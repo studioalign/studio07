@@ -101,13 +101,7 @@ export default function SignupForm() {
 				}
 			}
 
-			// Show success message and instruct user to verify email
-			setError(
-				"Please check your email to verify your account before signing in."
-			);
-			setTimeout(() => {
-				navigate("/");
-			}, 3000);
+			navigate("/");
 		} catch (err) {
 			console.error("Error in signup:", err);
 			setError(

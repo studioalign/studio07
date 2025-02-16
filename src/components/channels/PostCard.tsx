@@ -29,7 +29,7 @@ export default function PostCard({ post, isAdmin, channelId }: PostCardProps) {
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const { profile } = useAuth();
-	const canModify = isAdmin || post.author_id === profile?.id;
+	const canModify = isAdmin || post.author.id === profile?.id;
 	const hasLiked = post.reactions?.some(
 		(reaction: any) => reaction.user_id === profile?.id
 	);
@@ -79,13 +79,11 @@ export default function PostCard({ post, isAdmin, channelId }: PostCardProps) {
 					<div className="flex items-center">
 						<div className="w-10 h-10 rounded-full bg-brand-secondary-100 flex items-center justify-center">
 							<span className="text-brand-primary font-medium">
-								{post.author?.name?.[0] || "?"}
+								{post.author.name?.[0] + post.author.name?.[1]}
 							</span>
 						</div>
 						<div className="ml-3">
-							<p className="font-medium text-gray-900">
-								{post.author?.name || "Unknown"}
-							</p>
+							<p className="font-medium text-gray-900">{post.author.name}</p>
 							<p className="text-sm text-gray-500">
 								{formatDistanceToNow(new Date(post.created_at), {
 									addSuffix: true,

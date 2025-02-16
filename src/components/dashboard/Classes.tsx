@@ -59,7 +59,7 @@ export default function Classes() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [queryInProgress, setQueryInProgress] = useState(false);
-	const { isLoading: dataLoading, initialized } = useData();
+	const { isLoading: dataLoading } = useData();
 	const { profile } = useAuth();
 	const { timezone } = useLocalization();
 
@@ -67,42 +67,39 @@ export default function Classes() {
 		try {
 			setQueryInProgress(true);
 
-			let query = supabase.from("classes").select(`
-				id,
-				name,
-				status,
-				date,
-				end_date,
-				start_time,
-				end_time,
-				is_recurring,
-				parent_class_id,
-				notes,
-				is_drop_in,
-				capacity,
-				drop_in_price,
-				studio:studios (
+			const { data, error } = await supabase
+				.from("classes")
+				.select(
+					`
 					id,
-					name
-				),
-				teacher:users (
-					id,
-					name
-				),
-				location:locations (
-					id,
-					name
+					name,
+					status,
+					date,
+					end_date,
+					start_time,
+					end_time,
+					is_recurring,
+					parent_class_id,
+					notes,
+					is_drop_in,
+					capacity,
+					drop_in_price,
+					studio:studios (
+						id,
+						name
+					),
+					teacher:users (
+						id,
+						name
+					),
+					location:locations (
+						id,
+						name
+					)
+				`
 				)
-			`);
-
-			if (profile?.role === "parent") {
-				// For parents, filter by their studio but ensure we get all class details
-				query = query
-					.eq("studio_id", profile?.studio?.id || "")
-					.order("date", { ascending: true });
-			}
-
-			const { data, error } = await query.order("date", { ascending: true });
+				.eq("studio_id", profile?.studio?.id || "")
+				.order("date", { ascending: true });
 
 			if (error) throw error;
 
@@ -204,6 +201,9 @@ export default function Classes() {
 		if (!modifyingClass) return;
 
 		const { class: classItem, action } = modifyingClass;
+		console.log(classItem);
+		console.log(action);
+		console.log(scope);
 
 		try {
 			if (action === "delete") {

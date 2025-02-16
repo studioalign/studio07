@@ -16,12 +16,12 @@ interface Channel {
 interface Post {
 	id: string;
 	content: string;
-	author_id: string;
-	created_at: string;
-	edited_at: string | null;
-	author?: {
+	author: {
+		id: string;
 		name: string;
 	};
+	created_at: string;
+	edited_at: string | null;
 	media: {
 		id: string;
 		url: string;
@@ -34,10 +34,10 @@ interface Post {
 	comments: {
 		id: string;
 		content: string;
-		author_id: string;
 		created_at: string;
 		edited_at: string | null;
-		author?: {
+		author: {
+			id: string;
 			name: string;
 		};
 	}[];
@@ -60,15 +60,15 @@ export function useChannel(channelId: string) {
 					.from("class_channels")
 					.select(
 						`
-            id,
-            name,
-            description,
-            class_id,
-            members:channel_members (
-              user_id,
-              role
-            )
-          `
+						id,
+						name,
+						description,
+						class_id,
+						members:channel_members (
+						user_id,
+						role
+						)
+					`
 					)
 					.eq("id", channelId)
 					.single();
@@ -81,28 +81,34 @@ export function useChannel(channelId: string) {
 					.from("channel_posts")
 					.select(
 						`
-            id,
-            content,
-            author_id,
-            created_at,
-            edited_at,
-            media:post_media (
-              id,
-              url,
-              type,
-              filename
-            ),
-            reactions:post_reactions (
-              user_id
-            ),
-            comments:post_comments (
-              id,
-              content,
-              author_id,
-              created_at,
-              edited_at
-            )
-          `
+						id,
+						content,
+						author: users(
+							id,
+							name
+						),
+						created_at,
+						edited_at,
+						media:post_media (
+						id,
+						url,
+						type,
+						filename
+						),
+						reactions:post_reactions (
+						user_id
+						),
+						comments:post_comments (
+						id,
+						content,
+						author: users(
+							id,
+							name
+						),
+						created_at,
+						edited_at
+						)
+					`
 					)
 					.eq("channel_id", channelId)
 					.order("created_at", { ascending: false });

@@ -302,7 +302,7 @@ export default function AddClassForm({
 				</label>
 			</div>
 
-			{isRecurring && (
+			{isRecurring ? (
 				<select
 					value={dayOfWeek}
 					onChange={(e) => setDayOfWeek(e.target.value)}
@@ -318,16 +318,16 @@ export default function AddClassForm({
 					<option value="5">Friday</option>
 					<option value="6">Saturday</option>
 				</select>
+			) : (
+				<FormInput
+					id="date"
+					type="date"
+					label="Class Date"
+					value={date}
+					onChange={(e) => setDate(e.target.value)}
+					required
+				/>
 			)}
-
-			<FormInput
-				id="date"
-				type="date"
-				label="Class Date"
-				value={date}
-				onChange={(e) => setDate(e.target.value)}
-				required
-			/>
 
 			{isRecurring && (
 				<FormInput

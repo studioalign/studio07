@@ -10,14 +10,11 @@ interface ChannelMembersProps {
 }
 
 interface Member {
-	id: string;
-	user_id: string;
-	role: "admin" | "member";
+	role: string;
 	user: {
+		id: string;
 		email: string;
-		owner?: { name: string } | null;
-		teacher?: { name: string } | null;
-		parent?: { name: string } | null;
+		name: string;
 	};
 }
 
@@ -43,7 +40,7 @@ export default function ChannelMembers({
 
 	useEffect(() => {
 		fetchMembers();
-	}, [channelId]);
+	}, []);
 
 	const fetchMembers = async () => {
 		try {
@@ -51,27 +48,18 @@ export default function ChannelMembers({
 				.from("channel_members")
 				.select(
 					`
-          id,
-          user_id,
-          role,
-          user:users (
-            email,
-            owner:owners (
-              name
-            ),
-            teacher:teachers (
-              name
-            ),
-            parent:parents (
-              name
-            )
-          )
-        `
+					role,
+					user: users(
+						id,
+						email,
+						name
+					)
+					`
 				)
 				.eq("channel_id", channelId);
 
 			if (fetchError) throw fetchError;
-			setMembers(data || []);
+			setMembers(data);
 
 			// Fetch available users
 			const { data: classData } = await supabase
@@ -85,24 +73,17 @@ export default function ChannelMembers({
 					.from("users")
 					.select(
 						`
-            id,
-            email,
-            owner:owners (name),
-            teacher:teachers (name),
-            parent:parents (name)
-          `
+						id,
+						email,
+						name
+					`
 					)
-					.not("id", "in", `(${(data || []).map((m) => m.user_id).join(",")})`);
+					.not("id", "in", `(${(data || []).map((m) => m.user.id).join(",")})`);
 
 				setAvailableUsers(
 					(users || []).map((user) => ({
 						id: user.id,
-						label: `${
-							user.owner?.name ||
-							user.teacher?.name ||
-							user.parent?.name ||
-							"Unknown"
-						} (${user.email})`,
+						label: `${user.name || "Unknown"} (${user.email})`,
 					}))
 				);
 			}
@@ -175,12 +156,7 @@ export default function ChannelMembers({
 	};
 
 	const getMemberName = (member: Member) => {
-		return (
-			member.user.owner?.name ||
-			member.user.teacher?.name ||
-			member.user.parent?.name ||
-			"Unknown"
-		);
+		return member.user.name || "Unknown";
 	};
 
 	if (loading) {

@@ -208,7 +208,7 @@ export default function WeeklyCalendar({
 											<div className="mt-2">
 												{classItem.enrolledStudents?.length > 0 ? (
 													<p className="text-sm text-gray-600">
-														Enrolled: {classItem.enrolledStudents.join(", ")}
+														Enrolled: {classItem.enrolledStudents?.join(", ")}
 													</p>
 												) : classItem.is_drop_in ? (
 													<button

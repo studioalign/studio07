@@ -165,32 +165,24 @@ export default function EditClassForm({
 				drop_in_price: isDropIn ? parseFloat(dropInPrice) : null,
 			};
 
-			if (!isRecurring || classData.modificationScope === "single") {
-				// Update only this instance
-				const { error: updateError } = await supabase
-					.from("classes")
-					.update(updates)
-					.eq("id", classData.id);
-
-				if (updateError) throw updateError;
-			} else if (classData.parent_class_id) {
-				// For "future" scope, update this instance and all future instances
-				// For "all" scope, update all instances
-				const { error: updateError } = await supabase
-					.from("classes")
-					.update(updates)
-					.eq("parent_class_id", classData.parent_class_id)
-					.gte(
-						"date",
-						classData.modificationScope === "all"
-							? "1900-01-01"
-							: classData.date
-					)
-					.or(`id.eq.${classData.id}`); // Include this instance for both "future" and "all" scopes
-
-				if (updateError) throw updateError;
+			// update this instance
+			await supabase.from("classes").update(updates).eq("id", classData.id);
+			if (classData.modificationScope === "future") {
+				// For "future" scope, all future instances
+				if (classData.parent_class_id) {
+					await supabase
+						.from("classes")
+						.update(updates)
+						.eq("id", classData.parent_class_id);
+				}
 			}
-
+			// For "all" scope, update all instances
+			if (classData.modificationScope === "all") {
+				await supabase
+					.from("classes")
+					.update(updates)
+					.eq("parent_class_id", classData.parent_class_id || classData.id);
+			}
 			// Update student enrollments for this instance
 			if (!isRecurring || classData.modificationScope === "single") {
 				// Remove existing enrollments
