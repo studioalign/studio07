@@ -113,6 +113,7 @@ export default function AddClassForm({
 				if (!date) {
 					throw new Error("Date is required for non-recurring classes");
 				}
+
 				// Insert single class
 				const { data, error: classError } = await supabase
 					.from("classes")
@@ -140,6 +141,7 @@ export default function AddClassForm({
 				if (!dayOfWeek) {
 					throw new Error("Day of week is required for recurring classes");
 				}
+
 				if (!endDate) {
 					throw new Error("End date is required for recurring classes");
 				}
@@ -154,7 +156,7 @@ export default function AddClassForm({
 							teacher_id: selectedTeacher.id,
 							start_time: startTime,
 							end_time: endTime,
-							date: new Date(date).toISOString().split("T")[0],
+							date: date ? new Date(date).toISOString().split("T")[0] : null,
 							end_date: new Date(endDate).toISOString().split("T")[0],
 							location_id: selectedRoom.id,
 							is_drop_in: isDropIn,
@@ -166,13 +168,11 @@ export default function AddClassForm({
 					.select("id")
 					.single();
 
-				console.log("parentClassError", parentClassError);
-
 				if (parentClassError) throw parentClassError;
 
 				// Generate dates for recurring classes
 				const dates = [];
-				const currentDate = new Date(date);
+				const currentDate = new Date();
 				const daysDiff = (parseInt(dayOfWeek) - currentDate.getDay() + 7) % 7;
 				currentDate.setDate(currentDate.getDate() + daysDiff);
 

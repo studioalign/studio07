@@ -35,6 +35,7 @@ interface MessagingContextType {
 	messages: Message[];
 	setActiveConversation: (id: string | null) => void;
 	sendMessage: (content: string) => Promise<void>;
+	fetchMessages: (conversationId: string) => Promise<void>;
 	markAsRead: () => Promise<void>;
 	createConversation: (
 		createdBy: string,
@@ -52,7 +53,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 		null
 	);
 
-	console.log("clicked - ", activeConversation);
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -89,26 +89,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 	// Subscribe to messages for active conversation
 	useEffect(() => {
 		if (!activeConversation) return;
-		console.log("active");
-		const subscription = supabase
-			.channel(`messages:${activeConversation}`)
-			.on(
-				"postgres_changes",
-				{
-					event: "*",
-					schema: "public",
-					table: "messages",
-					filter: `conversation_id=eq.${activeConversation}`,
-				},
-				() => {
-					fetchMessages(activeConversation);
-				}
-			)
-			.subscribe();
-
-		return () => {
-			subscription.unsubscribe();
-		};
+		fetchMessages(activeConversation);
 	}, [activeConversation]);
 
 	const fetchConversations = async () => {
@@ -127,16 +108,18 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 					)`
 				)
 				.eq("user_id", profile?.id!);
-			// .order("conversation.last_message_at", {
-			// 	nullsFirst: false,
-			// 	ascending: false,
-			// });
 
 			if (fetchError) throw fetchError;
 
+			const sortedConversations = data.sort(
+				(a: any, b: any) =>
+					new Date(b.conversation.last_message_at).getTime() -
+					new Date(a.conversation.last_message_at).getTime()
+			);
+
 			// Map the data to match the Conversation type
 			const mappedConversations: Conversation[] = await Promise.all(
-				data.map(async (item: any) => {
+				sortedConversations.map(async (item: any) => {
 					const participantData = await Promise.all(
 						item.conversation.participants
 							.filter((participantId: string) => participantId !== profile?.id)
@@ -265,6 +248,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 				messages,
 				setActiveConversation,
 				sendMessage,
+				fetchMessages,
 				markAsRead,
 				createConversation,
 				loading,

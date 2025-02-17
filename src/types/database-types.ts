@@ -71,6 +71,13 @@ export type Database = {
             referencedRelation: "class_channels"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "channel_members_user_id_fkey1"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
         ]
       }
       channel_posts: {
@@ -99,6 +106,13 @@ export type Database = {
           id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "channel_posts_author_id_fkey1"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "channel_posts_channel_id_fkey"
             columns: ["channel_id"]
@@ -144,64 +158,11 @@ export type Database = {
             referencedRelation: "classes"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      class_instances: {
-        Row: {
-          class_id: string | null
-          created_at: string | null
-          date: string
-          end_time: string | null
-          id: string
-          location_id: string | null
-          name: string | null
-          notes: string | null
-          start_time: string | null
-          status: string | null
-          teacher_id: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          class_id?: string | null
-          created_at?: string | null
-          date: string
-          end_time?: string | null
-          id?: string
-          location_id?: string | null
-          name?: string | null
-          notes?: string | null
-          start_time?: string | null
-          status?: string | null
-          teacher_id?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          class_id?: string | null
-          created_at?: string | null
-          date?: string
-          end_time?: string | null
-          id?: string
-          location_id?: string | null
-          name?: string | null
-          notes?: string | null
-          start_time?: string | null
-          status?: string | null
-          teacher_id?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
           {
-            foreignKeyName: "class_instances_class_id_fkey"
-            columns: ["class_id"]
+            foreignKeyName: "class_channels_created_by_fkey1"
+            columns: ["created_by"]
             isOneToOne: false
-            referencedRelation: "classes"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "class_instances_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "locations"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -287,7 +248,7 @@ export type Database = {
             foreignKeyName: "class_modifications_class_instance_id_fkey"
             columns: ["class_instance_id"]
             isOneToOne: false
-            referencedRelation: "class_instances"
+            referencedRelation: "classes"
             referencedColumns: ["id"]
           },
           {
@@ -362,46 +323,61 @@ export type Database = {
       }
       classes: {
         Row: {
+          capacity: number | null
           created_at: string | null
           date: string | null
-          day_of_week: number | null
+          drop_in_price: number | null
           end_date: string
           end_time: string
           id: string
+          is_drop_in: boolean
           is_recurring: boolean | null
           location_id: string | null
           name: string
+          notes: string | null
+          parent_class_id: string | null
           start_time: string
+          status: string | null
           studio_id: string
           teacher_id: string
           updated_at: string | null
         }
         Insert: {
+          capacity?: number | null
           created_at?: string | null
           date?: string | null
-          day_of_week?: number | null
+          drop_in_price?: number | null
           end_date: string
           end_time: string
           id?: string
+          is_drop_in: boolean
           is_recurring?: boolean | null
           location_id?: string | null
           name: string
+          notes?: string | null
+          parent_class_id?: string | null
           start_time: string
+          status?: string | null
           studio_id: string
           teacher_id: string
           updated_at?: string | null
         }
         Update: {
+          capacity?: number | null
           created_at?: string | null
           date?: string | null
-          day_of_week?: number | null
+          drop_in_price?: number | null
           end_date?: string
           end_time?: string
           id?: string
+          is_drop_in?: boolean
           is_recurring?: boolean | null
           location_id?: string | null
           name?: string
+          notes?: string | null
+          parent_class_id?: string | null
           start_time?: string
+          status?: string | null
           studio_id?: string
           teacher_id?: string
           updated_at?: string | null
@@ -508,6 +484,13 @@ export type Database = {
             referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "conversation_participants_user_id_fkey1"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
         ]
       }
       conversations: {
@@ -560,13 +543,6 @@ export type Database = {
           student_id?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "instance_enrollments_class_instance_id_fkey"
-            columns: ["class_instance_id"]
-            isOneToOne: false
-            referencedRelation: "class_instances"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "instance_enrollments_student_id_fkey"
             columns: ["student_id"]
@@ -650,7 +626,7 @@ export type Database = {
           id: string
           notes: string | null
           number: string
-          parent_id: string | null
+          parent_id: string
           status: string
           studio_id: string | null
           subtotal: number
@@ -664,7 +640,7 @@ export type Database = {
           id?: string
           notes?: string | null
           number: string
-          parent_id?: string | null
+          parent_id: string
           status: string
           studio_id?: string | null
           subtotal: number
@@ -678,7 +654,7 @@ export type Database = {
           id?: string
           notes?: string | null
           number?: string
-          parent_id?: string | null
+          parent_id?: string
           status?: string
           studio_id?: string | null
           subtotal?: number
@@ -687,6 +663,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "invoices_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "invoices_studio_id_fkey"
             columns: ["studio_id"]
@@ -968,6 +951,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "post_comments_author_id_fkey1"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "post_comments_post_id_fkey"
             columns: ["post_id"]
             isOneToOne: false
@@ -1170,32 +1160,38 @@ export type Database = {
       studios: {
         Row: {
           address: string
+          country: string
           created_at: string | null
           email: string
           id: string
           name: string
           owner_id: string
           phone: string
+          timezone: string
           updated_at: string | null
         }
         Insert: {
           address: string
+          country?: string
           created_at?: string | null
           email: string
           id?: string
           name: string
           owner_id: string
           phone: string
+          timezone?: string
           updated_at?: string | null
         }
         Update: {
           address?: string
+          country?: string
           created_at?: string | null
           email?: string
           id?: string
           name?: string
           owner_id?: string
           phone?: string
+          timezone?: string
           updated_at?: string | null
         }
         Relationships: [
@@ -1274,16 +1270,6 @@ export type Database = {
           created_by: string
         }
         Returns: string
-      }
-      generate_dates: {
-        Args: {
-          p_start_date: string
-          p_end_date: string
-          p_day_of_week: number
-        }
-        Returns: {
-          date: string
-        }[]
       }
       generate_invoice_number: {
         Args: {

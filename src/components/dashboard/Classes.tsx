@@ -201,38 +201,33 @@ export default function Classes() {
 		if (!modifyingClass) return;
 
 		const { class: classItem, action } = modifyingClass;
-		console.log(classItem);
-		console.log(action);
-		console.log(scope);
 
 		try {
 			if (action === "delete") {
 				// Handle delete logic
-				if (scope === "single") {
-					// Delete only the selected instance
-					const { error } = await supabase
-						.from("classes")
-						.delete()
-						.eq("id", classItem.id);
+				// Delete only the selected instance
+				await supabase.from("classes").delete().eq("id", classItem.id);
 
-					if (error) throw error;
-				} else if (scope === "future") {
+				if (scope === "future") {
 					// Delete this and future instances
-					const { error } = await supabase
+					await supabase
 						.from("classes")
 						.delete()
-						.eq("id", classItem.id)
+						.eq("parent_class_id", classItem.parent_class_id || classItem.id)
 						.gte("date", classItem.date);
-
-					if (error) throw error;
 				} else if (scope === "all") {
 					// Delete all instances
-					const { error } = await supabase
+					await supabase
 						.from("classes")
 						.delete()
-						.eq("id", classItem.id);
+						.eq("parent_class_id", classItem.parent_class_id || classItem.id);
 
-					if (error) throw error;
+					if (classItem.parent_class_id) {
+						await supabase
+							.from("classes")
+							.delete()
+							.eq("id", classItem.parent_class_id);
+					}
 				}
 			} else if (action === "edit") {
 				// Handle edit logic

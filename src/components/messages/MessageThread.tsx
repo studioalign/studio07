@@ -3,13 +3,20 @@ import { Send, ArrowLeft } from "lucide-react";
 import { useMessaging } from "../../contexts/MessagingContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { formatMessageDate } from "../../utils/messagingUtils";
+import { supabase } from "../../lib/supabase";
 
 interface MessageThreadProps {
 	onBack: () => void;
 }
 
 export default function MessageThread({ onBack }: MessageThreadProps) {
-	const { messages, sendMessage, markAsRead } = useMessaging();
+	const {
+		messages,
+		sendMessage,
+		markAsRead,
+		activeConversation,
+		fetchMessages,
+	} = useMessaging();
 	const { profile } = useAuth();
 	const [newMessage, setNewMessage] = useState("");
 	const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -29,6 +36,31 @@ export default function MessageThread({ onBack }: MessageThreadProps) {
 		await sendMessage(newMessage);
 		setNewMessage("");
 	};
+
+	useEffect(() => {
+		console.log("activeConversation", activeConversation);
+		if (activeConversation) {
+			const subscription = supabase
+				.channel(`public:messages`)
+				.on(
+					"postgres_changes",
+					{
+						event: "*",
+						schema: "public",
+						table: "messages",
+						filter: `conversation_id=eq.${activeConversation}`,
+					},
+					() => {
+						fetchMessages(activeConversation);
+					}
+				)
+				.subscribe();
+
+			return () => {
+				subscription.unsubscribe();
+			};
+		}
+	}, [activeConversation, fetchMessages]);
 
 	console.log(messages);
 

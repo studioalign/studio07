@@ -169,12 +169,11 @@ export default function EditClassForm({
 			await supabase.from("classes").update(updates).eq("id", classData.id);
 			if (classData.modificationScope === "future") {
 				// For "future" scope, all future instances
-				if (classData.parent_class_id) {
-					await supabase
-						.from("classes")
-						.update(updates)
-						.eq("id", classData.parent_class_id);
-				}
+				await supabase
+					.from("classes")
+					.update(updates)
+					.eq("parent_class_id", classData.parent_class_id || classData.id)
+					.gte("date", classData.date);
 			}
 			// For "all" scope, update all instances
 			if (classData.modificationScope === "all") {
@@ -182,6 +181,13 @@ export default function EditClassForm({
 					.from("classes")
 					.update(updates)
 					.eq("parent_class_id", classData.parent_class_id || classData.id);
+
+				if (classData.parent_class_id) {
+					await supabase
+						.from("classes")
+						.update(updates)
+						.eq("id", classData.parent_class_id);
+				}
 			}
 			// Update student enrollments for this instance
 			if (!isRecurring || classData.modificationScope === "single") {

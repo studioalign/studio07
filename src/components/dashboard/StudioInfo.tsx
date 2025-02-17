@@ -127,8 +127,8 @@ export default function StudioInfo() {
 				.update({
 					name: localStudioInfo?.name,
 					address: localStudioInfo?.address,
-					phone: localStudioInfo?.contact?.phone,
-					email: localStudioInfo?.contact?.email,
+					phone: localStudioInfo?.phone,
+					email: localStudioInfo?.email,
 					country: country,
 					timezone: timezone,
 					updated_at: new Date().toISOString(),
@@ -250,11 +250,11 @@ export default function StudioInfo() {
 									id="phone"
 									type="tel"
 									label="Phone Number"
-									value={localStudioInfo.contact.phone}
+									value={localStudioInfo.phone}
 									onChange={(value) =>
 										setLocalStudioInfo({
 											...localStudioInfo,
-											contact: { ...localStudioInfo.contact, phone: value },
+											phone: value,
 										})
 									}
 								/>
@@ -262,11 +262,11 @@ export default function StudioInfo() {
 									id="email"
 									type="email"
 									label="Email Address"
-									value={localStudioInfo.contact.email}
+									value={localStudioInfo.email}
 									onChange={(value) =>
 										setLocalStudioInfo({
 											...localStudioInfo,
-											contact: { ...localStudioInfo.contact, email: value },
+											email: value,
 										})
 									}
 								/>
@@ -274,10 +274,10 @@ export default function StudioInfo() {
 						) : (
 							<div className="pl-7 space-y-2">
 								<p className="text-brand-secondary-400">
-									{profile?.studio?.contact?.phone}
+									{profile?.studio?.phone}
 								</p>
 								<p className="text-brand-secondary-400">
-									{profile?.studio?.contact?.email}
+									{profile?.studio?.email}
 								</p>
 							</div>
 						)}
