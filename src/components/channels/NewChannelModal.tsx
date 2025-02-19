@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import FormInput from "../FormInput";
 import MultiSelectDropdown from "../MultiSelectDropdown";
-import { getUsersByRole } from "../../utils/messagingUtils";
+import { getStudioUsersByRole } from "../../utils/messagingUtils";
 import { useAuth } from "../../contexts/AuthContext";
 
 interface NewChannelModalProps {
@@ -29,8 +29,8 @@ export default function NewChannelModal({ onClose }: NewChannelModalProps) {
 			try {
 				// Fetch all teachers and parents
 				const [teachers, parents] = await Promise.all([
-					getUsersByRole("teacher"),
-					getUsersByRole("parent"),
+					getStudioUsersByRole("teacher", profile?.studio?.id || ""),
+					getStudioUsersByRole("parent", profile?.studio?.id || ""),
 				]);
 
 				const users = [...teachers, ...parents].map((user) => ({
@@ -123,7 +123,6 @@ export default function NewChannelModal({ onClose }: NewChannelModalProps) {
 						onChange={setSelectedMembers}
 						options={availableUsers}
 						isLoading={loading}
-						required
 					/>
 
 					<FormInput

@@ -1210,8 +1210,11 @@ export type Database = {
           email: string
           id: string
           name: string
+          phone: string | null
+          photo_url: string | null
           role: Database["public"]["Enums"]["user_role"]
           studio_id: string | null
+          timezone: string | null
           updated_at: string | null
         }
         Insert: {
@@ -1219,8 +1222,11 @@ export type Database = {
           email: string
           id: string
           name: string
+          phone?: string | null
+          photo_url?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           studio_id?: string | null
+          timezone?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -1228,8 +1234,11 @@ export type Database = {
           email?: string
           id?: string
           name?: string
+          phone?: string | null
+          photo_url?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           studio_id?: string | null
+          timezone?: string | null
           updated_at?: string | null
         }
         Relationships: [

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { useMessaging } from "../../contexts/MessagingContext";
 import { useAuth } from "../../contexts/AuthContext";
-import { getUsersByRole } from "../../utils/messagingUtils";
+import { getStudioUsersByRole } from "../../utils/messagingUtils";
 import SearchableDropdown from "../SearchableDropdown";
 import { UserData } from "../../types/auth";
 
@@ -26,24 +26,25 @@ export default function NewMessageModal({ onClose }: NewMessageModalProps) {
 	useEffect(() => {
 		async function fetchRecipients() {
 			try {
+				console.log(profile?.role);
 				let users: UserData[] = [];
 				if (profile?.role === "owner") {
 					const [teachers, parents] = await Promise.all([
-						getUsersByRole("teacher"),
-						getUsersByRole("parent"),
+						getStudioUsersByRole("teacher", profile?.studio?.id || ""),
+						getStudioUsersByRole("parent", profile?.studio?.id || ""),
 					]);
 					users = [...teachers, ...parents];
 				} else if (profile?.role === "teacher") {
 					const [owners, parents] = await Promise.all([
-						getUsersByRole("owner"),
-						getUsersByRole("parent"),
+						getStudioUsersByRole("owner", profile?.studio?.id || ""),
+						getStudioUsersByRole("parent", profile?.studio?.id || ""),
 					]);
 					console.log(owners, parents);
 					users = [...owners, ...parents];
 				} else if (profile?.role === "parent") {
 					const [owners, teachers] = await Promise.all([
-						getUsersByRole("owner"),
-						getUsersByRole("teacher"),
+						getStudioUsersByRole("owner", profile?.studio?.id || ""),
+						getStudioUsersByRole("teacher", profile?.studio?.id || ""),
 					]);
 					users = [...owners, ...teachers];
 				}

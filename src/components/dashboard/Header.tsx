@@ -86,7 +86,19 @@ export default function Header() {
 						onClick={() => setShowDropdown(!showDropdown)}
 						className="w-8 h-8 rounded-full bg-brand-accent flex items-center justify-center"
 					>
-						<span className="text-brand-primary font-medium">JD</span>
+						<div className="h-full w-full rounded-full bg-brand-secondary-100 flex items-center justify-center overflow-hidden">
+							{profile?.photo_url ? (
+								<img
+									src={profile?.photo_url}
+									alt="Profile"
+									className="w-full h-full object-cover object-top"
+								/>
+							) : (
+								<span className="text-3xl font-medium text-brand-primary">
+									JD
+								</span>
+							)}
+						</div>
 					</button>
 
 					{showDropdown && (

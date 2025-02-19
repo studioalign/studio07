@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				const { data, error } = await supabase
 					.from("users")
 					.select(
-						`id, name, role, email,
+						`id, name, role, email, photo_url,
 						studio:studios!users_studio_id_fkey(
 							id, name, address, phone, email
 						)
