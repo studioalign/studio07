@@ -20,6 +20,7 @@ import Settings from "./components/settings/Settings";
 import Billing from "./components/settings/Billing";
 import UserManagement from "./components/settings/UserManagement";
 import DocumentList from "./components/documents/DocumentList";
+import OnboardingPage from "./components/dashboard/OnboardingPage";
 import { AuthProvider } from "./contexts/AuthContext";
 import { DataProvider } from "./contexts/DataContext";
 import { MessagingProvider } from "./contexts/MessagingContext";
@@ -58,6 +59,14 @@ const App = () => {
 								}
 							/>
 							<Route
+								path="/onboarding"
+								element={
+									<PrivateRoute requiredRole="owner">
+										<OnboardingPage />
+									</PrivateRoute>
+								}
+							/>
+							<Route
 								path="/dashboard"
 								element={
 									<PrivateRoute requiredRole="owner,teacher,parent">
@@ -77,8 +86,8 @@ const App = () => {
 								<Route path="notifications" element={<NotificationsPage />} />
 								<Route path="profile" element={<Profile />} />
 								<Route path="settings" element={<Settings />} />
-                <Route path="users" element={<UserManagement />} />
-                <Route path="documents" element={<DocumentList />} />
+								<Route path="users" element={<UserManagement />} />
+								<Route path="documents" element={<DocumentList />} />
 
 								{/* Owner-only routes */}
 								<Route

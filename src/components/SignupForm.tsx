@@ -69,39 +69,10 @@ export default function SignupForm() {
 			}
 
 			if (selectedRole === "owner") {
-				// Create initial studio
-				const { data: studioData, error: studioError } = await supabase
-					.from("studios")
-					.insert([
-						{
-							owner_id: authData.user.id,
-							name: "My Dance Studio",
-							address: "",
-							phone: "",
-							email: email,
-						},
-					])
-					.select()
-					.single();
-
-				if (studioError) {
-					console.error("Studio creation error:", studioError);
-					throw studioError;
-				}
-
-				// Update the user's studio_id
-				const { error: updateError } = await supabase
-					.from("users")
-					.update({ studio_id: studioData.id })
-					.eq("id", authData.user.id);
-
-				if (updateError) {
-					console.error("User update error:", updateError);
-					throw updateError;
-				}
+				navigate("/onboarding");
+			} else {
+				navigate("/");
 			}
-
-			navigate("/");
 		} catch (err) {
 			console.error("Error in signup:", err);
 			setError(
