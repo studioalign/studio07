@@ -2,26 +2,31 @@ import React, { useState } from 'react';
 import { Save } from 'lucide-react';
 import FormInput from './FormInput';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
+
+interface EmergencyContact {
+  id?: string;
+  student_id?: string;
+  name: string;
+  relationship: string;
+  phone: string;
+  email: string;
+}
 
 interface Student {
   id: string;
   name: string;
   date_of_birth: string;
   gender: string;
-  emergencyContacts: {
-    name: string;
-    relationship: string;
-    phone: string;
-    email: string;
-  }[];
-  medicalConditions: string;
+  medical_conditions: string;
   allergies: string;
   medications: string;
-  doctorName: string;
-  doctorPhone: string;
-  photoConsent: boolean;
-  socialMediaConsent: boolean;
-  participationConsent: boolean;
+  doctor_name: string;
+  doctor_phone: string;
+  photo_consent: boolean;
+  social_media_consent: boolean;
+  participation_consent: boolean;
+  emergency_contacts: EmergencyContact[];
 }
 
 interface EditStudentFormProps {
@@ -30,54 +35,33 @@ interface EditStudentFormProps {
   onCancel: () => void;
 }
 
-export default function EditStudentForm({ student, onSuccess, onCancel }: EditStudentFormProps) {
+export default function EditStudentForm({
+  student,
+  onSuccess,
+  onCancel,
+}: EditStudentFormProps) {
+  const { profile } = useAuth();
   const [name, setName] = useState(student.name);
   const [dateOfBirth, setDateOfBirth] = useState(student.date_of_birth);
   const [gender, setGender] = useState(student.gender);
-  const [emergencyContacts, setEmergencyContacts] = useState(student.emergencyContacts);
-  const [medicalConditions, setMedicalConditions] = useState(student.medicalConditions);
-  const [allergies, setAllergies] = useState(student.allergies);
-  const [medications, setMedications] = useState(student.medications);
-  const [doctorName, setDoctorName] = useState(student.doctorName);
-  const [doctorPhone, setDoctorPhone] = useState(student.doctorPhone);
-  const [photoConsent, setPhotoConsent] = useState(student.photoConsent);
-  const [socialMediaConsent, setSocialMediaConsent] = useState(student.socialMediaConsent);
-  const [participationConsent, setParticipationConsent] = useState(student.participationConsent);
+  const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>(
+    student.emergency_contacts || [{
+      name: "",
+      relationship: "",
+      phone: "",
+      email: ""
+    }]
+  );
+  const [medicalConditions, setMedicalConditions] = useState(student.medical_conditions || "");
+  const [allergies, setAllergies] = useState(student.allergies || "");
+  const [medications, setMedications] = useState(student.medications || "");
+  const [doctorName, setDoctorName] = useState(student.doctor_name || "");
+  const [doctorPhone, setDoctorPhone] = useState(student.doctor_phone || "");
+  const [photoConsent, setPhotoConsent] = useState(student.photo_consent);
+  const [socialMediaConsent, setSocialMediaConsent] = useState(student.social_media_consent);
+  const [participationConsent, setParticipationConsent] = useState(student.participation_consent);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setError(null);
-
-    try {
-      const { error: updateError } = await supabase
-        .from('students')
-        .update({
-          name,
-          date_of_birth: dateOfBirth,
-          gender,
-          emergency_contacts: emergencyContacts,
-          medical_conditions: medicalConditions,
-          allergies,
-          medications,
-          doctor_name: doctorName,
-          doctor_phone: doctorPhone,
-          photo_consent: photoConsent,
-          social_media_consent: socialMediaConsent,
-          participation_consent: participationConsent,
-        })
-        .eq('id', student.id);
-
-      if (updateError) throw updateError;
-      onSuccess();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update student');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const addEmergencyContact = () => {
     setEmergencyContacts([
@@ -99,6 +83,86 @@ export default function EditStudentForm({ student, onSuccess, onCancel }: EditSt
   const removeEmergencyContact = (index: number) => {
     if (emergencyContacts.length > 1) {
       setEmergencyContacts(emergencyContacts.filter((_, i) => i !== index));
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+
+    if (!profile?.id) {
+      setError("No parent ID found");
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Get studio_id from the user's profile
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('studio_id')
+      .eq('id', profile.id)
+      .single();
+
+    if (userError || !userData?.studio_id) {
+      setError("Could not find studio information");
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      // Step 1: Update student data
+      const { error: updateError } = await supabase
+        .from('students')
+        .update({
+          studio_id: userData.studio_id,
+          name,
+          date_of_birth: dateOfBirth,
+          gender,
+          medical_conditions: medicalConditions,
+          allergies,
+          medications,
+          doctor_name: doctorName,
+          doctor_phone: doctorPhone,
+          photo_consent: photoConsent,
+          social_media_consent: socialMediaConsent,
+          participation_consent: participationConsent,
+        })
+        .eq('id', student.id);
+
+      if (updateError) throw updateError;
+
+      // Step 2: Delete existing emergency contacts
+      const { error: deleteError } = await supabase
+        .from('emergency_contacts')
+        .delete()
+        .eq('student_id', student.id);
+
+      if (deleteError) throw deleteError;
+
+      // Step 3: Insert new emergency contacts
+      for (const contact of emergencyContacts) {
+        const { error: contactError } = await supabase
+          .from('emergency_contacts')
+          .insert([
+            {
+              student_id: student.id,
+              name: contact.name,
+              relationship: contact.relationship,
+              phone: contact.phone,
+              email: contact.email,
+            },
+          ]);
+
+        if (contactError) throw contactError;
+      }
+
+      onSuccess();
+    } catch (err) {
+      console.error('Error details:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update student');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -282,11 +346,10 @@ export default function EditStudentForm({ student, onSuccess, onCancel }: EditSt
             </div>
             <div className="ml-3">
               <label htmlFor="photoConsent" className="text-sm text-gray-700">
-                I consent to photographs being taken of my child during classes and performances
+                I consent to photos and videos being taken of my child for promotional purposes
               </label>
             </div>
           </div>
-
           <div className="flex items-start">
             <div className="flex items-center h-5">
               <input
@@ -299,11 +362,10 @@ export default function EditStudentForm({ student, onSuccess, onCancel }: EditSt
             </div>
             <div className="ml-3">
               <label htmlFor="socialMediaConsent" className="text-sm text-gray-700">
-                I consent to photographs of my child being used on the studio's social media accounts
+                I consent to photos and videos being used on social media
               </label>
             </div>
           </div>
-
           <div className="flex items-start">
             <div className="flex items-center h-5">
               <input
@@ -317,33 +379,37 @@ export default function EditStudentForm({ student, onSuccess, onCancel }: EditSt
             </div>
             <div className="ml-3">
               <label htmlFor="participationConsent" className="text-sm text-gray-700">
-                I confirm that my child is physically fit to participate in dance classes and I will inform the studio of any changes to their health condition
+                I confirm that my child is physically fit to participate in
+                dance classes and I will inform the studio of any changes to
+                their health condition
               </label>
-              <p className="mt-1 text-xs text-gray-500">This consent is required</p>
+              <p className="mt-1 text-xs text-gray-500">
+                This consent is required
+              </p>
             </div>
           </div>
         </div>
       </div>
 
-      {error && (
-        <p className="text-red-500 text-sm">{error}</p>
-      )}
+      {/* Error Handling */}
+      {error && <div className="text-red-500 text-sm">{error}</div>}
 
-      <div className="flex justify-end space-x-3">
+      {/* Action Buttons */}
+      <div className="flex justify-end space-x-4">
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+          className="px-4 py-2 bg-gray-300 text-white rounded-md hover:bg-gray-400"
         >
           Cancel
         </button>
         <button
           type="submit"
-          disabled={isSubmitting || !participationConsent}
-          className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 disabled:bg-gray-400"
+          disabled={isSubmitting}
+          className="px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-accent focus:ring-2 focus:ring-brand-primary flex items-center"
         >
-          <Save className="w-4 h-4 mr-2" />
-          Save Changes
+          {isSubmitting ? 'Saving...' : 'Save Changes'}
+          <Save className="inline-block ml-2 w-4 h-4" />
         </button>
       </div>
     </form>

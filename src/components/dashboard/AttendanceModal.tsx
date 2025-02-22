@@ -1,15 +1,44 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save } from 'lucide-react';
 import StudentDetailsModal from '../StudentDetailsModal';
+
 import {
-  getOrCreateClassInstance,
   fetchInstanceStudents,
   createInstanceStudents,
   fetchAttendanceRecords,
   saveAttendanceRecords
 } from '../../utils/attendanceUtils';
 
-interface InstanceEnrollment {
+interface EmergencyContact {
+  name: string;
+  relationship: string;
+  phone: string;
+  email: string;
+}
+
+interface Student {
+  id: string;
+  class_student_id: string;
+  name: string;
+  date_of_birth: string;
+  gender: string;
+  medical_conditions: string;
+  allergies: string;
+  medications: string;
+  doctor_name: string;
+  doctor_phone: string;
+  photo_consent: boolean;
+  social_media_consent: boolean;
+  participation_consent: boolean;
+  created_at: string | null;
+  emergency_contacts: EmergencyContact[];
+  attendance?: {
+    status: 'present' | 'late' | 'authorised' | 'unauthorised';
+    notes: string;
+  };
+}
+
+interface ClassStudent {
   id: string;
   student_id: string;
   student: {
@@ -19,34 +48,9 @@ interface InstanceEnrollment {
 }
 
 interface AttendanceRecord {
-  instance_enrollment_id: string;
+  class_student_id: string;
   status: 'present' | 'late' | 'authorised' | 'unauthorised';
   notes: string;
-}
-
-interface Student {
-  id: string;
-  enrollment_id: string;
-  name: string;
-  gender: string;
-  emergencyContacts: {
-    name: string;
-    relationship: string;
-    phone: string;
-    email: string;
-  }[];
-  medicalConditions: string;
-  allergies: string;
-  medications: string;
-  doctorName: string;
-  doctorPhone: string;
-  photoConsent: boolean;
-  socialMediaConsent: boolean;
-  participationConsent: boolean;
-  attendance?: {
-    status: 'present' | 'late' | 'authorised' | 'unauthorised';
-    notes: string;
-  };
 }
 
 interface AttendanceModalProps {
@@ -65,7 +69,14 @@ const statusOptions = [
   { value: 'unauthorised', label: 'Unauthorised Absence', color: 'bg-red-100 text-red-800' },
 ];
 
-export default function AttendanceModal({ classId, instanceId, userRole, className, date, onClose }: AttendanceModalProps) {
+export default function AttendanceModal({ 
+  classId, 
+  instanceId, 
+  userRole, 
+  className, 
+  date, 
+  onClose 
+}: AttendanceModalProps) {
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,51 +103,41 @@ export default function AttendanceModal({ classId, instanceId, userRole, classNa
         }
 
         // Fetch attendance records
-        const enrolledIds = (enrolled || []).map(e => e.id);
-        const allAttendanceRecords = await fetchAttendanceRecords(enrolledIds);
+        const classStudentIds = (enrolled || []).map(e => e.id);
+        const allAttendanceRecords = await fetchAttendanceRecords(classStudentIds);
 
         // Map enrolled students with their attendance records
-        const studentsWithAttendance = (enrolled || []).map((item: InstanceEnrollment) => ({
-          id: item.student.id,
-          enrollment_id: item.id,
-          name: item.student.name,
-          // Add mock data for student details
-          gender: 'female',
-          emergencyContacts: [
-            {
-              name: 'John Doe',
-              relationship: 'Father',
-              phone: '123-456-7890',
-              email: 'john@example.com'
-            },
-            {
-              name: 'Jane Doe',
-              relationship: 'Mother',
-              phone: '123-456-7891',
-              email: 'jane@example.com'
-            }
-          ],
-          medicalConditions: 'Asthma',
-          allergies: 'Peanuts',
-          medications: 'Inhaler as needed',
-          doctorName: 'Dr. Smith',
-          doctorPhone: '123-456-7892',
-          photoConsent: true,
-          socialMediaConsent: true,
-          participationConsent: true,
-          attendance: allAttendanceRecords.find((record: AttendanceRecord) => 
-            record.instance_enrollment_id === item.id
-          )
-            ? {
-                status: allAttendanceRecords.find(
-                  (record: AttendanceRecord) => record.instance_enrollment_id === item.id
-                )!.status,
-                notes: allAttendanceRecords.find(
-                  (record: AttendanceRecord) => record.instance_enrollment_id === item.id
-                )!.notes || '',
-              }
-            : undefined,
-        }));
+        const studentsWithAttendance = (enrolled || []).map((item: ClassStudent) => {
+          // Find corresponding attendance record
+          const attendanceRecord = allAttendanceRecords.find(
+            (record: AttendanceRecord) => record.class_student_id === item.id
+          );
+
+          return {
+            id: item.student_id,
+            class_student_id: item.id,
+            name: item.student.name,
+            // These fields will be populated with actual student data
+            date_of_birth: '',
+            gender: '',
+            medical_conditions: '',
+            allergies: '',
+            medications: '',
+            doctor_name: '',
+            doctor_phone: '',
+            photo_consent: false,
+            social_media_consent: false,
+            participation_consent: false,
+            created_at: null,
+            emergency_contacts: [],
+            attendance: attendanceRecord
+              ? {
+                  status: attendanceRecord.status,
+                  notes: attendanceRecord.notes || '',
+                }
+              : undefined,
+          };
+        });
 
         setStudents(studentsWithAttendance);
       } catch (err) {
@@ -147,7 +148,7 @@ export default function AttendanceModal({ classId, instanceId, userRole, classNa
     }
 
     fetchData();
-  }, [classId, selectedDate]);
+  }, [classId, instanceId, selectedDate]);
 
   const handleStatusChange = (studentId: string, status: string) => {
     setStudents(prev => prev.map(student => {
@@ -181,22 +182,19 @@ export default function AttendanceModal({ classId, instanceId, userRole, classNa
 
   const handleSave = async () => {
     setSaving(true);
-    try {
-      if (!classInstanceId) {
-        throw new Error('No class instance found');
-      }
 
+    try {
       // Prepare attendance records
       const attendanceRecords = students
         .filter(student => student.attendance)
         .map(student => ({
-          instance_enrollment_id: student.enrollment_id,
+          class_student_id: student.class_student_id,
           status: student.attendance!.status,
           notes: student.attendance!.notes || '',
         }));
 
       await saveAttendanceRecords(
-        students.map(s => s.enrollment_id),
+        students.map(s => s.class_student_id),
         attendanceRecords
       );
 
@@ -254,7 +252,6 @@ export default function AttendanceModal({ classId, instanceId, userRole, classNa
             </div>
           )}
         </div>
-
         {/* Student List */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-4">
@@ -309,7 +306,6 @@ export default function AttendanceModal({ classId, instanceId, userRole, classNa
             ))}
           </div>
         </div>
-
         {/* Footer */}
         {userRole !== 'parent' && (
           <div className="flex-none px-6 py-4 border-t bg-white">
