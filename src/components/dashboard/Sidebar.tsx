@@ -46,6 +46,7 @@ const parentNavigation = [
 	{ name: "Classes", to: "/dashboard/classes", icon: BookOpen },
 	{ name: "Messages", to: "/dashboard/messages", icon: MessageSquare },
 	{ name: "Channels", to: "/dashboard/channels", icon: Hash },
+	{ name: "Payments", to: "/dashboard/payments", icon: DollarSign },
 	{ name: "Documents", to: "/dashboard/documents", icon: File },
 	{ name: "My Students", to: "/dashboard/my-students", icon: GraduationCap },
 ];
