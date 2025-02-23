@@ -11,17 +11,17 @@ interface EmergencyContact {
 interface StudentDetails {
   id: string;
   name: string;
-  dateOfBirth: string;
+  date_of_birth: string;  // Changed from dateOfBirth
   gender: string;
-  emergencyContacts: EmergencyContact[];
-  medicalConditions: string;
+  emergency_contacts: EmergencyContact[];  // Changed from emergencyContacts
+  medical_conditions: string;  // Changed from medicalConditions
   allergies: string;
   medications: string;
-  doctorName: string;
-  doctorPhone: string;
-  photoConsent: boolean;
-  socialMediaConsent: boolean;
-  participationConsent: boolean;
+  doctor_name: string;  // Changed from doctorName
+  doctor_phone: string;  // Changed from doctorPhone
+  photo_consent: boolean;  // Changed from photoConsent
+  social_media_consent: boolean;  // Changed from socialMediaConsent
+  participation_consent: boolean;  // Changed from participationConsent
 }
 
 interface StudentDetailsModalProps {
@@ -47,7 +47,7 @@ export default function StudentDetailsModal({ student, onClose }: StudentDetails
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-brand-secondary-400">Date of Birth</label>
-                <p className="mt-1">{new Date(student.dateOfBirth).toLocaleDateString()}</p>
+                <p className="mt-1">{new Date(student.date_of_birth).toLocaleDateString()}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-brand-secondary-400">Gender</label>
@@ -60,7 +60,7 @@ export default function StudentDetailsModal({ student, onClose }: StudentDetails
           <section>
             <h3 className="text-lg font-semibold text-brand-primary mb-4">Emergency Contacts</h3>
             <div className="space-y-4">
-              {student.emergencyContacts.map((contact, index) => (
+              {student.emergency_contacts.map((contact, index) => (
                 <div key={index} className="bg-gray-50 rounded-lg p-4">
                   <div className="flex justify-between items-start mb-2">
                     <div>
@@ -96,7 +96,7 @@ export default function StudentDetailsModal({ student, onClose }: StudentDetails
             <h3 className="text-lg font-semibold text-brand-primary mb-4">Medical Information</h3>
             
             {/* Alert for Medical Conditions */}
-            {(student.medicalConditions || student.allergies) && (
+            {(student.medical_conditions || student.allergies) && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 flex items-start">
                 <AlertCircle className="w-5 h-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
                 <div>
@@ -109,13 +109,13 @@ export default function StudentDetailsModal({ student, onClose }: StudentDetails
             )}
             
             <div className="space-y-4">
-              {student.medicalConditions && (
+              {student.medical_conditions && (
                 <div>
                   <label className="text-sm font-medium text-brand-secondary-400">
                     Medical Conditions
                   </label>
                   <p className="mt-1 text-gray-700 bg-gray-50 rounded-lg p-3">
-                    {student.medicalConditions}
+                    {student.medical_conditions}
                   </p>
                 </div>
               )}
@@ -147,7 +147,7 @@ export default function StudentDetailsModal({ student, onClose }: StudentDetails
                   <label className="text-sm font-medium text-brand-secondary-400">
                     Doctor's Name
                   </label>
-                  <p className="mt-1">{student.doctorName}</p>
+                  <p className="mt-1">{student.doctor_name}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-brand-secondary-400">
@@ -155,10 +155,10 @@ export default function StudentDetailsModal({ student, onClose }: StudentDetails
                   </label>
                   <p className="mt-1">
                     <a
-                      href={`tel:${student.doctorPhone}`}
+                      href={`tel:${student.doctor_phone}`}
                       className="text-brand-primary hover:text-brand-secondary-400"
                     >
-                      {student.doctorPhone}
+                      {student.doctor_phone}
                     </a>
                   </p>
                 </div>
@@ -172,10 +172,10 @@ export default function StudentDetailsModal({ student, onClose }: StudentDetails
             <div className="space-y-3">
               <div className="flex items-center">
                 <div className={`w-4 h-4 rounded-sm mr-3 flex items-center justify-center ${
-                  student.photoConsent ? 'bg-green-500' : 'bg-red-500'
+                  student.photo_consent ? 'bg-green-500' : 'bg-red-500'
                 }`}>
                   <span className="text-white text-xs">
-                    {student.photoConsent ? '✓' : '✕'}
+                    {student.photo_consent ? '✓' : '✕'}
                   </span>
                 </div>
                 <span className="text-sm text-gray-700">
@@ -185,10 +185,10 @@ export default function StudentDetailsModal({ student, onClose }: StudentDetails
               
               <div className="flex items-center">
                 <div className={`w-4 h-4 rounded-sm mr-3 flex items-center justify-center ${
-                  student.socialMediaConsent ? 'bg-green-500' : 'bg-red-500'
+                  student.social_media_consent ? 'bg-green-500' : 'bg-red-500'
                 }`}>
                   <span className="text-white text-xs">
-                    {student.socialMediaConsent ? '✓' : '✕'}
+                    {student.social_media_consent ? '✓' : '✕'}
                   </span>
                 </div>
                 <span className="text-sm text-gray-700">
@@ -198,10 +198,10 @@ export default function StudentDetailsModal({ student, onClose }: StudentDetails
               
               <div className="flex items-center">
                 <div className={`w-4 h-4 rounded-sm mr-3 flex items-center justify-center ${
-                  student.participationConsent ? 'bg-green-500' : 'bg-red-500'
+                  student.participation_consent ? 'bg-green-500' : 'bg-red-500'
                 }`}>
                   <span className="text-white text-xs">
-                    {student.participationConsent ? '✓' : '✕'}
+                    {student.participation_consent ? '✓' : '✕'}
                   </span>
                 </div>
                 <span className="text-sm text-gray-700">
