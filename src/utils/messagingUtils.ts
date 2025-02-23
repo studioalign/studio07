@@ -9,10 +9,10 @@ export async function getStudioUsersByRole(
 			.from("users")
 			.select(
 				`id, name, role, email,
-        studio:studios!users_studio_id_fkey(
-          id, name, address, phone, email
-        )
-      `
+				studio:studios!users_studio_id_fkey(
+				id, name, address, phone, email
+				)
+			`
 			)
 			.eq("role", role)
 			.eq("studio_id", studioId);

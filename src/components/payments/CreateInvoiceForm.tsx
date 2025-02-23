@@ -5,6 +5,7 @@ import { useData } from "../../contexts/DataContext";
 import FormInput from "../FormInput";
 import SearchableDropdown from "../SearchableDropdown";
 import { useAuth } from "../../contexts/AuthContext";
+import { getStudioUsersByRole } from "../../utils/messagingUtils";
 
 interface Parent {
 	id: string;
@@ -73,35 +74,27 @@ export default function CreateInvoiceForm({
 
 	const fetchParents = async () => {
 		try {
-			const { data, error: fetchError } = await supabase
+			const { data, error } = await supabase
 				.from("users")
 				.select(
 					`
-          id,
-          name,
-          email,
-          students (
-            id,
-            name,
-            enrollments:plan_enrollments (
-              id,
-              plan:pricing_plans (
-                name,
-                amount
-              )
-            )
-          )
-        `
+						id, name, role, email,
+						studio:studios!users_studio_id_fkey(
+						id, name, address, phone, email
+						),
+						students:students (id, name)
+					`
 				)
+				.eq("role", "parent")
 				.eq("studio_id", profile?.studio?.id + "");
 
-			if (fetchError) throw fetchError;
+			if (error) throw error;
+
 			setParents(data);
 		} catch (err) {
 			console.error("Error fetching parents:", err);
 			setError(err instanceof Error ? err.message : "Failed to fetch parents");
 		}
-		y;
 	};
 
 	const addItem = () => {
