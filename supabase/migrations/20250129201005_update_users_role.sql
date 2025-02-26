@@ -2,17 +2,13 @@
 ALTER TABLE public.users 
   ALTER COLUMN role DROP DEFAULT,
   ALTER COLUMN role TYPE user_role USING role::user_role;
-
 -- Set the default back with the correct type
 ALTER TABLE public.users 
   ALTER COLUMN role SET DEFAULT 'owner'::user_role;
-
 -- Drop existing trigger first
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users CASCADE;
-
 -- Drop and recreate the function with explicit signature
 DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
-
 -- Recreate the function with role support
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
@@ -75,7 +71,6 @@ EXCEPTION WHEN OTHERS THEN
   RAISE;
 END;
 $$;
-
 -- Recreate the trigger
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users

@@ -1,5 +1,4 @@
 set check_function_bodies = off;
-
 CREATE OR REPLACE FUNCTION public.handle_new_user()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -58,7 +57,4 @@ EXCEPTION WHEN OTHERS THEN
   -- Log any errors that occur
   RAISE NOTICE 'Error in handle_new_user: %', SQLERRM;
   RAISE;
-END;$function$
-;
-
-
+END;$function$;

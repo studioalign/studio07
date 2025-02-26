@@ -1,0 +1,14 @@
+alter table "public"."invoices" drop constraint "invoices_discount_type_check";
+alter table "public"."invoices" drop constraint "invoices_recurring_interval_check";
+alter table "public"."invoices" drop constraint "invoices_studio_id_number_key";
+drop index if exists "public"."invoices_studio_id_number_key";
+alter table "public"."invoice_items" disable row level security;
+alter table "public"."invoices" drop column "discount_reason";
+alter table "public"."invoices" drop column "discount_type";
+alter table "public"."invoices" drop column "discount_value";
+alter table "public"."invoices" drop column "is_recurring";
+alter table "public"."invoices" drop column "number";
+alter table "public"."invoices" drop column "recurring_end_date";
+alter table "public"."invoices" drop column "recurring_interval";
+alter table "public"."invoices" disable row level security;
+alter table "public"."users" add column "stripe_customer_id" text;

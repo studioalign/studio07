@@ -11,35 +11,35 @@ export type Database = {
     Tables: {
       attendance: {
         Row: {
+          class_student_id: string | null
           created_at: string | null
           id: string
-          instance_enrollment_id: string | null
           notes: string | null
           status: string
           updated_at: string | null
         }
         Insert: {
+          class_student_id?: string | null
           created_at?: string | null
           id?: string
-          instance_enrollment_id?: string | null
           notes?: string | null
           status: string
           updated_at?: string | null
         }
         Update: {
+          class_student_id?: string | null
           created_at?: string | null
           id?: string
-          instance_enrollment_id?: string | null
           notes?: string | null
           status?: string
           updated_at?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "attendance_instance_enrollment_id_fkey"
-            columns: ["instance_enrollment_id"]
-            isOneToOne: true
-            referencedRelation: "instance_enrollments"
+            foreignKeyName: "attendance_class_student_id_fkey"
+            columns: ["class_student_id"]
+            isOneToOne: false
+            referencedRelation: "class_students"
             referencedColumns: ["id"]
           },
         ]
@@ -264,16 +264,19 @@ export type Database = {
         Row: {
           class_id: string
           created_at: string | null
+          id: string
           student_id: string
         }
         Insert: {
           class_id: string
           created_at?: string | null
+          id?: string
           student_id: string
         }
         Update: {
           class_id?: string
           created_at?: string | null
+          id?: string
           student_id?: string
         }
         Relationships: [
@@ -523,6 +526,41 @@ export type Database = {
         }
         Relationships: []
       }
+      emergency_contacts: {
+        Row: {
+          email: string | null
+          id: string
+          name: string
+          phone: string
+          relationship: string
+          student_id: string | null
+        }
+        Insert: {
+          email?: string | null
+          id?: string
+          name: string
+          phone: string
+          relationship: string
+          student_id?: string | null
+        }
+        Update: {
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string
+          relationship?: string
+          student_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emergency_contacts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       instance_enrollments: {
         Row: {
           class_instance_id: string | null
@@ -622,12 +660,19 @@ export type Database = {
       invoices: {
         Row: {
           created_at: string | null
+          discount_reason: string | null
+          discount_type: string | null
+          discount_value: number | null
           due_date: string
           id: string
+          is_recurring: boolean | null
           notes: string | null
-          number: string
           parent_id: string
+          pdf_url: string | null
+          recurring_end_date: string | null
+          recurring_interval: string
           status: string
+          stripe_invoice_id: string | null
           studio_id: string | null
           subtotal: number
           tax: number
@@ -636,12 +681,19 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          discount_reason?: string | null
+          discount_type?: string | null
+          discount_value?: number | null
           due_date: string
           id?: string
+          is_recurring?: boolean | null
           notes?: string | null
-          number: string
           parent_id: string
+          pdf_url?: string | null
+          recurring_end_date?: string | null
+          recurring_interval: string
           status: string
+          stripe_invoice_id?: string | null
           studio_id?: string | null
           subtotal: number
           tax?: number
@@ -650,12 +702,19 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          discount_reason?: string | null
+          discount_type?: string | null
+          discount_value?: number | null
           due_date?: string
           id?: string
+          is_recurring?: boolean | null
           notes?: string | null
-          number?: string
           parent_id?: string
+          pdf_url?: string | null
+          recurring_end_date?: string | null
+          recurring_interval?: string
           status?: string
+          stripe_invoice_id?: string | null
           studio_id?: string | null
           subtotal?: number
           tax?: number
@@ -836,10 +895,14 @@ export type Database = {
         Row: {
           amount: number
           created_at: string | null
+          discount_amount: number | null
           id: string
           invoice_id: string | null
+          is_recurring: boolean
+          original_amount: number | null
           payment_date: string
           payment_method: string
+          recurring_interval: string
           status: string
           transaction_id: string | null
           updated_at: string | null
@@ -847,10 +910,14 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string | null
+          discount_amount?: number | null
           id?: string
           invoice_id?: string | null
+          is_recurring?: boolean
+          original_amount?: number | null
           payment_date?: string
           payment_method: string
+          recurring_interval: string
           status: string
           transaction_id?: string | null
           updated_at?: string | null
@@ -858,10 +925,14 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string | null
+          discount_amount?: number | null
           id?: string
           invoice_id?: string | null
+          is_recurring?: boolean
+          original_amount?: number | null
           payment_date?: string
           payment_method?: string
+          recurring_interval?: string
           status?: string
           transaction_id?: string | null
           updated_at?: string | null
@@ -1117,27 +1188,54 @@ export type Database = {
       }
       students: {
         Row: {
+          allergies: string | null
           created_at: string | null
           date_of_birth: string
+          doctor_name: string | null
+          doctor_phone: string | null
+          gender: string | null
           id: string
+          medical_conditions: string | null
+          medications: string | null
           name: string
           parent_id: string
+          participation_consent: boolean | null
+          photo_consent: boolean | null
+          social_media_consent: boolean | null
           studio_id: string
         }
         Insert: {
+          allergies?: string | null
           created_at?: string | null
           date_of_birth: string
+          doctor_name?: string | null
+          doctor_phone?: string | null
+          gender?: string | null
           id?: string
+          medical_conditions?: string | null
+          medications?: string | null
           name: string
           parent_id: string
+          participation_consent?: boolean | null
+          photo_consent?: boolean | null
+          social_media_consent?: boolean | null
           studio_id: string
         }
         Update: {
+          allergies?: string | null
           created_at?: string | null
           date_of_birth?: string
+          doctor_name?: string | null
+          doctor_phone?: string | null
+          gender?: string | null
           id?: string
+          medical_conditions?: string | null
+          medications?: string | null
           name?: string
           parent_id?: string
+          participation_consent?: boolean | null
+          photo_consent?: boolean | null
+          social_media_consent?: boolean | null
           studio_id?: string
         }
         Relationships: [
@@ -1204,6 +1302,204 @@ export type Database = {
           },
         ]
       }
+      subscriptions: {
+        Row: {
+          amount: number
+          created_at: string | null
+          end_date: string | null
+          id: string
+          interval: string
+          invoice_id: string | null
+          payment_method_id: string | null
+          status: string
+          stripe_subscription_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          end_date?: string | null
+          id?: string
+          interval: string
+          invoice_id?: string | null
+          payment_method_id?: string | null
+          status: string
+          stripe_subscription_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          end_date?: string | null
+          id?: string
+          interval?: string
+          invoice_id?: string | null
+          payment_method_id?: string | null
+          status?: string
+          stripe_subscription_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      uniform_assignments: {
+        Row: {
+          created_at: string | null
+          id: string
+          student_id: string
+          uniform_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          student_id: string
+          uniform_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          student_id?: string
+          uniform_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uniform_assignments_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uniform_assignments_uniform_id_fkey"
+            columns: ["uniform_id"]
+            isOneToOne: false
+            referencedRelation: "uniforms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      uniform_responses: {
+        Row: {
+          assignment_id: string
+          created_at: string | null
+          id: string
+          size_option_id: string
+          updated_at: string | null
+          value: string
+        }
+        Insert: {
+          assignment_id: string
+          created_at?: string | null
+          id?: string
+          size_option_id: string
+          updated_at?: string | null
+          value: string
+        }
+        Update: {
+          assignment_id?: string
+          created_at?: string | null
+          id?: string
+          size_option_id?: string
+          updated_at?: string | null
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uniform_responses_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "uniform_assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uniform_responses_size_option_id_fkey"
+            columns: ["size_option_id"]
+            isOneToOne: false
+            referencedRelation: "uniform_size_options"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      uniform_size_options: {
+        Row: {
+          created_at: string | null
+          id: string
+          label: string
+          options: Json | null
+          type: string
+          uniform_id: string
+          unit: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          label: string
+          options?: Json | null
+          type: string
+          uniform_id: string
+          unit?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          label?: string
+          options?: Json | null
+          type?: string
+          uniform_id?: string
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uniform_size_options_uniform_id_fkey"
+            columns: ["uniform_id"]
+            isOneToOne: false
+            referencedRelation: "uniforms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      uniforms: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          studio_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          studio_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          studio_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uniforms_studio_id_fkey"
+            columns: ["studio_id"]
+            isOneToOne: false
+            referencedRelation: "studios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           created_at: string | null
@@ -1213,6 +1509,7 @@ export type Database = {
           phone: string | null
           photo_url: string | null
           role: Database["public"]["Enums"]["user_role"]
+          stripe_customer_id: string | null
           studio_id: string | null
           timezone: string | null
           updated_at: string | null
@@ -1225,6 +1522,7 @@ export type Database = {
           phone?: string | null
           photo_url?: string | null
           role?: Database["public"]["Enums"]["user_role"]
+          stripe_customer_id?: string | null
           studio_id?: string | null
           timezone?: string | null
           updated_at?: string | null
@@ -1237,6 +1535,7 @@ export type Database = {
           phone?: string | null
           photo_url?: string | null
           role?: Database["public"]["Enums"]["user_role"]
+          stripe_customer_id?: string | null
           studio_id?: string | null
           timezone?: string | null
           updated_at?: string | null

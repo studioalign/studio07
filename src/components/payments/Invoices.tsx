@@ -3,30 +3,32 @@ import { Plus, FileText, Search, X } from "lucide-react";
 import CreateInvoiceForm from "./CreateInvoiceForm";
 import InvoiceDetail from "./InvoiceDetail";
 import EditInvoiceForm from "./EditInvoiceForm";
-import { useInvoices } from "../../hooks/useInvoices";
-import { formatCurrency } from "../../utils/formatters";
+import { useInvoices, InvoiceStatus } from "../../hooks/useInvoices";
+import { formatCurrency, formatDate } from "../../utils/formatters";
 import { useLocalization } from "../../contexts/LocalizationContext";
 import type { Invoice } from "../../hooks/useInvoices";
 
 export default function Invoices() {
 	const { currency, dateFormat } = useLocalization();
 	const [showCreateForm, setShowCreateForm] = useState(false);
-	const [selectedStatus, setSelectedStatus] = useState<string | undefined>();
+	const [selectedStatus, setSelectedStatus] = useState<
+		InvoiceStatus | undefined
+	>(undefined);
 	const [search, setSearch] = useState("");
 	const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 	const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
 
 	const { invoices, loading, error, counts, refresh } = useInvoices({
-		status: selectedStatus as any,
+		status: selectedStatus,
 		search,
 	});
 
 	const filters = [
 		{ id: undefined, label: "All" },
-		{ id: "draft", label: "Draft" },
-		{ id: "sent", label: "Sent" },
-		{ id: "paid", label: "Paid" },
-		{ id: "overdue", label: "Overdue" },
+		{ id: "draft" as InvoiceStatus, label: "Draft" },
+		{ id: "pending" as InvoiceStatus, label: "Pending" },
+		{ id: "paid" as InvoiceStatus, label: "Paid" },
+		{ id: "overdue" as InvoiceStatus, label: "Overdue" },
 	];
 
 	const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,17 +196,50 @@ export default function Invoices() {
 										<div className="flex items-center">
 											<FileText className="w-5 h-5 text-brand-primary mr-3" />
 											<div className="text-left">
-												<p className="font-medium">{invoice.number}</p>
+												<p className="font-medium">{invoice.id}</p>
 												<p className="text-sm text-gray-500">
 													{invoice.parent.name}
 												</p>
+												{invoice.is_recurring && (
+													<p className="text-xs text-blue-600 mt-1">
+														↻ Recurring{" "}
+														{invoice.recurring_interval.toLowerCase()}
+													</p>
+												)}
 											</div>
 										</div>
 										<div className="flex items-center space-x-6">
 											<div className="text-right">
-												<p className="font-medium">
-													{formatCurrency(invoice.total, currency)}
-												</p>
+												{invoice.discount_value > 0 ? (
+													<>
+														<p className="text-sm text-gray-500 line-through">
+															{formatCurrency(invoice.total, currency)}
+														</p>
+														<p className="font-medium text-green-600">
+															{formatCurrency(
+																invoice.discount_type === "percentage"
+																	? invoice.total *
+																			(1 - invoice.discount_value / 100)
+																	: invoice.total - invoice.discount_value,
+																currency
+															)}
+															<span className="text-xs ml-1">
+																(
+																{invoice.discount_type === "percentage"
+																	? `${invoice.discount_value}% off`
+																	: `${formatCurrency(
+																			invoice.discount_value,
+																			currency
+																	  )} off`}
+																)
+															</span>
+														</p>
+													</>
+												) : (
+													<p className="font-medium">
+														{formatCurrency(invoice.total, currency)}
+													</p>
+												)}
 												<p className="text-sm text-gray-500">
 													Due {formatDate(invoice.due_date, dateFormat)}
 												</p>
@@ -215,7 +250,7 @@ export default function Invoices() {
 														? "bg-green-100 text-green-800"
 														: invoice.status === "overdue"
 														? "bg-red-100 text-red-800"
-														: invoice.status === "sent"
+														: invoice.status === "pending"
 														? "bg-yellow-100 text-yellow-800"
 														: "bg-gray-100 text-gray-800"
 												}`}

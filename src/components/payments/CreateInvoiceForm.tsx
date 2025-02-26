@@ -51,12 +51,10 @@ export default function CreateInvoiceForm({
 	const [items, setItems] = useState<InvoiceItem[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
-	const [name, setName] = useState("");
-	const [description, setDescription] = useState("");
 	const [isRecurring, setIsRecurring] = useState(false);
 	const [recurringInterval, setRecurringInterval] = useState<
-		"weekly" | "monthly" | "term"
-	>("monthly");
+		"week" | "month" | "year"
+	>("month");
 	const [weeklyDay, setWeeklyDay] = useState<number>(1); // 1 = Monday
 	const [monthlyDate, setMonthlyDate] = useState<number>(1);
 	const [termMonths, setTermMonths] = useState<number[]>([1, 4, 9]); // Default to January, April, September
@@ -152,7 +150,15 @@ export default function CreateInvoiceForm({
 						notes: notes || null,
 						subtotal: calculateTotals().subtotal,
 						total: calculateTotals().total,
-						status: "draft",
+						status: "pending",
+						is_recurring: isRecurring,
+						recurring_interval: recurringInterval,
+						recurring_end_date: recurringEndDate || null,
+						discount_type: discountType,
+						discount_value: discountValue ? parseFloat(discountValue) : 0,
+						discount_reason: discountReason,
+						stripe_invoice_id: null, // To store the Stripe invoice ID
+						pdf_url: null, // To store the PDF URL
 					},
 				])
 				.select()
@@ -177,6 +183,46 @@ export default function CreateInvoiceForm({
 
 			if (itemsError) throw itemsError;
 
+			// Create Stripe invoice - call edge function
+			try {
+				const response = await supabase.functions.invoke(
+					"create-stripe-invoice",
+					{
+						body: {
+							invoiceId: invoice.id,
+							isRecurring: isRecurring,
+							recurringInterval: recurringInterval,
+							recurringEndDate: recurringEndDate,
+							discountType: discountType,
+							discountValue: discountValue ? parseFloat(discountValue) : 0,
+						},
+					}
+				);
+
+				if (response.error) {
+					console.error("Error creating Stripe invoice:", response.error);
+				} else if (response.data) {
+					// Update the invoice with Stripe invoice ID and PDF URL
+					const { error: updateError } = await supabase
+						.from("invoices")
+						.update({
+							stripe_invoice_id: response.data.stripe_invoice_id,
+							pdf_url: response.data.pdf_url,
+						})
+						.eq("id", invoice.id);
+
+					if (updateError) {
+						console.error(
+							"Error updating invoice with Stripe details:",
+							updateError
+						);
+					}
+				}
+			} catch (stripeErr) {
+				console.error("Error with Stripe invoice creation:", stripeErr);
+				// Continue even if Stripe invoice creation fails - we can retry later
+			}
+
 			onSuccess();
 		} catch (err) {
 			console.error("Error creating invoice:", err);
@@ -189,6 +235,7 @@ export default function CreateInvoiceForm({
 	const getStudentOptions = () => {
 		if (!selectedParent) return [];
 		const parent = parents.find((p) => p.id === selectedParent.id);
+		console.log(parent);
 		return (
 			parent?.students.map((student) => ({
 				id: student.id,
@@ -309,7 +356,7 @@ export default function CreateInvoiceForm({
 							</div>
 						</div>
 
-						{item.type === "tuition" && item.student_id && (
+						{/* {item.type === "tuition" && item.student_id && (
 							<SearchableDropdown
 								id={`enrollment-${index}`}
 								label="Plan Enrollment"
@@ -338,7 +385,7 @@ export default function CreateInvoiceForm({
 								}}
 								options={getEnrollmentOptions(item.student_id)}
 							/>
-						)}
+						)} */}
 
 						<div className="grid grid-cols-3 gap-4">
 							<FormInput
@@ -464,16 +511,16 @@ export default function CreateInvoiceForm({
 									onChange={(e) => setRecurringInterval(e.target.value as any)}
 									className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-accent focus:border-brand-accent"
 								>
-									<option value="weekly">Weekly</option>
-									<option value="monthly">Monthly</option>
-									<option value="term">Term</option>
+									<option value="week">Weekly</option>
+									<option value="month">Monthly</option>
+									<option value="year">Yearly</option>
 								</select>
 							</div>
 
 							{/* Recurring Payment Schedule */}
 							{isRecurring && (
 								<div className="col-span-2 mt-4">
-									{recurringInterval === "weekly" && (
+									{recurringInterval === "week" && (
 										<div>
 											<label className="block text-sm font-medium text-brand-secondary-400 mb-1">
 												Payment Day
@@ -494,7 +541,7 @@ export default function CreateInvoiceForm({
 										</div>
 									)}
 
-									{recurringInterval === "monthly" && (
+									{recurringInterval === "month" && (
 										<div>
 											<label className="block text-sm font-medium text-brand-secondary-400 mb-1">
 												Payment Date
@@ -521,7 +568,7 @@ export default function CreateInvoiceForm({
 										</div>
 									)}
 
-									{recurringInterval === "term" && (
+									{/* {recurringInterval === "year" && (
 										<div className="space-y-4">
 											<div>
 												<label className="block text-sm font-medium text-brand-secondary-400 mb-1">
@@ -574,7 +621,7 @@ export default function CreateInvoiceForm({
 												</div>
 											</div>
 										</div>
-									)}
+									)} */}
 								</div>
 							)}
 
