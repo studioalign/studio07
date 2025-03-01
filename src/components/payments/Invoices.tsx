@@ -1,5 +1,12 @@
-import React, { useState, useCallback } from "react";
-import { Plus, FileText, Search, X } from "lucide-react";
+import React, { useState, useCallback, useEffect } from "react";
+import {
+	Plus,
+	FileText,
+	Search,
+	X,
+	AlertCircle,
+	CreditCard,
+} from "lucide-react";
 import CreateInvoiceForm from "./CreateInvoiceForm";
 import InvoiceDetail from "./InvoiceDetail";
 import EditInvoiceForm from "./EditInvoiceForm";
@@ -7,9 +14,15 @@ import { useInvoices, InvoiceStatus } from "../../hooks/useInvoices";
 import { formatCurrency, formatDate } from "../../utils/formatters";
 import { useLocalization } from "../../contexts/LocalizationContext";
 import type { Invoice } from "../../hooks/useInvoices";
+import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabase";
+import { useNavigate } from "react-router-dom";
 
 export default function Invoices() {
 	const { currency, dateFormat } = useLocalization();
+	const { profile } = useAuth();
+	const [isStripeConnected, setIsStripeConnected] = useState<boolean>(false);
+	const navigate = useNavigate();
 	const [showCreateForm, setShowCreateForm] = useState(false);
 	const [selectedStatus, setSelectedStatus] = useState<
 		InvoiceStatus | undefined
@@ -23,6 +36,12 @@ export default function Invoices() {
 		search,
 	});
 
+	useEffect(() => {
+		if (profile?.studio?.id) {
+			checkStripeConnection(profile.studio.id);
+		}
+	}, [profile]);
+
 	const filters = [
 		{ id: undefined, label: "All" },
 		{ id: "draft" as InvoiceStatus, label: "Draft" },
@@ -34,6 +53,22 @@ export default function Invoices() {
 	const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
 		setSearch(e.target.value);
 	}, []);
+
+	const checkStripeConnection = async (studioId: string) => {
+		try {
+			const { data: studioData, error } = await supabase
+				.from("studios")
+				.select("stripe_connect_enabled")
+				.eq("id", studioId)
+				.single();
+
+			if (error) throw error;
+			setIsStripeConnected(!!studioData?.stripe_connect_enabled);
+		} catch (err) {
+			console.error("Error checking Stripe connection:", err);
+			setIsStripeConnected(false);
+		}
+	};
 
 	if (selectedInvoice) {
 		return (
@@ -84,11 +119,38 @@ export default function Invoices() {
 
 	return (
 		<div>
+			{!isStripeConnected && (
+				<div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+					<div className="flex items-start">
+						<AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 mr-3" />
+						<div>
+							<h3 className="text-sm font-medium text-yellow-800">
+								Stripe Account Not Connected
+							</h3>
+							<p className="mt-1 text-sm text-yellow-700">
+								You need to connect your Stripe account to start accepting
+								payments and creating invoices. This ensures secure payment
+								processing and automatic transfers to your bank account.
+							</p>
+							<div className="mt-3">
+								<button
+									onClick={() => navigate("/dashboard/payment-settings")}
+									className="inline-flex items-center px-4 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-sm font-medium rounded-lg transition-colors duration-200"
+								>
+									<CreditCard className="w-4 h-4 mr-2" />
+									Go to Payment Settings
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
 			<div className="flex justify-between items-center mb-6">
 				<h1 className="text-2xl font-bold text-brand-primary">Invoices</h1>
 				<button
 					onClick={() => setShowCreateForm(true)}
-					className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
+					disabled={!isStripeConnected}
+					className="flex items-center px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
 				>
 					<Plus className="w-5 h-5 mr-2" />
 					Create Invoice
@@ -144,9 +206,14 @@ export default function Invoices() {
 										}`}
 									>
 										{item.label}
-										{counts && (
+										{counts && item.label !== "All" && (
 											<span className="ml-2 text-xs text-gray-400">
 												({counts[item.id as keyof typeof counts] || 0})
+											</span>
+										)}
+										{counts && item.label === "All" && (
+											<span className="ml-2 text-xs text-gray-400">
+												({invoices.length || 0})
 											</span>
 										)}
 									</button>

@@ -38,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 					.select(
 						`id, name, role, email, photo_url,
 						studio:studios!users_studio_id_fkey(
-							id, name, address, phone, email
+							id, name, address, phone, email, stripe_connect_id, stripe_connect_enabled, stripe_connect_onboarding_complete, uses_platform_payments, bank_account_name, bank_account_last4
 						)
 					`
 					)

@@ -190,11 +190,6 @@ export default function CreateInvoiceForm({
 					{
 						body: {
 							invoiceId: invoice.id,
-							isRecurring: isRecurring,
-							recurringInterval: recurringInterval,
-							recurringEndDate: recurringEndDate,
-							discountType: discountType,
-							discountValue: discountValue ? parseFloat(discountValue) : 0,
 						},
 					}
 				);

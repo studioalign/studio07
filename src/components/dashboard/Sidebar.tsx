@@ -31,6 +31,11 @@ const ownerNavigation = [
 	{ name: "Students", to: "/dashboard/students", icon: GraduationCap },
 	{ name: "Payments", to: "/dashboard/payments", icon: DollarSign },
 	{ name: "Invoices", to: "/dashboard/invoices", icon: FileText },
+	{
+		name: "Payment Settings",
+		to: "/dashboard/payment-settings",
+		icon: DollarSign,
+	},
 ];
 
 const teacherNavigation = [
@@ -83,27 +88,27 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 			</div>
 			<nav className="flex-1 overflow-y-auto min-h-0">
 				<div className="py-6 space-y-1">
-				{navigation.map((item) => {
-					const Icon = item.icon;
-					return (
-						<NavLink
-							key={item.name}
-							to={item.to}
-							end={item.end}
-							onClick={() => onClose()}
-							className={({ isActive }) =>
-								`flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-									isActive
-										? "bg-brand-secondary-400 text-brand-accent"
-										: "text-gray-300 hover:bg-brand-secondary-400/50 hover:text-white"
-								}`
-							}
-						>
-							<Icon className="w-5 h-5 mr-3" />
-							{item.name}
-						</NavLink>
-					);
-				})}
+					{navigation.map((item) => {
+						const Icon = item.icon;
+						return (
+							<NavLink
+								key={item.name}
+								to={item.to}
+								end={item.end}
+								onClick={() => onClose()}
+								className={({ isActive }) =>
+									`flex items-center px-6 py-3 text-sm font-medium transition-colors ${
+										isActive
+											? "bg-brand-secondary-400 text-brand-accent"
+											: "text-gray-300 hover:bg-brand-secondary-400/50 hover:text-white"
+									}`
+								}
+							>
+								<Icon className="w-5 h-5 mr-3" />
+								{item.name}
+							</NavLink>
+						);
+					})}
 				</div>
 			</nav>
 		</div>

@@ -65,6 +65,7 @@ export default function ParentInvoices() {
 				address: string;
 				phone: string;
 				email: string;
+				stripe_connect_enabled: boolean;
 		  }
 		| undefined
 	>(undefined);
@@ -76,7 +77,7 @@ export default function ParentInvoices() {
 			const { data: userData, error: userError } = await supabase
 				.from("users")
 				.select(
-					"studio:studios!users_studio_id_fkey(name, address, phone, email)"
+					"studio:studios!users_studio_id_fkey(name, address, phone, email, stripe_connect_enabled)"
 				)
 				.eq("id", profile.id)
 				.single();
@@ -421,9 +422,39 @@ export default function ParentInvoices() {
 										</div>
 									</div>
 									<div className="text-right">
-										<p className="text-2xl font-bold text-brand-primary">
-											{formatCurrency(invoice.total, currency)}
-										</p>
+										<div className="space-y-1">
+											{invoice.discount_value > 0 && (
+												<div className="flex items-center justify-end space-x-2">
+													<p className="text-sm text-gray-500 line-through">
+														{formatCurrency(invoice.total, currency)}
+													</p>
+													<span className="text-sm text-green-600">
+														{invoice.discount_type === "percentage"
+															? `${invoice.discount_value}% off`
+															: `${formatCurrency(
+																	invoice.discount_value,
+																	currency
+															  )} off`}
+													</span>
+												</div>
+											)}
+											<p className="text-2xl font-bold text-brand-primary">
+												{formatCurrency(
+													invoice.discount_value
+														? invoice.discount_type === "percentage"
+															? invoice.total *
+															  (1 - invoice.discount_value / 100)
+															: invoice.total - invoice.discount_value
+														: invoice.total,
+													currency
+												)}
+											</p>
+											{invoice.discount_reason && (
+												<p className="text-sm text-gray-500">
+													Reason: {invoice.discount_reason}
+												</p>
+											)}
+										</div>
 										<div className="flex justify-end mt-2 space-x-2">
 											{invoice.pdf_url && (
 												<button

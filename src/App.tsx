@@ -28,137 +28,146 @@ import { MessagingProvider } from "./contexts/MessagingContext";
 import { LocalizationProvider } from "./contexts/LocalizationContext";
 import PrivateRoute from "./components/PrivateRoute";
 import { useAuth } from "./contexts/AuthContext";
+import PaymentSettings from "./pages/dashboard/payment-settings";
 
 const DashboardRoutes = () => {
-  const { profile } = useAuth();
-  
-  return (
-    <Routes>
-      <Route
-        path="/signup"
-        element={
-          <div className="min-h-screen bg-gradient-to-br from-brand-secondary-400 to-brand-primary flex items-center justify-center p-4">
-            <SignupForm />
-          </div>
-        }
-      />
-      <Route
-        path="/"
-        element={
-          <div className="min-h-screen bg-gradient-to-br from-brand-secondary-400 to-brand-primary flex items-center justify-center p-4">
-            <SigninForm />
-          </div>
-        }
-      />
-      <Route
-        path="/forgot-password"
-        element={
-          <div className="min-h-screen bg-gradient-to-br from-brand-secondary-400 to-brand-primary flex items-center justify-center p-4">
-            <ForgotPasswordForm />
-          </div>
-        }
-      />
-      <Route
-        path="/onboarding"
-        element={
-          <PrivateRoute requiredRole="owner">
-            <OnboardingPage />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/dashboard"
-        element={
-          <PrivateRoute requiredRole="owner,teacher,parent">
-            <DataProvider>
-              <DashboardLayout />
-            </DataProvider>
-          </PrivateRoute>
-        }
-      >
-        <Route index element={<Overview />} />
+	const { profile } = useAuth();
 
-        {/* Common routes for all authenticated users */}
-        <Route path="classes" element={<Classes />} />
-        <Route path="messages" element={<MessagesLayout />} />
-        <Route path="channels" element={<ChannelLayout />} />
-        <Route path="channels/:channelId" element={<ChannelLayout />} />
-        <Route path="notifications" element={<NotificationsPage />} />
-        <Route path="profile" element={<Profile />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="users" element={<UserManagement />} />
-        <Route path="documents" element={<DocumentList />} />
+	return (
+		<Routes>
+			<Route
+				path="/signup"
+				element={
+					<div className="min-h-screen bg-gradient-to-br from-brand-secondary-400 to-brand-primary flex items-center justify-center p-4">
+						<SignupForm />
+					</div>
+				}
+			/>
+			<Route
+				path="/"
+				element={
+					<div className="min-h-screen bg-gradient-to-br from-brand-secondary-400 to-brand-primary flex items-center justify-center p-4">
+						<SigninForm />
+					</div>
+				}
+			/>
+			<Route
+				path="/forgot-password"
+				element={
+					<div className="min-h-screen bg-gradient-to-br from-brand-secondary-400 to-brand-primary flex items-center justify-center p-4">
+						<ForgotPasswordForm />
+					</div>
+				}
+			/>
+			<Route
+				path="/onboarding"
+				element={
+					<PrivateRoute requiredRole="owner">
+						<OnboardingPage />
+					</PrivateRoute>
+				}
+			/>
+			<Route
+				path="/dashboard"
+				element={
+					<PrivateRoute requiredRole="owner,teacher,parent">
+						<DataProvider>
+							<DashboardLayout />
+						</DataProvider>
+					</PrivateRoute>
+				}
+			>
+				<Route index element={<Overview />} />
 
-        {/* Owner-only routes */}
-        <Route
-          path="studio"
-          element={
-            <PrivateRoute requiredRole="owner">
-              <StudioInfo />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="teachers"
-          element={
-            <PrivateRoute requiredRole="owner">
-              <Teachers />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="students"
-          element={
-            <PrivateRoute requiredRole="owner">
-              <Students />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="payments"
-          element={
-            <PrivateRoute requiredRole="owner,parent">
-              {profile?.role === 'owner' ? <Payments /> : <ParentInvoices />}
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="plans"
-          element={
-            <PrivateRoute requiredRole="owner">
-              <Plans />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="invoices"
-          element={
-            <PrivateRoute requiredRole="owner">
-              <Invoices />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="billing"
-          element={
-            <PrivateRoute requiredRole="owner">
-              <Billing />
-            </PrivateRoute>
-          }
-        />
+				{/* Common routes for all authenticated users */}
+				<Route path="classes" element={<Classes />} />
+				<Route path="messages" element={<MessagesLayout />} />
+				<Route path="channels" element={<ChannelLayout />} />
+				<Route path="channels/:channelId" element={<ChannelLayout />} />
+				<Route path="notifications" element={<NotificationsPage />} />
+				<Route path="profile" element={<Profile />} />
+				<Route path="settings" element={<Settings />} />
+				<Route path="users" element={<UserManagement />} />
+				<Route path="documents" element={<DocumentList />} />
 
-        {/* Parent-only routes */}
-        <Route
-          path="my-students"
-          element={
-            <PrivateRoute requiredRole="parent">
-              <MyStudents />
-            </PrivateRoute>
-          }
-        />
-      </Route>
-    </Routes>
-  );
+				{/* Owner-only routes */}
+				<Route
+					path="studio"
+					element={
+						<PrivateRoute requiredRole="owner">
+							<StudioInfo />
+						</PrivateRoute>
+					}
+				/>
+				<Route
+					path="teachers"
+					element={
+						<PrivateRoute requiredRole="owner">
+							<Teachers />
+						</PrivateRoute>
+					}
+				/>
+				<Route
+					path="students"
+					element={
+						<PrivateRoute requiredRole="owner">
+							<Students />
+						</PrivateRoute>
+					}
+				/>
+				<Route
+					path="payments"
+					element={
+						<PrivateRoute requiredRole="owner,parent">
+							{profile?.role === "owner" ? <Payments /> : <ParentInvoices />}
+						</PrivateRoute>
+					}
+				/>
+				<Route
+					path="payment-settings"
+					element={
+						<PrivateRoute requiredRole="owner">
+							<PaymentSettings />
+						</PrivateRoute>
+					}
+				/>
+				<Route
+					path="plans"
+					element={
+						<PrivateRoute requiredRole="owner">
+							<Plans />
+						</PrivateRoute>
+					}
+				/>
+				<Route
+					path="invoices"
+					element={
+						<PrivateRoute requiredRole="owner">
+							<Invoices />
+						</PrivateRoute>
+					}
+				/>
+				<Route
+					path="billing"
+					element={
+						<PrivateRoute requiredRole="owner">
+							<Billing />
+						</PrivateRoute>
+					}
+				/>
+
+				{/* Parent-only routes */}
+				<Route
+					path="my-students"
+					element={
+						<PrivateRoute requiredRole="parent">
+							<MyStudents />
+						</PrivateRoute>
+					}
+				/>
+			</Route>
+		</Routes>
+	);
 };
 
 const App = () => {

@@ -3,6 +3,7 @@ import { MapPin, Phone, Mail, Save, Plus, Globe } from "lucide-react";
 import FormField from "../FormField";
 import RoomCard from "./RoomCard";
 import AddRoomForm from "./AddRoomForm";
+import BankAccountSetup from "./BankAccountSetup";
 import { supabase } from "../../lib/supabase";
 import type { StudioInfo as StudioInfoType } from "../../types/studio";
 import { useData } from "../../contexts/DataContext";
@@ -282,6 +283,9 @@ export default function StudioInfo() {
 							</div>
 						)}
 					</div>
+
+					{/* Bank Account Setup */}
+					<BankAccountSetup />
 
 					{/* Localization Settings */}
 					<div>

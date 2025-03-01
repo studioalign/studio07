@@ -4,25 +4,27 @@ import { supabase } from "../../lib/supabase";
 import StatsCard from "../dashboard/StatsCard";
 import { formatCurrency, formatDate } from "../../utils/formatters";
 import { useLocalization } from "../../contexts/LocalizationContext";
+import { useAuth } from "../../contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 interface Payment {
 	id: string;
 	amount: number;
-	original_amount?: number;
-	discount_amount?: number;
+	original_amount?: number | null;
+	discount_amount?: number | null;
 	is_recurring: boolean;
-	recurring_interval?: string;
+	recurring_interval?: string | null;
 	payment_method: string;
 	status: string;
 	transaction_id: string | null;
 	payment_date: string;
 	invoice: {
 		id: string;
-		number: string;
+		studio_id: string;
 		parent: {
 			name: string;
 		};
-	};
+	} | null;
 }
 
 interface PaymentStats {
@@ -35,7 +37,10 @@ interface PaymentStats {
 
 export default function Payments() {
 	const { currency, dateFormat } = useLocalization();
+	const { profile } = useAuth();
+	const navigate = useNavigate();
 	const [payments, setPayments] = useState<Payment[]>([]);
+	const [isStripeConnected, setIsStripeConnected] = useState<boolean>(false);
 	const [stats, setStats] = useState<PaymentStats>({
 		totalRevenue: 0,
 		outstandingBalance: 0,
@@ -47,11 +52,30 @@ export default function Payments() {
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
-		fetchPayments();
-		fetchStats();
-	}, []);
+		if (profile?.studio?.id) {
+			fetchPayments(profile.studio.id);
+			fetchStats(profile.studio.id);
+			checkStripeConnection(profile.studio.id);
+		}
+	}, [profile]);
 
-	const fetchPayments = async () => {
+	const checkStripeConnection = async (studioId: string) => {
+		try {
+			const { data: studioData, error } = await supabase
+				.from("studios")
+				.select("stripe_connect_enabled")
+				.eq("id", studioId)
+				.single();
+
+			if (error) throw error;
+			setIsStripeConnected(!!studioData?.stripe_connect_enabled);
+		} catch (err) {
+			console.error("Error checking Stripe connection:", err);
+			setIsStripeConnected(false);
+		}
+	};
+
+	const fetchPayments = async (studioId: string) => {
 		try {
 			const { data, error: fetchError } = await supabase
 				.from("payments")
@@ -67,8 +91,9 @@ export default function Payments() {
           status,
           transaction_id,
           payment_date,
-          invoice:invoices (
+          invoice:invoices!payments_invoice_id_fkey (
             id,
+            studio_id,
             parent:users!invoices_parent_id_fkey (
               name
             )
@@ -79,41 +104,60 @@ export default function Payments() {
 				.limit(10);
 
 			if (fetchError) throw fetchError;
-			setPayments(data || []);
+
+			// Filter out any payments with null invoice or mismatched studio_id
+			const filteredPayments = (data || []).filter(
+				(payment) => payment.invoice && payment.invoice.studio_id === studioId
+			);
+			setPayments(filteredPayments as Payment[]);
 		} catch (err) {
 			console.error("Error fetching payments:", err);
 			setError(err instanceof Error ? err.message : "Failed to fetch payments");
 		}
 	};
 
-	const fetchStats = async () => {
+	const fetchStats = async (studioId: string) => {
 		try {
-			// Get total revenue from completed payments
+			// Get total revenue from completed payments for this studio
 			const { data: revenueData, error: revenueError } = await supabase
 				.from("payments")
-				.select("amount")
+				.select(
+					`
+					amount, 
+					invoice:invoices!payments_invoice_id_fkey (
+						studio_id
+					)
+				`
+				)
 				.eq("status", "completed");
 
 			if (revenueError) throw revenueError;
 
-			// Get outstanding invoices (sent but not paid)
+			// Get outstanding invoices (sent but not paid) for this studio
 			const { data: pendingData, error: pendingError } = await supabase
 				.from("invoices")
 				.select("total")
-				.eq("status", "pending");
+				.eq("status", "pending")
+				.eq("studio_id", studioId);
 
 			if (pendingError) throw pendingError;
 
-			// Get overdue invoices
+			// Get overdue invoices for this studio
 			const { data: overdueData, error: overdueError } = await supabase
 				.from("invoices")
 				.select("total")
-				.eq("status", "overdue");
+				.eq("status", "overdue")
+				.eq("studio_id", studioId);
 
 			if (overdueError) throw overdueError;
 
+			// Filter out payments where invoice is null or studio_id doesn't match
+			const filteredRevenueData = (revenueData || []).filter(
+				(p) => p.invoice && p.invoice.studio_id === studioId
+			);
+
 			const totalRevenue =
-				revenueData?.reduce((sum, p) => sum + p.amount, 0) || 0;
+				filteredRevenueData.reduce((sum, p) => sum + p.amount, 0) || 0;
 			const outstandingBalance =
 				pendingData?.reduce((sum, i) => sum + i.total, 0) || 0;
 			const overdueAmount =
@@ -158,6 +202,33 @@ export default function Payments() {
 
 	return (
 		<div>
+			{!isStripeConnected && (
+				<div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+					<div className="flex items-start">
+						<AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 mr-3" />
+						<div>
+							<h3 className="text-sm font-medium text-yellow-800">
+								Stripe Account Not Connected
+							</h3>
+							<p className="mt-1 text-sm text-yellow-700">
+								You need to connect your Stripe account to start accepting
+								payments and creating invoices. This ensures secure payment
+								processing and automatic transfers to your bank account.
+							</p>
+							<div className="mt-3">
+								<button
+									onClick={() => navigate("/dashboard/payment-settings")}
+									className="inline-flex items-center px-4 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-sm font-medium rounded-lg transition-colors duration-200"
+								>
+									<CreditCard className="w-4 h-4 mr-2" />
+									Go to Payment Settings
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
 			<h1 className="text-2xl font-bold text-brand-primary mb-6">
 				Payments Overview
 			</h1>
@@ -212,8 +283,8 @@ export default function Payments() {
 										<CreditCard className="w-5 h-5 text-brand-primary mr-3" />
 										<div>
 											<p className="font-medium">
-												Invoice #{payment.invoice.id} -{" "}
-												{payment.invoice.parent.name}
+												Invoice #{payment.invoice?.id} -{" "}
+												{payment.invoice?.parent.name}
 											</p>
 											<div className="flex items-center space-x-2 text-sm text-gray-500">
 												<span>

@@ -14,6 +14,9 @@ interface InvoiceDetailsModalProps {
 		total: number;
 		notes: string | null;
 		pdf_url?: string;
+		discount_type?: string;
+		discount_value?: number;
+		discount_reason?: string;
 		items: {
 			id: string;
 			description: string;
@@ -32,6 +35,7 @@ interface InvoiceDetailsModalProps {
 		address: string;
 		phone: string;
 		email: string;
+		stripe_connect_enabled?: boolean;
 	};
 }
 
@@ -85,69 +89,83 @@ export default function InvoiceDetailsModal({
 	};
 
 	return (
-		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-			<div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+		<div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+			<div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
 				{/* Header */}
-				<div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
-					<div>
-						<h2 className="text-2xl font-semibold text-brand-primary">
-							Invoice {invoice.number}
-						</h2>
+				<div className="sticky top-0 bg-white border-b px-8 py-4 flex justify-between items-center">
+					<div className="space-y-1">
+						<div className="flex items-center gap-3">
+							<h2 className="text-2xl font-semibold text-brand-primary">
+								Invoice {invoice.number}
+							</h2>
+							<span
+								className={`px-3 py-1 text-sm font-medium rounded-full ${
+									invoice.status === "paid"
+										? "bg-green-100 text-green-800"
+										: invoice.status === "overdue"
+										? "bg-red-100 text-red-800"
+										: "bg-yellow-100 text-yellow-800"
+								}`}
+							>
+								{invoice.status.charAt(0).toUpperCase() +
+									invoice.status.slice(1)}
+							</span>
+						</div>
 						<p className="text-brand-secondary-400">
 							Due {new Date(invoice.due_date).toLocaleDateString()}
 						</p>
 					</div>
-					<div className="flex items-center space-x-2">
+					<div className="flex items-center gap-3">
 						{invoice.pdf_url ? (
 							<button
 								onClick={handleDownloadPDF}
-								className="flex items-center px-3 py-2 text-brand-primary border border-brand-primary rounded-md hover:bg-brand-primary hover:text-white transition-colors"
+								className="flex items-center px-4 py-2 text-brand-primary border border-brand-primary rounded-lg hover:bg-brand-primary hover:text-white transition-colors duration-200"
 								title="Download Invoice PDF"
 							>
-								<Download className="w-5 h-5 mr-1" />
+								<Download className="w-5 h-5 mr-2" />
 								<span>Download PDF</span>
 							</button>
 						) : (
 							<button
-								className="flex items-center px-3 py-2 text-gray-400 border border-gray-300 rounded-md cursor-not-allowed"
+								className="flex items-center px-4 py-2 text-gray-400 border border-gray-300 rounded-lg cursor-not-allowed"
 								title="PDF not available"
 								disabled
 							>
-								<Download className="w-5 h-5 mr-1" />
+								<Download className="w-5 h-5 mr-2" />
 								<span>No PDF</span>
 							</button>
 						)}
 						<button
 							onClick={onClose}
-							className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
+							className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors duration-200"
 						>
 							<X className="w-6 h-6" />
 						</button>
 					</div>
 				</div>
 
-				<div className="p-6 space-y-8">
+				<div className="p-6 space-y-6">
 					{/* Studio and Invoice Info */}
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 						{studio && (
-							<div>
-								<div className="flex items-center text-brand-primary mb-2">
-									<Building2 className="w-5 h-5 mr-2" />
-									<h3 className="font-medium">{studio.name}</h3>
+							<div className="p-6 bg-gray-50 rounded-xl">
+								<div className="flex items-center text-brand-primary mb-4">
+									<Building2 className="w-6 h-6 mr-2" />
+									<h3 className="text-lg font-medium">{studio.name}</h3>
 								</div>
-								<div className="text-sm text-gray-600 space-y-1">
+								<div className="text-sm text-gray-600 space-y-2">
 									<p>{studio.address}</p>
 									<p>{studio.phone}</p>
 									<p>{studio.email}</p>
 								</div>
 							</div>
 						)}
-						<div>
-							<div className="flex items-center text-brand-primary mb-2">
-								<Calendar className="w-5 h-5 mr-2" />
-								<h3 className="font-medium">Invoice Details</h3>
+						<div className="p-6 bg-gray-50 rounded-xl">
+							<div className="flex items-center text-brand-primary mb-4">
+								<Calendar className="w-6 h-6 mr-2" />
+								<h3 className="text-lg font-medium">Invoice Details</h3>
 							</div>
-							<div className="text-sm text-gray-600 space-y-1">
+							<div className="text-sm text-gray-600 space-y-2">
 								<p>Invoice Number: {invoice.number}</p>
 								<p>
 									Issue Date: {new Date(invoice.due_date).toLocaleDateString()}
@@ -155,82 +173,55 @@ export default function InvoiceDetailsModal({
 								<p>
 									Due Date: {new Date(invoice.due_date).toLocaleDateString()}
 								</p>
-								<p>
-									Status:{" "}
-									<span
-										className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
-											invoice.status === "paid"
-												? "bg-green-100 text-green-800"
-												: invoice.status === "overdue"
-												? "bg-red-100 text-red-800"
-												: "bg-yellow-100 text-yellow-800"
-										}`}
-									>
-										{invoice.status.charAt(0).toUpperCase() +
-											invoice.status.slice(1)}
-									</span>
-								</p>
 							</div>
 						</div>
 					</div>
 
 					{/* Invoice Items */}
-					<div>
-						<h3 className="text-lg font-medium text-brand-primary mb-4">
+					<div className="bg-white rounded-xl border">
+						<h3 className="text-lg font-medium text-brand-primary p-4 border-b">
 							Invoice Items
 						</h3>
 						<div className="overflow-x-auto">
-							<table className="min-w-full divide-y divide-gray-200">
-								<thead className="bg-gray-50">
-									<tr>
-										<th
-											scope="col"
-											className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-										>
+							<table className="w-full">
+								<thead>
+									<tr className="bg-gray-50">
+										<th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
 											Description
 										</th>
-										<th
-											scope="col"
-											className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-										>
+										<th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
 											Student
 										</th>
-										<th
-											scope="col"
-											className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-										>
+										<th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
 											Quantity
 										</th>
-										<th
-											scope="col"
-											className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-										>
+										<th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
 											Unit Price
 										</th>
-										<th
-											scope="col"
-											className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-										>
+										<th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
 											Total
 										</th>
 									</tr>
 								</thead>
-								<tbody className="bg-white divide-y divide-gray-200">
+								<tbody className="divide-y">
 									{invoice.items.map((item) => (
-										<tr key={item.id}>
-											<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+										<tr
+											key={item.id}
+											className="hover:bg-gray-50 transition-colors duration-150"
+										>
+											<td className="px-6 py-4 text-sm text-gray-900">
 												{item.description}
 											</td>
-											<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+											<td className="px-6 py-4 text-sm text-gray-900">
 												{item.student.name}
 											</td>
-											<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+											<td className="px-6 py-4 text-sm text-gray-900 text-right">
 												{item.quantity}
 											</td>
-											<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+											<td className="px-6 py-4 text-sm text-gray-900 text-right">
 												{formatCurrency(item.unit_price, currency)}
 											</td>
-											<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+											<td className="px-6 py-4 text-sm text-gray-900 text-right">
 												{formatCurrency(item.total, currency)}
 											</td>
 										</tr>
@@ -239,31 +230,54 @@ export default function InvoiceDetailsModal({
 								<tfoot className="bg-gray-50">
 									<tr>
 										<td colSpan={3} />
-										<td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">
+										<td className="px-6 py-4 text-sm font-medium text-gray-900 text-right">
 											Subtotal
 										</td>
-										<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+										<td className="px-6 py-4 text-sm text-gray-900 text-right">
 											{formatCurrency(invoice.subtotal, currency)}
 										</td>
 									</tr>
 									{invoice.tax > 0 && (
 										<tr>
 											<td colSpan={3} />
-											<td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">
+											<td className="px-6 py-4 text-sm font-medium text-gray-900 text-right">
 												Tax
 											</td>
-											<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+											<td className="px-6 py-4 text-sm text-gray-900 text-right">
 												{formatCurrency(invoice.tax, currency)}
 											</td>
 										</tr>
 									)}
-									<tr>
+									{invoice.discount_value && invoice.discount_value > 0 && (
+										<tr>
+											<td colSpan={3} />
+											<td className="px-6 py-4 text-sm font-medium text-green-600 text-right">
+												Discount
+												{invoice.discount_reason &&
+													` (${invoice.discount_reason})`}
+											</td>
+											<td className="px-6 py-4 text-sm text-green-600 text-right">
+												-
+												{invoice.discount_type === "percentage"
+													? `${invoice.discount_value}%`
+													: formatCurrency(invoice.discount_value, currency)}
+											</td>
+										</tr>
+									)}
+									<tr className="border-t-2">
 										<td colSpan={3} />
-										<td className="px-6 py-4 whitespace-nowrap text-lg font-bold text-brand-primary text-right">
-											Total
+										<td className="px-6 py-4 text-lg font-bold text-brand-primary text-right">
+											Final Amount
 										</td>
-										<td className="px-6 py-4 whitespace-nowrap text-lg font-bold text-brand-primary text-right">
-											{formatCurrency(invoice.total, currency)}
+										<td className="px-6 py-4 text-lg font-bold text-brand-primary text-right">
+											{formatCurrency(
+												invoice.discount_value && invoice.discount_type
+													? invoice.discount_type === "percentage"
+														? invoice.total * (1 - invoice.discount_value / 100)
+														: invoice.total - invoice.discount_value
+													: invoice.total,
+												currency
+											)}
 										</td>
 									</tr>
 								</tfoot>
@@ -273,8 +287,8 @@ export default function InvoiceDetailsModal({
 
 					{/* Notes */}
 					{invoice.notes && (
-						<div>
-							<h3 className="text-lg font-medium text-brand-primary mb-2">
+						<div className="bg-gray-50 rounded-xl p-6">
+							<h3 className="text-lg font-medium text-brand-primary mb-4">
 								Notes
 							</h3>
 							<p className="text-gray-600 whitespace-pre-wrap">
@@ -285,14 +299,38 @@ export default function InvoiceDetailsModal({
 
 					{/* Payment Button */}
 					{["pending", "overdue"].includes(invoice.status) && onPayClick && (
-						<div className="flex justify-end pt-4 border-t">
-							<button
-								onClick={onPayClick}
-								className="flex items-center px-6 py-3 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
-							>
-								<CreditCard className="w-5 h-5 mr-2" />
-								Pay {formatCurrency(invoice.total, currency)}
-							</button>
+						<div className="flex justify-end">
+							{studio?.stripe_connect_enabled ? (
+								<button
+									onClick={onPayClick}
+									className="flex items-center px-8 py-4 bg-brand-primary text-white rounded-xl hover:bg-brand-secondary-400 transform hover:scale-105 transition-all duration-200"
+								>
+									<CreditCard className="w-5 h-5 mr-3" />
+									Pay{" "}
+									{formatCurrency(
+										invoice.discount_value && invoice.discount_type
+											? invoice.discount_type === "percentage"
+												? invoice.total * (1 - invoice.discount_value / 100)
+												: invoice.total - invoice.discount_value
+											: invoice.total,
+										currency
+									)}
+								</button>
+							) : (
+								<div className="text-right">
+									<button
+										disabled
+										className="flex items-center px-8 py-4 bg-gray-300 text-gray-500 rounded-xl cursor-not-allowed"
+									>
+										<CreditCard className="w-5 h-5 mr-3" />
+										Payment Unavailable
+									</button>
+									<p className="text-sm text-gray-500 mt-2">
+										The studio needs to connect their Stripe account to accept
+										payments.
+									</p>
+								</div>
+							)}
 						</div>
 					)}
 				</div>
