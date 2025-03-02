@@ -1,18 +1,11 @@
 import React, { useState } from "react";
 import { X } from "lucide-react";
-import { loadStripe } from "@stripe/stripe-js";
-import {
-	Elements,
-	CardElement,
-	useStripe,
-	useElements,
-} from "@stripe/react-stripe-js";
 import { supabase } from "../../lib/supabase";
 import { formatCurrency } from "../../utils/formatters";
 import { useLocalization } from "../../contexts/LocalizationContext";
 
-// Initialize Stripe
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY!);
+// We no longer need the Stripe SDK for this component
+// since we're using Stripe's hosted invoice URL directly
 
 interface Invoice {
 	id: string;
@@ -42,14 +35,8 @@ interface ProcessPaymentModalProps {
 	onSuccess: () => void;
 }
 
-// Payment Form Component
-const PaymentForm = ({
-	invoice,
-	onSuccess,
-	onClose,
-}: ProcessPaymentModalProps) => {
-	const stripe = useStripe();
-	const elements = useElements();
+// Checkout Component
+const CheckoutForm = ({ invoice, onClose }: ProcessPaymentModalProps) => {
 	const [error, setError] = useState<string | null>(null);
 	const [processing, setProcessing] = useState(false);
 	const { currency } = useLocalization();
@@ -67,113 +54,55 @@ const PaymentForm = ({
 
 	const finalAmount = calculateDiscountedAmount();
 
-	const handleSubmit = async (event: React.FormEvent) => {
-		event.preventDefault();
-
-		if (!stripe || !elements) {
-			setError("Stripe has not been initialized");
-			return;
-		}
-
-		const cardElement = elements.getElement(CardElement);
-		if (!cardElement) {
-			setError("Card element not found");
-			return;
-		}
-
+	const handleCheckout = async () => {
 		setProcessing(true);
 		setError(null);
 
 		try {
-			// We're now using the existing Stripe invoice, so we just need to pay it
-			// First, check if the invoice has a Stripe invoice ID
 			if (!invoice.stripe_invoice_id) {
 				throw new Error(
 					"This invoice doesn't have an associated Stripe invoice"
 				);
 			}
 
-			// Create a payment method
-			const { error: pmError, paymentMethod } =
-				await stripe.createPaymentMethod({
-					type: "card",
-					card: cardElement,
-					billing_details: {
-						email: invoice.parent?.email,
-						name: invoice.parent?.name,
-					},
-				});
-
-			if (pmError) {
-				throw pmError;
-			}
-
-			// Pay the invoice
-			const { data: paymentResult, error: payError } =
-				await supabase.functions.invoke("pay-stripe-invoice", {
+			// Get the hosted invoice URL for direct payment
+			const { data: sessionData, error: sessionError } =
+				await supabase.functions.invoke("create-checkout-session", {
 					body: {
 						invoiceId: invoice.id,
 						stripeInvoiceId: invoice.stripe_invoice_id,
-						paymentMethodId: paymentMethod.id,
 						isRecurring: invoice.is_recurring,
+						successUrl: `${window.location.origin}/dashboard/payment-success?invoice_id=${invoice.id}`,
 					},
 				});
 
-			if (payError) {
-				throw new Error(payError.message || "Failed to process payment");
+			if (sessionError) {
+				throw new Error(
+					sessionError.message || "Failed to get invoice payment URL"
+				);
 			}
 
-			// Save payment details
-			const { error: paymentError } = await supabase.from("payments").insert({
-				invoice_id: invoice.id,
-				amount: finalAmount,
-				original_amount: invoice.total,
-				discount_amount:
-					invoice.discount_value > 0
-						? invoice.discount_type === "percentage"
-							? invoice.total * (invoice.discount_value / 100)
-							: invoice.discount_value
-						: null,
-				is_recurring: invoice.is_recurring,
-				recurring_interval: invoice.is_recurring
-					? invoice.recurring_interval
-					: "",
-				payment_method: "card",
-				status: "completed",
-				transaction_id: paymentResult.payment_intent_id,
-				payment_date: new Date().toISOString(),
-			});
-
-			if (paymentError) {
-				console.error("Error saving payment:", paymentError);
-				throw new Error("Payment processed but failed to save payment record");
+			// Check if we received a URL for payment
+			if (sessionData.url) {
+				// Redirect to the invoice payment page
+				window.location.href = sessionData.url;
+				return;
+			} else {
+				throw new Error("No payment URL was returned");
 			}
-
-			// Update invoice status
-			const { error: updateError } = await supabase
-				.from("invoices")
-				.update({ status: "paid" })
-				.eq("id", invoice.id);
-
-			if (updateError) {
-				console.error("Error updating invoice status:", updateError);
-			}
-
-			onSuccess();
 		} catch (err) {
 			console.error("Payment error:", err);
 			setError(
 				err instanceof Error
 					? err.message
-					: "An error occurred while processing your payment"
+					: "An error occurred while preparing the invoice payment"
 			);
-		} finally {
 			setProcessing(false);
 		}
 	};
 
 	return (
-		<form onSubmit={handleSubmit} className="space-y-6">
+		<div className="space-y-6">
 			{invoice.is_recurring && (
 				<div className="bg-blue-50 p-4 rounded-md mb-4">
 					<h3 className="text-sm font-medium text-blue-800">
@@ -186,40 +115,12 @@ const PaymentForm = ({
 				</div>
 			)}
 
-			<div>
-				<label className="block text-sm font-medium text-brand-secondary-400 mb-2">
-					Card Details
-				</label>
-				<div className="p-3 border rounded-md">
-					<CardElement
-						options={{
-							style: {
-								base: {
-									fontSize: "16px",
-									color: "#424770",
-									"::placeholder": {
-										color: "#aab7c4",
-									},
-								},
-								invalid: {
-									color: "#9e2146",
-								},
-							},
-							hidePostalCode: true,
-						}}
-					/>
-				</div>
-			</div>
-
-			{error && (
-				<div className="text-red-500 text-sm bg-red-50 p-3 rounded-md">
-					{error}
-				</div>
-			)}
-
-			<div className="flex justify-between items-center pt-4">
-				<div className="space-y-1">
-					<p className="text-sm text-brand-secondary-400">Amount to Pay</p>
+			<div className="p-4 bg-gray-50 rounded-md">
+				<p className="text-sm text-brand-secondary-400 mb-2">Payment Summary</p>
+				<div className="space-y-2">
+					<p className="text-sm text-gray-700 font-medium">
+						Invoice #{invoice.stripe_invoice_id?.slice(-6) || "N/A"}
+					</p>
 					{invoice.discount_value > 0 && (
 						<div className="flex items-center space-x-2">
 							<p className="text-sm text-gray-500 line-through">
@@ -241,6 +142,27 @@ const PaymentForm = ({
 						</p>
 					)}
 				</div>
+			</div>
+
+			<p className="text-sm text-gray-600">
+				This will take you to Stripe's secure payment page to complete the
+				payment for invoice #{invoice.stripe_invoice_id?.slice(-6) || "N/A"}.
+				The invoice will be marked as paid once the payment is completed.
+			</p>
+
+			{error && (
+				<div className="text-red-500 text-sm bg-red-50 p-3 rounded-md">
+					{error}
+				</div>
+			)}
+
+			<div className="flex justify-between items-center pt-4">
+				<div className="space-y-1">
+					<p className="text-sm text-brand-secondary-400">Amount to Pay</p>
+					<p className="text-xl font-bold text-brand-primary">
+						{formatCurrency(finalAmount, currency)}
+					</p>
+				</div>
 
 				<div className="flex space-x-3">
 					<button
@@ -252,8 +174,9 @@ const PaymentForm = ({
 						Cancel
 					</button>
 					<button
-						type="submit"
-						disabled={!stripe || processing}
+						type="button"
+						onClick={handleCheckout}
+						disabled={processing}
 						className="px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 disabled:bg-gray-400 disabled:cursor-not-allowed"
 					>
 						{processing ? (
@@ -281,12 +204,12 @@ const PaymentForm = ({
 								Processing...
 							</span>
 						) : (
-							"Pay Now"
+							"Pay Invoice"
 						)}
 					</button>
 				</div>
 			</div>
-		</form>
+		</div>
 	);
 };
 
@@ -318,13 +241,11 @@ export default function ProcessPaymentModal({
 					</div>
 
 					<div className="flex-1 overflow-y-auto p-6">
-						<Elements stripe={stripePromise}>
-							<PaymentForm
-								invoice={invoice}
-								onSuccess={onSuccess}
-								onClose={onClose}
-							/>
-						</Elements>
+						<CheckoutForm
+							invoice={invoice}
+							onSuccess={onSuccess}
+							onClose={onClose}
+						/>
 					</div>
 				</div>
 			</div>

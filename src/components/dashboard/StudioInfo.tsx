@@ -9,15 +9,7 @@ import type { StudioInfo as StudioInfoType } from "../../types/studio";
 import { useData } from "../../contexts/DataContext";
 import { useLocalization } from "../../contexts/LocalizationContext";
 import { useAuth } from "../../contexts/AuthContext";
-
-const SUPPORTED_COUNTRIES = [
-	{ code: "GB", name: "United Kingdom", currency: "GBP" },
-	{ code: "IE", name: "Ireland", currency: "EUR" },
-	{ code: "US", name: "United States", currency: "USD" },
-	{ code: "CA", name: "Canada", currency: "CAD" },
-	{ code: "AU", name: "Australia", currency: "AUD" },
-	{ code: "NZ", name: "New Zealand", currency: "NZD" },
-];
+import { SUPPORTED_COUNTRIES } from "../../utils/formatters";
 
 const TIMEZONE_LABELS: Record<string, string> = {
 	// UK & Ireland
@@ -131,6 +123,8 @@ export default function StudioInfo() {
 					phone: localStudioInfo?.phone,
 					email: localStudioInfo?.email,
 					country: country,
+					currency: SUPPORTED_COUNTRIES.find((c) => c.code === country)
+						?.currency,
 					timezone: timezone,
 					updated_at: new Date().toISOString(),
 				})

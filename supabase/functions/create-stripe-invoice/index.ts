@@ -73,7 +73,7 @@ serve(async (req) => {
 		const { data: studioData } = await supabaseClient
 			.from("studios")
 			.select(
-				"stripe_connect_id, stripe_connect_enabled, stripe_connect_onboarding_complete"
+				"stripe_connect_id, stripe_connect_enabled, stripe_connect_onboarding_complete, currency"
 			)
 			.eq("id", invoice.studio_id)
 			.single();
@@ -150,7 +150,7 @@ serve(async (req) => {
 			auto_advance: true,
 			collection_method: "send_invoice",
 			days_until_due: 30,
-			currency: "gbp",
+			currency: studioData?.currency,
 			metadata: {
 				internal_invoice_id: invoice.id,
 				studio_id: invoice.studio_id,
@@ -172,7 +172,7 @@ serve(async (req) => {
 						customer: connectedCustomerId,
 						invoice: stripeInvoice.id,
 						unit_amount: Math.round(item.unit_price * 100), // Convert to pence
-						currency: "gbp",
+						currency: studioData?.currency,
 						description: item.description,
 						quantity: item.quantity,
 						metadata: {
@@ -223,7 +223,7 @@ serve(async (req) => {
 								{
 									id: couponId,
 									amount_off: Math.round(invoice.discount_value * 100),
-									currency: "gbp",
+									currency: studioData?.currency,
 									duration: "once",
 								},
 								options

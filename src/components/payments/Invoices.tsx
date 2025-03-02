@@ -21,7 +21,7 @@ import { useNavigate } from "react-router-dom";
 export default function Invoices() {
 	const { currency, dateFormat } = useLocalization();
 	const { profile } = useAuth();
-	const [isStripeConnected, setIsStripeConnected] = useState<boolean>(false);
+	const [isStripeConnected, setIsStripeConnected] = useState<boolean>(true);
 	const navigate = useNavigate();
 	const [showCreateForm, setShowCreateForm] = useState(false);
 	const [selectedStatus, setSelectedStatus] = useState<

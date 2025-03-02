@@ -4,6 +4,8 @@ export interface StudioInfo {
 	address: string;
 	phone: string;
 	email: string;
+	currency: string;
+	country: string;
 	stripe_connect_id?: string;
 	stripe_connect_enabled?: boolean;
 	stripe_connect_onboarding_complete?: boolean;

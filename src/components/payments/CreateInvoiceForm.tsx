@@ -150,7 +150,6 @@ export default function CreateInvoiceForm({
 						notes: notes || null,
 						subtotal: calculateTotals().subtotal,
 						total: calculateTotals().total,
-						status: "pending",
 						is_recurring: isRecurring,
 						recurring_interval: recurringInterval,
 						recurring_end_date: recurringEndDate || null,
@@ -248,7 +247,7 @@ export default function CreateInvoiceForm({
 				id: enrollment.id,
 				label: `${enrollment.plan.name} - ${new Intl.NumberFormat("en-US", {
 					style: "currency",
-					currency: "USD",
+					currency: profile?.studio?.currency,
 				}).format(enrollment.plan.amount)}`,
 			})) || []
 		);
@@ -428,7 +427,7 @@ export default function CreateInvoiceForm({
 							Subtotal:{" "}
 							{new Intl.NumberFormat("en-US", {
 								style: "currency",
-								currency: "USD",
+								currency: profile?.studio?.currency,
 							}).format(item.quantity * item.unit_price)}
 						</div>
 					</div>
@@ -655,14 +654,14 @@ export default function CreateInvoiceForm({
 						Subtotal:{" "}
 						{new Intl.NumberFormat("en-US", {
 							style: "currency",
-							currency: "USD",
+							currency: profile?.studio?.currency,
 						}).format(calculateTotals().subtotal)}
 					</p>
 					<p className="text-lg font-bold text-brand-primary">
 						Total:{" "}
 						{new Intl.NumberFormat("en-US", {
 							style: "currency",
-							currency: "USD",
+							currency: profile?.studio?.currency,
 						}).format(calculateTotals().total)}
 					</p>
 				</div>

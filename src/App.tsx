@@ -29,6 +29,8 @@ import { LocalizationProvider } from "./contexts/LocalizationContext";
 import PrivateRoute from "./components/PrivateRoute";
 import { useAuth } from "./contexts/AuthContext";
 import PaymentSettings from "./pages/dashboard/payment-settings";
+import PaymentSuccessPage from "./pages/payment-success";
+import PaymentCancelPage from "./pages/payment-cancel";
 
 const DashboardRoutes = () => {
 	const { profile } = useAuth();
@@ -123,6 +125,8 @@ const DashboardRoutes = () => {
 						</PrivateRoute>
 					}
 				/>
+				<Route path="payment-success" element={<PaymentSuccessPage />} />
+				<Route path="payment-cancel" element={<PaymentCancelPage />} />
 				<Route
 					path="payment-settings"
 					element={

@@ -457,6 +457,45 @@ export type Database = {
         }
         Relationships: []
       }
+      connected_customers: {
+        Row: {
+          created_at: string
+          id: number
+          parent_id: string
+          stripe_connected_customer_id: string | null
+          studio_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          parent_id: string
+          stripe_connected_customer_id?: string | null
+          studio_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          parent_id?: string
+          stripe_connected_customer_id?: string | null
+          studio_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connected_customers_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connected_customers_studio_id_fkey"
+            columns: ["studio_id"]
+            isOneToOne: false
+            referencedRelation: "studios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_participants: {
         Row: {
           conversation_id: string
@@ -667,6 +706,7 @@ export type Database = {
           id: string
           is_recurring: boolean | null
           notes: string | null
+          paid_at: string | null
           parent_id: string
           pdf_url: string | null
           recurring_end_date: string | null
@@ -688,11 +728,12 @@ export type Database = {
           id?: string
           is_recurring?: boolean | null
           notes?: string | null
+          paid_at?: string | null
           parent_id: string
           pdf_url?: string | null
           recurring_end_date?: string | null
           recurring_interval: string
-          status: string
+          status?: string
           stripe_invoice_id?: string | null
           studio_id?: string | null
           subtotal: number
@@ -709,6 +750,7 @@ export type Database = {
           id?: string
           is_recurring?: boolean | null
           notes?: string | null
+          paid_at?: string | null
           parent_id?: string
           pdf_url?: string | null
           recurring_end_date?: string | null
@@ -895,46 +937,61 @@ export type Database = {
         Row: {
           amount: number
           created_at: string | null
+          destination_account_id: string | null
           discount_amount: number | null
           id: string
           invoice_id: string | null
           is_recurring: boolean
           original_amount: number | null
           payment_date: string
-          payment_method: string
-          recurring_interval: string
+          payment_method: string | null
+          recurring_interval: string | null
           status: string
+          stripe_invoice_id: string | null
+          stripe_payment_intent_id: string | null
           transaction_id: string | null
+          transfer_id: string | null
+          transfer_status: string | null
           updated_at: string | null
         }
         Insert: {
           amount: number
           created_at?: string | null
+          destination_account_id?: string | null
           discount_amount?: number | null
           id?: string
           invoice_id?: string | null
           is_recurring?: boolean
           original_amount?: number | null
           payment_date?: string
-          payment_method: string
-          recurring_interval: string
+          payment_method?: string | null
+          recurring_interval?: string | null
           status: string
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
           transaction_id?: string | null
+          transfer_id?: string | null
+          transfer_status?: string | null
           updated_at?: string | null
         }
         Update: {
           amount?: number
           created_at?: string | null
+          destination_account_id?: string | null
           discount_amount?: number | null
           id?: string
           invoice_id?: string | null
           is_recurring?: boolean
           original_amount?: number | null
           payment_date?: string
-          payment_method?: string
-          recurring_interval?: string
+          payment_method?: string | null
+          recurring_interval?: string | null
           status?: string
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
           transaction_id?: string | null
+          transfer_id?: string | null
+          transfer_status?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -1258,39 +1315,60 @@ export type Database = {
       studios: {
         Row: {
           address: string
+          bank_account_last4: string | null
+          bank_account_name: string | null
           country: string
           created_at: string | null
+          currency: string | null
           email: string
           id: string
           name: string
           owner_id: string
           phone: string
+          stripe_connect_enabled: boolean | null
+          stripe_connect_id: string | null
+          stripe_connect_onboarding_complete: boolean | null
           timezone: string
           updated_at: string | null
+          uses_platform_payments: boolean | null
         }
         Insert: {
           address: string
+          bank_account_last4?: string | null
+          bank_account_name?: string | null
           country?: string
           created_at?: string | null
+          currency?: string | null
           email: string
           id?: string
           name: string
           owner_id: string
           phone: string
+          stripe_connect_enabled?: boolean | null
+          stripe_connect_id?: string | null
+          stripe_connect_onboarding_complete?: boolean | null
           timezone?: string
           updated_at?: string | null
+          uses_platform_payments?: boolean | null
         }
         Update: {
           address?: string
+          bank_account_last4?: string | null
+          bank_account_name?: string | null
           country?: string
           created_at?: string | null
+          currency?: string | null
           email?: string
           id?: string
           name?: string
           owner_id?: string
           phone?: string
+          stripe_connect_enabled?: boolean | null
+          stripe_connect_id?: string | null
+          stripe_connect_onboarding_complete?: boolean | null
           timezone?: string
           updated_at?: string | null
+          uses_platform_payments?: boolean | null
         }
         Relationships: [
           {
