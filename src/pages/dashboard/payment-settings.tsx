@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Building2, CreditCard, Settings } from "lucide-react";
+import { Building2, Settings } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -9,13 +9,6 @@ import {
 	CardHeader,
 	CardTitle,
 } from "../../components/ui/card";
-import {
-	Tabs,
-	TabsContent,
-	TabsList,
-	TabsTrigger,
-} from "../../components/ui/tabs";
-import { Switch } from "../../components/ui/switch";
 import { supabase } from "../../lib/supabase";
 
 interface DashboardHeaderProps {
@@ -43,7 +36,6 @@ interface Studio {
 	name: string;
 	stripe_connect_id?: string;
 	stripe_connect_onboarding_complete?: boolean;
-	uses_platform_payments?: boolean;
 	bank_account_name?: string;
 	bank_account_last4?: string;
 }
@@ -119,12 +111,6 @@ export default function PaymentSettings() {
 
 					if (error) throw error;
 					setStudioData(data as Studio);
-
-					alert({
-						title: "Bank account connected successfully!",
-						description:
-							"Your bank account has been connected to receive payments.",
-					});
 				} catch (err) {
 					console.error("Error fetching studio data:", err);
 				}
@@ -205,47 +191,6 @@ export default function PaymentSettings() {
 		}
 	};
 
-	// Toggle platform payments setting
-	const togglePlatformPayments = async (enabled: boolean) => {
-		if (!studioData) return;
-
-		setLoading((prev) => ({ ...prev, platformPayments: true }));
-
-		try {
-			const { error } = await supabase
-				.from("studios")
-				.update({ uses_platform_payments: enabled })
-				.eq("id", studioData.id);
-
-			if (error) throw error;
-
-			setStudioData((prev) =>
-				prev ? { ...prev, uses_platform_payments: enabled } : null
-			);
-
-			alert({
-				title: enabled
-					? "Platform payments enabled"
-					: "Platform payments disabled",
-				description: enabled
-					? "Payments will be processed by StudioAlign and transferred to your bank account."
-					: "Clients will see your studio name on invoices and payments will go directly to your account.",
-			});
-		} catch (err: Error | unknown) {
-			console.error("Error updating platform payments setting:", err);
-			alert({
-				variant: "destructive",
-				title: "Update Failed",
-				description:
-					err instanceof Error
-						? err.message
-						: "Failed to update payment settings",
-			});
-		} finally {
-			setLoading((prev) => ({ ...prev, platformPayments: false }));
-		}
-	};
-
 	return (
 		<>
 			<DashboardHeader
@@ -255,226 +200,88 @@ export default function PaymentSettings() {
 			/>
 
 			<div className="space-y-6">
-				<Tabs defaultValue="bank-account" className="w-full">
-					<TabsList className="grid w-full max-w-md grid-cols-2">
-						<TabsTrigger value="bank-account">Bank Account</TabsTrigger>
-						<TabsTrigger value="invoice-settings">Invoice Settings</TabsTrigger>
-					</TabsList>
+				<main className="w-full space-y-4 mt-6 bg-white">
+					<Card>
+						<CardHeader>
+							<CardTitle className="flex items-center gap-2">
+								<Building2 className="h-5 w-5" />
+								Bank Account Connection
+							</CardTitle>
+							<CardDescription>
+								Connect your bank account to receive payments directly from
+								clients
+							</CardDescription>
+						</CardHeader>
+						<CardContent className="space-y-4">
+							{error && (
+								<div className="bg-red-50 text-red-800 p-3 rounded-md text-sm mb-4">
+									{error}
+								</div>
+							)}
 
-					<TabsContent value="bank-account" className="space-y-4 mt-6">
-						<Card>
-							<CardHeader>
-								<CardTitle className="flex items-center gap-2">
-									<Building2 className="h-5 w-5" />
-									Bank Account Connection
-								</CardTitle>
-								<CardDescription>
-									Connect your bank account to receive payments directly from
-									clients
-								</CardDescription>
-							</CardHeader>
-							<CardContent className="space-y-4">
-								{error && (
-									<div className="bg-red-50 text-red-800 p-3 rounded-md text-sm mb-4">
-										{error}
-									</div>
-								)}
-
-								{studioData?.stripe_connect_onboarding_complete ? (
-									<div className="space-y-4">
-										<div className="flex items-center justify-between p-4 bg-green-50 rounded-md">
-											<div>
-												<h3 className="font-medium text-green-800">
-													Bank Account Connected
-												</h3>
-												{studioData.bank_account_name &&
-													studioData.bank_account_last4 && (
-														<p className="text-sm text-green-700 mt-1">
-															{studioData.bank_account_name} (ending in{" "}
-															{studioData.bank_account_last4})
-														</p>
-													)}
-											</div>
-											<div className="bg-green-100 rounded-full p-2">
-												<Building2 className="h-5 w-5 text-green-600" />
-											</div>
+							{studioData?.stripe_connect_onboarding_complete ? (
+								<div className="space-y-4">
+									<div className="flex items-center justify-between p-4 bg-green-50 rounded-md">
+										<div>
+											<h3 className="font-medium text-green-800">
+												Bank Account Connected
+											</h3>
+											{studioData.bank_account_name &&
+												studioData.bank_account_last4 && (
+													<p className="text-sm text-green-700 mt-1">
+														{studioData.bank_account_name} (ending in{" "}
+														{studioData.bank_account_last4})
+													</p>
+												)}
 										</div>
-
-										<button
-											onClick={connectStripeAccount}
-											className="px-4 py-2 text-sm font-medium bg-accent text-brand-primary"
-											disabled={loading.connectAccount}
-										>
-											{loading.connectAccount
-												? "Loading..."
-												: "Manage Bank Account"}
-										</button>
-									</div>
-								) : (
-									<div className="space-y-4">
-										<div className="flex items-center justify-between p-4 bg-amber-50 rounded-md">
-											<div>
-												<h3 className="font-medium text-amber-800">
-													Bank Account Not Connected
-												</h3>
-												<p className="text-sm text-amber-700 mt-1">
-													Connect your bank account to receive payments directly
-													from clients.
-												</p>
-											</div>
-											<div className="bg-amber-100 rounded-full p-2">
-												<Building2 className="h-5 w-5 text-amber-600" />
-											</div>
+										<div className="bg-green-100 rounded-full p-2">
+											<Building2 className="h-5 w-5 text-green-600" />
 										</div>
-
-										<button
-											onClick={connectStripeAccount}
-											disabled={loading.connectAccount}
-											className="px-4 py-2 text-sm font-medium bg-brand-primary text-white"
-										>
-											{loading.connectAccount
-												? "Loading..."
-												: studioData?.stripe_connect_id
-												? "Complete Onboarding"
-												: "Connect Bank Account"}
-										</button>
 									</div>
-								)}
-							</CardContent>
-						</Card>
-					</TabsContent>
 
-					<TabsContent value="invoice-settings" className="space-y-4 mt-6">
-						<Card>
-							<CardHeader>
-								<CardTitle className="flex items-center gap-2">
-									<CreditCard className="h-5 w-5" />
-									Invoice Settings
-								</CardTitle>
-								<CardDescription>
-									Configure how your clients see your invoices and process
-									payments
-								</CardDescription>
-							</CardHeader>
-							<CardContent className="space-y-6">
-								<div className="space-y-3">
-									<div className="flex items-center justify-between">
-										<div className="space-y-0.5">
-											<div className="flex items-center gap-2">
-												<label
-													htmlFor="platform-payments"
-													className="font-medium"
-												>
-													Use Platform Payments
-												</label>
-												<span
-													className={`text-xs px-2 py-0.5 rounded-full ${
-														studioData?.uses_platform_payments
-															? "bg-green-100 text-green-700"
-															: "bg-gray-100 text-gray-700"
-													}`}
-												>
-													{studioData?.uses_platform_payments
-														? "Enabled"
-														: "Disabled"}
-												</span>
-											</div>
-											<p className="text-sm text-muted-foreground">
-												When enabled, StudioAlign processes payments on your
-												behalf and transfers them to your account. When
-												disabled, your clients see your studio name on invoices
-												and payments go directly to your bank account.
+									<button
+										onClick={connectStripeAccount}
+										className="px-4 py-2 text-sm font-medium bg-accent text-brand-primary"
+										disabled={loading.connectAccount}
+									>
+										{loading.connectAccount
+											? "Loading..."
+											: "Manage Bank Account"}
+									</button>
+								</div>
+							) : (
+								<div className="space-y-4">
+									<div className="flex items-center justify-between p-4 bg-amber-50 rounded-md">
+										<div>
+											<h3 className="font-medium text-amber-800">
+												Bank Account Not Connected
+											</h3>
+											<p className="text-sm text-amber-700 mt-1">
+												Connect your bank account to receive payments directly
+												from clients.
 											</p>
 										</div>
-										<div className="flex flex-col items-end gap-2">
-											<Switch
-												id="platform-payments"
-												checked={studioData?.uses_platform_payments || false}
-												onCheckedChange={togglePlatformPayments}
-												disabled={
-													loading.platformPayments ||
-													!studioData?.stripe_connect_onboarding_complete
-												}
-												className={`${
-													loading.platformPayments
-														? "opacity-50 cursor-not-allowed"
-														: ""
-												}`}
-											/>
-											{loading.platformPayments && (
-												<span className="text-xs text-muted-foreground">
-													Updating...
-												</span>
-											)}
+										<div className="bg-amber-100 rounded-full p-2">
+											<Building2 className="h-5 w-5 text-amber-600" />
 										</div>
 									</div>
 
-									{!studioData?.stripe_connect_onboarding_complete ? (
-										<div className="text-sm text-amber-600 p-3 bg-amber-50 rounded-md flex items-start gap-2">
-											<Building2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
-											<p>
-												You need to connect your bank account first before you
-												can change this setting.
-											</p>
-										</div>
-									) : (
-										!studioData?.uses_platform_payments && (
-											<div className="text-sm text-blue-600 p-3 bg-blue-50 rounded-md flex items-start gap-2">
-												<CreditCard className="h-4 w-4 mt-0.5 flex-shrink-0" />
-												<p>
-													Payments will be processed directly through your
-													Stripe account. Your studio name will appear on all
-													invoices.
-												</p>
-											</div>
-										)
-									)}
+									<button
+										onClick={connectStripeAccount}
+										disabled={loading.connectAccount}
+										className="px-4 py-2 text-sm font-medium bg-brand-primary text-white"
+									>
+										{loading.connectAccount
+											? "Loading..."
+											: studioData?.stripe_connect_id
+											? "Complete Onboarding"
+											: "Connect Bank Account"}
+									</button>
 								</div>
-
-								<div className="border-t my-4" />
-
-								<div>
-									<h3 className="font-medium mb-2">Invoice Branding</h3>
-									<p className="text-sm text-muted-foreground mb-4">
-										How your studio information appears on invoices to clients:
-									</p>
-
-									<div className="p-4 border rounded-md">
-										<div className="flex items-center justify-between mb-4">
-											<div>
-												<h4 className="font-medium">
-													{studioData?.uses_platform_payments
-														? "StudioAlign"
-														: studioData?.name || "Your Studio Name"}
-												</h4>
-												<p className="text-sm text-muted-foreground">
-													{studioData?.uses_platform_payments
-														? "Payment processed by StudioAlign on behalf of your studio"
-														: "Payment processed directly by your studio"}
-												</p>
-											</div>
-											<div
-												className={`p-2 rounded-full ${
-													studioData?.uses_platform_payments
-														? "bg-blue-100"
-														: "bg-green-100"
-												}`}
-											>
-												<CreditCard
-													className={`h-5 w-5 ${
-														studioData?.uses_platform_payments
-															? "text-blue-600"
-															: "text-green-600"
-													}`}
-												/>
-											</div>
-										</div>
-									</div>
-								</div>
-							</CardContent>
-						</Card>
-					</TabsContent>
-				</Tabs>
+							)}
+						</CardContent>
+					</Card>
+				</main>
 			</div>
 		</>
 	);

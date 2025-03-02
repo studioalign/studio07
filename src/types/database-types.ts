@@ -1330,7 +1330,6 @@ export type Database = {
           stripe_connect_onboarding_complete: boolean | null
           timezone: string
           updated_at: string | null
-          uses_platform_payments: boolean | null
         }
         Insert: {
           address: string
@@ -1349,7 +1348,6 @@ export type Database = {
           stripe_connect_onboarding_complete?: boolean | null
           timezone?: string
           updated_at?: string | null
-          uses_platform_payments?: boolean | null
         }
         Update: {
           address?: string
@@ -1368,7 +1366,6 @@ export type Database = {
           stripe_connect_onboarding_complete?: boolean | null
           timezone?: string
           updated_at?: string | null
-          uses_platform_payments?: boolean | null
         }
         Relationships: [
           {
