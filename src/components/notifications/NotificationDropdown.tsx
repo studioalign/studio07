@@ -1,25 +1,45 @@
+// src/components/notifications/NotificationDropdown.tsx
 import React from 'react';
-import { Bell, X, MessageSquare, DollarSign, Calendar, Users } from 'lucide-react';
+import { Bell, X, MessageSquare, DollarSign, Calendar, Users, BookOpen, AlertCircle, Award, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
-import { useNotifications } from '../../hooks/useNotifications';
+import { useNotifications, Notification } from '../../hooks/useNotifications';
 
 export default function NotificationDropdown({ onClose }: { onClose: () => void }) {
-  const { notifications, markAsRead } = useNotifications();
+  const { notifications, markAsRead, isLoading } = useNotifications();
 
-  const getIcon = (type: string) => {
+  const getIcon = (notification: Notification) => {
+    const type = notification.type.split('_')[0]; // Get the first part of the type
+    
     switch (type) {
       case 'message':
+      case 'new':
         return <MessageSquare className="w-4 h-4 text-blue-500" />;
       case 'payment':
         return <DollarSign className="w-4 h-4 text-green-500" />;
       case 'class':
         return <Calendar className="w-4 h-4 text-purple-500" />;
-      case 'enrollment':
+      case 'student':
         return <Users className="w-4 h-4 text-orange-500" />;
+      case 'attendance':
+        return <BookOpen className="w-4 h-4 text-red-500" />;
+      case 'parent':
+      case 'staff':
+        return <UserPlus className="w-4 h-4 text-indigo-500" />;
+      case 'monthly':
+        return <DollarSign className="w-4 h-4 text-teal-500" />;
+      case 'birthday':
+        return <Award className="w-4 h-4 text-yellow-500" />;
+      case 'unauthorized':
+        return <AlertCircle className="w-4 h-4 text-red-500" />;
       default:
         return <Bell className="w-4 h-4 text-gray-500" />;
     }
+  };
+
+  const handleNotificationClick = (notification: Notification) => {
+    markAsRead(notification.id);
+    onClose();
   };
 
   return (
@@ -32,33 +52,43 @@ export default function NotificationDropdown({ onClose }: { onClose: () => void 
       </div>
 
       <div className="max-h-96 overflow-y-auto">
-        {notifications.length === 0 ? (
+        {isLoading ? (
+          <div className="p-4 flex justify-center">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-primary"></div>
+          </div>
+        ) : notifications.length === 0 ? (
           <div className="p-4 text-center text-gray-500">
             <Bell className="w-8 h-8 mx-auto mb-2 text-gray-400" />
             <p>No new notifications</p>
           </div>
         ) : (
           <div className="divide-y">
-            {notifications.map((notification) => (
+            {notifications.slice(0, 5).map((notification) => (
               <div
                 key={notification.id}
-                className={`p-4 hover:bg-gray-50 ${
+                className={`p-4 hover:bg-gray-50 cursor-pointer ${
                   !notification.read ? 'bg-brand-secondary-100/10' : ''
                 }`}
-                onClick={() => markAsRead(notification.id)}
+                onClick={() => handleNotificationClick(notification)}
               >
                 <div className="flex space-x-3">
                   <div className="flex-shrink-0">
-                    {getIcon(notification.type)}
+                    {getIcon(notification)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900">{notification.message}</p>
+                    <p className="text-sm font-medium text-gray-900">{notification.title}</p>
+                    <p className="text-sm text-gray-600">{notification.message}</p>
                     <p className="text-xs text-gray-500 mt-1">
                       {formatDistanceToNow(new Date(notification.created_at), {
                         addSuffix: true,
                       })}
                     </p>
                   </div>
+                  {!notification.read && (
+                    <div className="flex-shrink-0">
+                      <span className="inline-block w-2 h-2 bg-brand-primary rounded-full" />
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

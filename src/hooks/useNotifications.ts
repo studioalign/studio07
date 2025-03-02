@@ -1,97 +1,185 @@
-import { useState, useEffect } from 'react';
+// src/hooks/useNotifications.ts
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
-interface Notification {
+export interface Notification {
   id: string;
-  type: 'message' | 'payment' | 'class' | 'enrollment';
+  type: string;
+  title: string;
   message: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  entity_id?: string;
+  entity_type?: string;
+  link?: string;
+  details?: any;
   read: boolean;
+  dismissed: boolean;
+  requires_action: boolean;
+  email_required: boolean;
+  email_sent: boolean;
   created_at: string;
 }
 
 export function useNotifications() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Mock notifications based on user role
-    const mockNotifications: Notification[] = [];
-    const now = new Date();
-
-    if (profile?.role === 'owner') {
-      mockNotifications.push(
-        {
-          id: '1',
-          type: 'payment',
-          message: 'New payment received from Sarah Johnson',
-          read: false,
-          created_at: new Date(now.getTime() - 30 * 60000).toISOString(),
-        },
-        {
-          id: '2',
-          type: 'enrollment',
-          message: 'New student enrollment: Michael Smith in Ballet Beginners',
-          read: false,
-          created_at: new Date(now.getTime() - 2 * 3600000).toISOString(),
-        }
-      );
-    } else if (profile?.role === 'teacher') {
-      mockNotifications.push(
-        {
-          id: '3',
-          type: 'class',
-          message: 'Your next class starts in 30 minutes: Ballet Intermediate',
-          read: false,
-          created_at: new Date(now.getTime() - 15 * 60000).toISOString(),
-        },
-        {
-          id: '4',
-          type: 'message',
-          message: 'New message from parent regarding student absence',
-          read: true,
-          created_at: new Date(now.getTime() - 4 * 3600000).toISOString(),
-        }
-      );
-    } else if (profile?.role === 'parent') {
-      mockNotifications.push(
-        {
-          id: '5',
-          type: 'payment',
-          message: 'Payment reminder: Monthly tuition due in 3 days',
-          read: false,
-          created_at: new Date(now.getTime() - 12 * 3600000).toISOString(),
-        },
-        {
-          id: '6',
-          type: 'class',
-          message: 'Class schedule change: Hip Hop moved to 5 PM next week',
-          read: false,
-          created_at: new Date(now.getTime() - 24 * 3600000).toISOString(),
-        }
-      );
+  // Fetch notifications
+  const fetchNotifications = useCallback(async () => {
+    if (!user?.id) return;
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('dismissed', false)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      setNotifications(data || []);
+    } catch (err) {
+      console.error('Error fetching notifications:', err);
+      setError('Failed to load notifications');
+    } finally {
+      setIsLoading(false);
     }
+  }, [user?.id]);
 
-    setNotifications(mockNotifications);
-  }, [profile?.role]);
+  // Mark notification as read
+  const markAsRead = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setNotifications(prev =>
+        prev.map(notification =>
+          notification.id === id
+            ? { ...notification, read: true }
+            : notification
+        )
+      );
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev =>
-      prev.map(notification =>
-        notification.id === id
-          ? { ...notification, read: true }
-          : notification
+      // If the notification has a link, navigate to it
+      const notification = notifications.find(n => n.id === id);
+      if (notification?.link) {
+        window.location.href = notification.link;
+      }
+    } catch (err) {
+      console.error('Error marking notification as read:', err);
+    }
+  };
+
+  // Mark all notifications as read
+  const markAllAsRead = async () => {
+    if (!user?.id || notifications.length === 0) return;
+    
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true, updated_at: new Date().toISOString() })
+        .eq('user_id', user.id)
+        .eq('read', false);
+      
+      if (error) throw error;
+      
+      setNotifications(prev =>
+        prev.map(notification => ({ ...notification, read: true }))
+      );
+    } catch (err) {
+      console.error('Error marking all notifications as read:', err);
+    }
+  };
+
+  // Dismiss notification
+  const dismissNotification = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ dismissed: true, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setNotifications(prev =>
+        prev.filter(notification => notification.id !== id)
+      );
+    } catch (err) {
+      console.error('Error dismissing notification:', err);
+    }
+  };
+
+  // Dismiss all notifications
+  const dismissAll = async () => {
+    if (!user?.id || notifications.length === 0) return;
+    
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ dismissed: true, updated_at: new Date().toISOString() })
+        .eq('user_id', user.id)
+        .eq('dismissed', false);
+      
+      if (error) throw error;
+      
+      setNotifications([]);
+    } catch (err) {
+      console.error('Error dismissing all notifications:', err);
+    }
+  };
+
+  // Load notifications on mount and when user changes
+  useEffect(() => {
+    if (user?.id) {
+      fetchNotifications();
+    }
+  }, [user?.id, fetchNotifications]);
+
+  // Set up real-time subscription for new notifications
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    const subscription = supabase
+      .channel('notifications-channel')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          setNotifications(prev => [payload.new as Notification, ...prev]);
+        }
       )
-    );
-  };
-
-  const clearAll = () => {
-    setNotifications([]);
-  };
+      .subscribe();
+    
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [user?.id]);
 
   return {
     notifications,
+    isLoading,
+    error,
     markAsRead,
-    clearAll,
+    markAllAsRead,
+    dismissNotification,
+    dismissAll,
+    fetchNotifications,
     unreadCount: notifications.filter(n => !n.read).length,
   };
 }

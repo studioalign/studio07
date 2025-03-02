@@ -1,3 +1,4 @@
+// src/components/dashboard/Header.tsx
 import React from "react";
 import { Bell, Settings, LogOut, User, CreditCard } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
