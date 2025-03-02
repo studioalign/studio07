@@ -69,7 +69,7 @@ export default function PaymentSettings() {
 		setError(null);
 
 		try {
-			const { data: connectData, error } = await supabase.functions.invoke(
+			const { error } = await supabase.functions.invoke(
 				"create-connect-account",
 				{
 					body: { action: "check_status" },
@@ -118,7 +118,7 @@ export default function PaymentSettings() {
 						.single();
 
 					if (error) throw error;
-					setStudioData(data);
+					setStudioData(data as Studio);
 
 					alert({
 						title: "Bank account connected successfully!",
@@ -166,9 +166,11 @@ export default function PaymentSettings() {
 						}`,
 					},
 					body: JSON.stringify({
-						action: studioData.stripe_connect_id
-							? "create_login_link"
-							: "create_account",
+						action:
+							studioData.stripe_connect_id &&
+							studioData.stripe_connect_onboarding_complete
+								? "create_login_link"
+								: "create_account",
 						studio_id: studioData.id,
 					}),
 				}
