@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import FormInput from '../FormInput';
 import SearchableDropdown from '../SearchableDropdown';
 import { formatCurrency } from '../../utils/formatters';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Student {
   id: string;
@@ -37,6 +38,9 @@ interface Invoice {
   notes: string | null;
   items: InvoiceItem[];
   status: string;
+  discount_type?: "percentage" | "fixed";
+  discount_value?: number;
+  discount_reason?: string;
 }
 
 interface EditInvoiceFormProps {
@@ -46,6 +50,7 @@ interface EditInvoiceFormProps {
 }
 
 export default function EditInvoiceForm({ invoice, onSuccess, onCancel }: EditInvoiceFormProps) {
+  const { profile } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [dueDate, setDueDate] = useState(invoice.due_date);
   const [notes, setNotes] = useState(invoice.notes || '');
@@ -53,12 +58,40 @@ export default function EditInvoiceForm({ invoice, onSuccess, onCancel }: EditIn
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Discount-related states
+  const [discountType, setDiscountType] = useState<"percentage" | "fixed">(
+    (invoice.discount_type as "percentage" | "fixed") || "percentage"
+  );
+  const [discountValue, setDiscountValue] = useState(
+    invoice.discount_value ? invoice.discount_value.toString() : ''
+  );
+  const [discountReason, setDiscountReason] = useState(invoice.discount_reason || '');
+
   useEffect(() => {
     fetchStudents();
-  }, []);
+  }, [invoice.id]);
 
   const fetchStudents = async () => {
     try {
+      // First, ensure we have a valid parent_id
+      let parentId = invoice.parent_id;
+
+      if (!parentId) {
+        // If no parent_id, try to fetch it from the invoice
+        const { data: invoiceData, error: invoiceError } = await supabase
+          .from('invoices')
+          .select('parent_id')
+          .eq('id', invoice.id)
+          .single();
+
+        if (invoiceError || !invoiceData?.parent_id) {
+          throw new Error('Unable to retrieve parent information');
+        }
+
+        parentId = invoiceData.parent_id;
+      }
+
+      // Now fetch students for the parent
       const { data, error: fetchError } = await supabase
         .from('students')
         .select(`
@@ -72,9 +105,14 @@ export default function EditInvoiceForm({ invoice, onSuccess, onCancel }: EditIn
             )
           )
         `)
-        .eq('parent_id', invoice.parent_id);
+        .eq('parent_id', parentId);
 
       if (fetchError) throw fetchError;
+      
+      if (!data || data.length === 0) {
+        console.warn('No students found for parent:', parentId);
+      }
+      
       setStudents(data || []);
     } catch (err) {
       console.error('Error fetching students:', err);
@@ -106,16 +144,28 @@ export default function EditInvoiceForm({ invoice, onSuccess, onCancel }: EditIn
   };
 
   const calculateTotals = () => {
-    return items.reduce(
-      (acc, item) => {
-        const subtotal = item.quantity * item.unit_price;
-        return {
-          subtotal: acc.subtotal + subtotal,
-          total: acc.total + subtotal,
-        };
-      },
-      { subtotal: 0, total: 0 }
+    const subtotal = items.reduce(
+      (acc, item) => acc + (item.quantity * item.unit_price),
+      0
     );
+    
+    // Calculate discount
+    let discount = 0;
+    if (discountValue && !isNaN(parseFloat(discountValue))) {
+      if (discountType === "percentage") {
+        discount = subtotal * (parseFloat(discountValue) / 100);
+      } else {
+        discount = parseFloat(discountValue);
+      }
+    }
+    
+    const total = subtotal - discount;
+    
+    return {
+      subtotal,
+      discount,
+      total
+    };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -124,14 +174,19 @@ export default function EditInvoiceForm({ invoice, onSuccess, onCancel }: EditIn
     setError(null);
 
     try {
+      const totals = calculateTotals();
+      
       // Update invoice
       const { error: invoiceError } = await supabase
         .from('invoices')
         .update({
           due_date: dueDate,
           notes: notes || null,
-          subtotal: calculateTotals().subtotal,
-          total: calculateTotals().total,
+          subtotal: totals.subtotal,
+          total: totals.total,
+          discount_type: discountType,
+          discount_value: discountValue ? parseFloat(discountValue) : 0,
+          discount_reason: discountReason,
         })
         .eq('id', invoice.id);
 
@@ -341,6 +396,48 @@ export default function EditInvoiceForm({ invoice, onSuccess, onCancel }: EditIn
         ))}
       </div>
 
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-brand-secondary-400 mb-1">
+            Discount Type
+          </label>
+          <select
+            value={discountType}
+            onChange={(e) =>
+              setDiscountType(e.target.value as "percentage" | "fixed")
+            }
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-accent focus:border-brand-accent"
+          >
+            <option value="percentage">Percentage</option>
+            <option value="fixed">Fixed Amount</option>
+          </select>
+        </div>
+
+        <FormInput
+          id="discountValue"
+          type="text"
+          label={`Discount ${discountType === "percentage" ? "(%)" : "($)"}`}
+          value={discountValue}
+          onChange={(e) => {
+            const value = e.target.value.replace(/[^\d.]/g, "");
+            if ((value.match(/\./g) || []).length <= 1) {
+              setDiscountValue(value);
+            }
+          }}
+        />
+
+        <div className="col-span-2">
+          <FormInput
+            id="discountReason"
+            type="text"
+            label="Discount Reason"
+            value={discountReason}
+            onChange={(e) => setDiscountReason(e.target.value)}
+            placeholder="e.g., Sibling discount, Early payment, etc."
+          />
+        </div>
+      </div>
+
       <div>
         <label htmlFor="notes" className="block text-sm font-medium text-brand-secondary-400">
           Notes
@@ -356,9 +453,20 @@ export default function EditInvoiceForm({ invoice, onSuccess, onCancel }: EditIn
 
       <div className="flex justify-between items-center pt-4 border-t">
         <div className="text-brand-secondary-400">
-          <p>Subtotal: {formatCurrency(calculateTotals().subtotal)}</p>
+          <p>
+            Subtotal:{" "}
+            {formatCurrency(calculateTotals().subtotal, profile?.studio?.currency)}
+          </p>
+          {parseFloat(discountValue) > 0 && (
+            <p>
+              Discount:{" "}
+              {formatCurrency(calculateTotals().discount, profile?.studio?.currency)}
+              {discountType === "percentage" && ` (${discountValue}%)`}
+            </p>
+          )}
           <p className="text-lg font-bold text-brand-primary">
-            Total: {formatCurrency(calculateTotals().total)}
+            Total:{" "}
+            {formatCurrency(calculateTotals().total, profile?.studio?.currency)}
           </p>
         </div>
 

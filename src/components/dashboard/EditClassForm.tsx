@@ -6,6 +6,7 @@ import MultiSelectDropdown from "../MultiSelectDropdown";
 import { supabase } from "../../lib/supabase";
 import { useData } from "../../contexts/DataContext";
 import { useAuth } from "../../contexts/AuthContext";
+import { notificationService } from "../../services/notificationService";
 
 interface Student {
 	id: string;
@@ -56,9 +57,8 @@ export default function EditClassForm({
 	const { teachers, locations } = useData();
 	const { profile } = useAuth();
 	const [students, setStudents] = useState<Student[]>([]);
-	const [selectedStudents, setSelectedStudents] = useState<
-		{ id: string; label: string }[]
-	>([]);
+	const [selectedStudents, setSelectedStudents] = useState<{ id: string; label: string }[]>([]);
+    const [previouslyEnrolledStudentIds, setPreviouslyEnrolledStudentIds] = useState<string[]>([]);
 	const [loadingStudents, setLoadingStudents] = useState(true);
 	const [name, setName] = useState(classData.name);
 	const [selectedRoom, setSelectedRoom] = useState<{
@@ -122,19 +122,24 @@ export default function EditClassForm({
 				if (enrolledError) throw enrolledError;
 
 				if (enrolledData) {
-					setSelectedStudents(
-						enrolledData
-							.map((enrollment) => {
-								if (!enrollment.student) return null;
-								return {
-									id: enrollment.student.id,
-									label: enrollment.student.name,
-								};
-							})
-							.filter(
-								(item): item is { id: string; label: string } => item !== null
-							)
-					);
+                    const currentEnrolledStudents = enrolledData
+                        .map((enrollment) => {
+                            if (!enrollment.student) return null;
+                            return {
+                                id: enrollment.student.id,
+                                label: enrollment.student.name,
+                            };
+                        })
+                        .filter(
+                            (item): item is { id: string; label: string } => item !== null
+                        );
+                        
+					setSelectedStudents(currentEnrolledStudents);
+                    
+                    // Store the IDs of previously enrolled students for comparison later
+                    setPreviouslyEnrolledStudentIds(
+                        currentEnrolledStudents.map(student => student.id)
+                    );
 				}
 			} catch (err) {
 				console.error("Error fetching data:", err);
@@ -146,6 +151,8 @@ export default function EditClassForm({
 		fetchData();
 	}, [profile?.studio?.id, classData?.id]);
 
+	// Modify your EditClassForm.tsx handleSubmit function:
+
 	const handleSubmit = async () => {
 		setError(null);
 		setIsSubmitting(true);
@@ -153,6 +160,29 @@ export default function EditClassForm({
 		try {
 			const studioId = profile?.studio?.id;
 			if (!studioId) throw new Error("Studio ID is required");
+
+			// Check what has changed from the original class data
+			const scheduleChanged = 
+				startTime !== classData.start_time || 
+				endTime !== classData.end_time;
+				
+			const teacherChanged = 
+				selectedTeacher?.id !== classData.teacher.id;
+				
+			const roomChanged = 
+				selectedRoom?.id !== classData.location.id;
+				
+			// Get the currently selected student IDs for comparison
+			const currentStudentIds = selectedStudents.map(student => student.id);
+			
+			// Find added and removed students
+			const addedStudentIds = currentStudentIds.filter(
+				id => !previouslyEnrolledStudentIds.includes(id)
+			);
+			
+			const removedStudentIds = previouslyEnrolledStudentIds.filter(
+				id => !currentStudentIds.includes(id)
+			);
 
 			const updates = {
 				name,
@@ -189,30 +219,192 @@ export default function EditClassForm({
 						.eq("id", classData.parent_class_id);
 				}
 			}
+			// Replace the student enrollment section in EditClassForm.tsx with this:
+
 			// Update student enrollments for this instance
 			if (!isRecurring || classData.modificationScope === "single") {
-				// Remove existing enrollments
-				await supabase
-					.from("class_students")
-					.delete()
-					.eq("class_id", classData.id);
-
-				// Add new enrollments
-				if (selectedStudents.length > 0) {
-					const { error: enrollError } = await supabase
+				try {
+					// First get the currently enrolled students to compare with the new selection
+					const { data: currentEnrollments, error: fetchError } = await supabase
 						.from("class_students")
-						.insert(
-							selectedStudents.map((student) => ({
-								class_id: classData.id,
-								student_id: student.id,
-							}))
-						);
-
-					if (enrollError) throw enrollError;
+						.select("student_id")
+						.eq("class_id", classData.id);
+						
+					if (fetchError) throw fetchError;
+					
+					// Get the list of currently enrolled student IDs
+					const currentStudentIds = currentEnrollments?.map(e => e.student_id) || [];
+					
+					// Get the list of student IDs we want to have enrolled after the update
+					const targetStudentIds = selectedStudents.map(s => s.id);
+					
+					// Find students to add (in target but not in current)
+					const studentsToAdd = targetStudentIds.filter(id => !currentStudentIds.includes(id));
+					
+					// Find students to remove (in current but not in target)
+					const studentsToRemove = currentStudentIds.filter(id => !targetStudentIds.includes(id));
+					
+					// For students to remove, check if they have attendance records
+					if (studentsToRemove.length > 0) {
+						// For each student to remove, first check if they have attendance records
+						for (const studentId of studentsToRemove) {
+							// Check if student has attendance for this class
+							const { data: attendanceData, error: attendanceError } = await supabase
+								.from("attendance")
+								.select("id")
+								.eq("class_id", classData.id)
+								.eq("student_id", studentId)
+								.limit(1);
+								
+							if (attendanceError) throw attendanceError;
+							
+							// If no attendance records, safe to remove
+							if (!attendanceData || attendanceData.length === 0) {
+								const { error: deleteError } = await supabase
+									.from("class_students")
+									.delete()
+									.eq("class_id", classData.id)
+									.eq("student_id", studentId);
+									
+								if (deleteError) throw deleteError;
+							} else {
+								// Student has attendance records, can't remove
+								console.warn(`Student ${studentId} has attendance records and cannot be removed from the class.`);
+								
+								// Add this student back to selectedStudents so they appear in the UI
+								const studentToKeep = students.find(s => s.id === studentId);
+								if (studentToKeep) {
+									// Only add if not already in the list
+									if (!selectedStudents.some(s => s.id === studentId)) {
+										setSelectedStudents(prev => [
+											...prev, 
+											{ id: studentToKeep.id, label: studentToKeep.name }
+										]);
+									}
+								}
+							}
+						}
+					}
+					
+					// Add new students
+					if (studentsToAdd.length > 0) {
+						for (const studentId of studentsToAdd) {
+							try {
+								const { error: enrollError } = await supabase
+									.from("class_students")
+									.insert({
+										class_id: classData.id,
+										student_id: studentId,
+									});
+									
+								if (enrollError) {
+									// If it's a duplicate key error, just log and continue
+									if (enrollError.code === '23505') {
+										console.warn(`Student ${studentId} already enrolled in this class, skipping...`);
+									} else {
+										throw enrollError;
+									}
+								}
+							} catch (enrollErr) {
+								console.error(`Error enrolling student ${studentId}:`, enrollErr);
+								// Continue with next student instead of failing the whole operation
+							}
+						}
+					}
+				} catch (enrollmentError) {
+					console.error("Error updating enrollments:", enrollmentError);
+					throw new Error(`Failed to update student enrollments: ${enrollmentError.message}`);
 				}
 			}
 
+			// Call success first before any notification attempts
 			onSuccess();
+
+			// Send notifications in the background without blocking the form submission
+			// This prevents notification failures from affecting the main functionality
+			try {
+				// 1. If schedule changed, notify all relevant parties
+				if (scheduleChanged || roomChanged) {
+					const changes = {
+						oldStartTime: classData.start_time,
+						newStartTime: startTime,
+						oldEndTime: classData.end_time,
+						newEndTime: endTime,
+						oldRoom: classData.location.name,
+						newRoom: selectedRoom?.label || "",
+					};
+					
+					// Notify about schedule change
+					notificationService.notifyClassScheduleChange(
+						studioId,
+						name,
+						classData.id,
+						changes
+					).catch(err => console.error("Schedule notification failed:", err));
+					
+					console.log("Schedule change notification initiated");
+				}
+				
+				// 2. If teacher changed, notify the new teacher
+				if (teacherChanged && selectedTeacher) {
+					const scheduleDetails = {
+						startTime,
+						endTime,
+						date: classData.date,
+						location: selectedRoom?.label || ""
+					};
+					
+					notificationService.notifyClassAssigned(
+						selectedTeacher.id,
+						studioId,
+						name,
+						classData.id,
+						scheduleDetails
+					).catch(err => console.error("Teacher notification failed:", err));
+					
+					console.log("New teacher notification initiated");
+				}
+				
+				// 3. If students were added, notify the teacher about each new student
+				if (addedStudentIds.length > 0 && selectedTeacher) {
+					for (const studentId of addedStudentIds) {
+						const student = selectedStudents.find(s => s.id === studentId);
+						if (student) {
+							notificationService.notifyStudentAddedToClass(
+								studioId,
+								selectedTeacher.id,
+								student.label,
+								student.id,
+								name,
+								classData.id
+							).catch(err => console.error("Student add notification failed:", err));
+						}
+					}
+					console.log(`${addedStudentIds.length} new student notifications initiated`);
+				}
+				
+				// 4. If students were removed, notify the teacher about each removed student
+				if (removedStudentIds.length > 0 && selectedTeacher) {
+					for (const studentId of removedStudentIds) {
+						// Look up student name from your students array
+						const student = students.find(s => s.id === studentId);
+						if (student) {
+							notificationService.notifyStudentRemovedFromClass(
+								studioId,
+								selectedTeacher.id,
+								student.name,
+								student.id,
+								name,
+								classData.id
+							).catch(err => console.error("Student remove notification failed:", err));
+						}
+					}
+					console.log(`${removedStudentIds.length} removed student notifications initiated`);
+				}
+			} catch (notificationErr) {
+				console.error("Error initiating notifications:", notificationErr);
+				// Notifications failed but form submission succeeded
+			}
 		} catch (err) {
 			console.error("Error saving class:", err);
 			setError(err instanceof Error ? err.message : "Failed to save class");
@@ -220,7 +412,6 @@ export default function EditClassForm({
 			setIsSubmitting(false);
 		}
 	};
-
 	return (
 		<form className="space-y-4">
 			<FormInput

@@ -1,17 +1,21 @@
 import React, { useState, useRef } from 'react';
 import { Image, Paperclip, Send, X } from 'lucide-react';
 import { createPost } from '../../utils/channelUtils';
+import { notificationService } from '../../services/notificationService';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface PostComposerProps {
   channelId: string;
+  channelName: string;
 }
 
-export default function PostComposer({ channelId }: PostComposerProps) {
+export default function PostComposer({ channelId, channelName }: PostComposerProps) {
   const [content, setContent] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { profile } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +25,24 @@ export default function PostComposer({ channelId }: PostComposerProps) {
     setError(null);
     
     try {
-      await createPost(channelId, content, files);
+      // Create the post
+      const newPost = await createPost(channelId, content, files);
+
+      // Send notification to studio members
+      if (profile?.studio?.id) {
+        await notificationService.notifyNewChannelPost(
+          profile.studio.id, 
+          channelId, 
+          channelName, 
+          profile.name || 'A user', 
+          newPost.id, 
+          content.length > 50 
+            ? content.substring(0, 47) + '...' 
+            : content
+        );
+      }
+
+      // Reset form
       setContent('');
       setFiles([]);
     } catch (err) {

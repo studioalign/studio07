@@ -1,12 +1,15 @@
 // src/components/notifications/NotificationDropdown.tsx
 import React from 'react';
-import { Bell, X, MessageSquare, DollarSign, Calendar, Users, BookOpen, AlertCircle, Award, UserPlus } from 'lucide-react';
+import { Bell, X, MessageSquare, DollarSign, Calendar, Users, BookOpen, AlertCircle, Award, UserPlus, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { useNotifications, Notification } from '../../hooks/useNotifications';
 
 export default function NotificationDropdown({ onClose }: { onClose: () => void }) {
-  const { notifications, markAsRead, isLoading } = useNotifications();
+  const { notifications, markAsRead, markAllAsRead, isLoading } = useNotifications();
+  
+  // Count unread notifications
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   const getIcon = (notification: Notification) => {
     const type = notification.type.split('_')[0]; // Get the first part of the type
@@ -42,13 +45,30 @@ export default function NotificationDropdown({ onClose }: { onClose: () => void 
     onClose();
   };
 
+  const handleMarkAllAsRead = () => {
+    markAllAsRead();
+    // Don't close the dropdown so user can see the updates
+  };
+
   return (
     <div className="w-full sm:w-96 bg-white rounded-lg shadow-lg py-1 mx-4 sm:mx-0">
       <div className="flex items-center justify-between px-4 py-2 border-b">
         <h3 className="font-medium text-gray-900">Notifications</h3>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-          <X className="w-5 h-5" />
-        </button>
+        <div className="flex space-x-2">
+          {unreadCount > 0 && (
+            <button 
+              onClick={handleMarkAllAsRead} 
+              className="text-brand-primary hover:text-brand-secondary-400 text-sm flex items-center"
+              title="Mark all as read"
+            >
+              <Check className="w-4 h-4 mr-1" />
+              <span className="hidden sm:inline">Mark all read</span>
+            </button>
+          )}
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       <div className="max-h-96 overflow-y-auto">

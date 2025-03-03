@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { UserPlus } from 'lucide-react';
 import FormInput from '../FormInput';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { notificationService } from '../../services/notificationService';
 
 interface AddTeacherFormProps {
   onSuccess: () => void;
@@ -8,6 +11,7 @@ interface AddTeacherFormProps {
 }
 
 export default function AddTeacherForm({ onSuccess, onCancel }: AddTeacherFormProps) {
+  const { profile } = useAuth(); // Get current user context
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -21,14 +25,77 @@ export default function AddTeacherForm({ onSuccess, onCancel }: AddTeacherFormPr
     setError(null);
     setIsSubmitting(true);
 
+    if (!profile?.studio?.id) {
+      setError("Studio information not available");
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
-      // Mock success - in real implementation, this would:
-      // 1. Create a pending teacher record
-      // 2. Send an invitation email
-      // 3. Create the teacher record when they accept
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Generate a temporary password
+      const tempPassword = Math.random().toString(36).slice(2, 10) + 
+                         Math.random().toString(36).slice(2, 10);
+      
+      // 1. Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: email,
+        password: tempPassword,
+        email_confirm: true, // Auto-confirm email
+        user_metadata: {
+          name: name,
+          role: 'teacher',
+          studio_id: profile.studio.id,
+          phone: phone,
+          bio: bio,
+          specialties: specialties
+        }
+      });
+
+      if (authError) throw authError;
+      
+      if (!authData.user) {
+        throw new Error("Failed to create user account");
+      }
+
+      // 2. Add teacher to the users table
+      const { error: dbError } = await supabase
+        .from('users')
+        .insert([
+          {
+            id: authData.user.id,
+            name: name,
+            email: email,
+            role: 'teacher',
+            studio_id: profile.studio.id,
+            phone: phone,
+            bio: bio,
+            specialties: specialties,
+            active: true
+          }
+        ]);
+
+      if (dbError) throw dbError;
+
+      // 3. Send teacher registration notification
+      try {
+        await notificationService.notifyStaffRegistration(
+          profile.studio.id,
+          name,
+          authData.user.id,
+          'teacher'
+        );
+        console.log("Teacher registration notification sent");
+      } catch (notificationError) {
+        // Log but don't fail if notification has issues
+        console.error("Failed to send teacher notification:", notificationError);
+      }
+
+      // 4. In a real app, we'd also trigger a password reset email here
+      // so the teacher can set their own password
+
       onSuccess();
     } catch (err) {
+      console.error("Error adding teacher:", err);
       setError(err instanceof Error ? err.message : 'Failed to add teacher');
     } finally {
       setIsSubmitting(false);

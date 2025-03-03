@@ -56,13 +56,7 @@ export function useNotifications() {
   // Mark notification as read
   const markAsRead = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true, updated_at: new Date().toISOString() })
-        .eq('id', id);
-      
-      if (error) throw error;
-      
+      // Optimistically update UI first
       setNotifications(prev =>
         prev.map(notification =>
           notification.id === id
@@ -70,14 +64,18 @@ export function useNotifications() {
             : notification
         )
       );
-
-      // If the notification has a link, navigate to it
-      const notification = notifications.find(n => n.id === id);
-      if (notification?.link) {
-        window.location.href = notification.link;
-      }
+      
+      // Then update in database
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      
+      if (error) throw error;
     } catch (err) {
       console.error('Error marking notification as read:', err);
+      // Revert optimistic update on error
+      fetchNotifications();
     }
   };
 
@@ -86,6 +84,12 @@ export function useNotifications() {
     if (!user?.id || notifications.length === 0) return;
     
     try {
+      // Optimistically update UI first
+      setNotifications(prev =>
+        prev.map(notification => ({ ...notification, read: true }))
+      );
+      
+      // Then update in database
       const { error } = await supabase
         .from('notifications')
         .update({ read: true, updated_at: new Date().toISOString() })
@@ -93,30 +97,32 @@ export function useNotifications() {
         .eq('read', false);
       
       if (error) throw error;
-      
-      setNotifications(prev =>
-        prev.map(notification => ({ ...notification, read: true }))
-      );
     } catch (err) {
       console.error('Error marking all notifications as read:', err);
+      // Revert optimistic update on error
+      fetchNotifications();
     }
   };
 
   // Dismiss notification
   const dismissNotification = async (id: string) => {
     try {
+      // Optimistically update UI first
+      setNotifications(prev =>
+        prev.filter(notification => notification.id !== id)
+      );
+      
+      // Then update in database
       const { error } = await supabase
         .from('notifications')
         .update({ dismissed: true, updated_at: new Date().toISOString() })
         .eq('id', id);
       
       if (error) throw error;
-      
-      setNotifications(prev =>
-        prev.filter(notification => notification.id !== id)
-      );
     } catch (err) {
       console.error('Error dismissing notification:', err);
+      // Revert optimistic update on error
+      fetchNotifications();
     }
   };
 
@@ -125,6 +131,10 @@ export function useNotifications() {
     if (!user?.id || notifications.length === 0) return;
     
     try {
+      // Optimistically update UI first
+      setNotifications([]);
+      
+      // Then update in database
       const { error } = await supabase
         .from('notifications')
         .update({ dismissed: true, updated_at: new Date().toISOString() })
@@ -132,10 +142,10 @@ export function useNotifications() {
         .eq('dismissed', false);
       
       if (error) throw error;
-      
-      setNotifications([]);
     } catch (err) {
       console.error('Error dismissing all notifications:', err);
+      // Revert optimistic update on error
+      fetchNotifications();
     }
   };
 
@@ -162,6 +172,30 @@ export function useNotifications() {
         },
         (payload) => {
           setNotifications(prev => [payload.new as Notification, ...prev]);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          // Update the notification in our local state if it's updated externally
+          const updated = payload.new as Notification;
+          if (updated.dismissed) {
+            // If dismissed, remove from the list
+            setNotifications(prev => 
+              prev.filter(n => n.id !== updated.id)
+            );
+          } else {
+            // Otherwise update the notification
+            setNotifications(prev => 
+              prev.map(n => n.id === updated.id ? updated : n)
+            );
+          }
         }
       )
       .subscribe();

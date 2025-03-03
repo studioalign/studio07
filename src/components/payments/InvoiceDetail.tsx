@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { Edit2, Download } from "lucide-react";
 import PaymentHistory from "./PaymentHistory";
 import { formatCurrency } from "../../utils/formatters";
 import { useLocalization } from "../../contexts/LocalizationContext";
+import { notificationService } from "../../services/notificationService";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface InvoiceItem {
 	id: string;
@@ -34,10 +36,12 @@ interface Invoice {
 	discount_reason: string;
 	pdf_url?: string;
 	parent: {
+		id?: string; // Added for notification purposes
 		name: string;
 		email: string;
 	};
 	items: InvoiceItem[];
+	studio_id?: string; // Added for notification purposes
 }
 
 interface InvoiceDetailProps {
@@ -52,6 +56,55 @@ export default function InvoiceDetail({
 	onRefresh,
 }: InvoiceDetailProps) {
 	const { currency } = useLocalization();
+	const { profile } = useAuth();
+	const previousStatusRef = useRef(invoice.status);
+
+	// Send notifications when invoice status changes to "paid"
+	useEffect(() => {
+		// If status wasn't already "paid" and is now "paid"
+		if (previousStatusRef.current !== "paid" && invoice.status === "paid") {
+			console.log("Invoice status changed to paid, sending notifications");
+			
+			const sendPaymentNotifications = async () => {
+				try {
+					// Use studio_id from invoice or from current user profile
+					const studioId = invoice.studio_id || profile?.studio?.id;
+					
+					if (!studioId) {
+						console.error("No studio ID available for notifications");
+						return;
+					}
+
+					// Notify the studio owner about the payment
+					await notificationService.notifyPaymentReceived(
+						studioId,
+						invoice.parent.name,
+						invoice.total,
+						invoice.id
+					);
+					console.log("Payment received notification sent to studio owner");
+
+					// Notify the parent about the payment confirmation
+					if (invoice.parent.id) {
+						await notificationService.notifyPaymentConfirmation(
+							invoice.parent.id,
+							studioId,
+							invoice.total,
+							invoice.id
+						);
+						console.log("Payment confirmation notification sent to parent");
+					}
+				} catch (error) {
+					console.error("Failed to send payment notifications:", error);
+				}
+			};
+
+			sendPaymentNotifications();
+		}
+		
+		// Update ref for next render
+		previousStatusRef.current = invoice.status;
+	}, [invoice.status, invoice.id, invoice.total, invoice.parent, invoice.studio_id, profile]);
 
 	const getStatusColor = (status: string) => {
 		switch (status) {
@@ -65,8 +118,6 @@ export default function InvoiceDetail({
 				return "bg-gray-100 text-gray-800";
 		}
 	};
-
-	console.log(invoice);
 
 	return (
 		<div className="bg-white rounded-lg shadow-lg">
@@ -140,16 +191,8 @@ export default function InvoiceDetail({
 						</h3>
 						{invoice.discount_value > 0 ? (
 							<>
-								<p className="text-lg text-gray-500 line-through">
-									{formatCurrency(invoice.total, currency)}
-								</p>
 								<p className="text-3xl font-bold text-brand-primary">
-									{formatCurrency(
-										invoice.discount_type === "percentage"
-											? invoice.total * (1 - invoice.discount_value / 100)
-											: invoice.total - invoice.discount_value,
-										currency
-									)}
+									{formatCurrency(invoice.total, currency)}
 								</p>
 								<p className="text-sm text-green-600">
 									{invoice.discount_type === "percentage"

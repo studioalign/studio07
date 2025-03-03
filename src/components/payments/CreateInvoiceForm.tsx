@@ -123,24 +123,22 @@ export default function CreateInvoiceForm({
 			(acc, item) => acc + (item.quantity * item.unit_price),
 			0
 		);
-        
-        // Calculate discount
-		{parseFloat(discountValue) > 0 && (
-			<p>
-				Discount:{" "}
-				{new Intl.NumberFormat("en-US", {
-					style: "currency",
-					currency: profile?.studio?.currency,
-				}).format(calculateTotals().discount)} 
-				{discountType === "percentage" && ` (${discountValue}%)`}
-			</p>
-		)}
-        
-        const total = subtotal - discount;
-        
+		
+		// Calculate discount
+		let discount = 0;
+		if (parseFloat(discountValue) > 0) {
+			if (discountType === "percentage") {
+				discount = subtotal * (parseFloat(discountValue) / 100);
+			} else {
+				discount = parseFloat(discountValue);
+			}
+		}
+		
+		const total = subtotal - discount;
+		
 		return {
 			subtotal,
-            discount,
+			discount,
 			total
 		};
 	};

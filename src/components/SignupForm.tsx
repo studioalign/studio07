@@ -8,6 +8,7 @@ import FormInput from "./FormInput";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useStudios } from "../hooks/useStudios";
+import { notificationService } from "../services/notificationService";
 
 export default function SignupForm() {
 	const [selectedRole, setSelectedRole] = useState<Role | null>(null);
@@ -66,6 +67,29 @@ export default function SignupForm() {
 			if (!authData.user) {
 				console.error("No user data returned");
 				throw new Error("Signup failed");
+			}
+
+			// Send appropriate notifications based on role
+			try {
+				if (selectedRole === "parent" && selectedStudio) {
+					await notificationService.notifyParentRegistration(
+						selectedStudio.id,
+						name,
+						authData.user.id
+					);
+					console.log("Parent registration notification sent");
+				} else if (selectedRole === "teacher" && selectedStudio) {
+					await notificationService.notifyStaffRegistration(
+						selectedStudio.id,
+						name,
+						authData.user.id,
+						"teacher" // Using "teacher" role since staff doesn't exist
+					);
+					console.log("Teacher registration notification sent");
+				}
+			} catch (notificationError) {
+				// Log but don't fail the registration if notification fails
+				console.error("Failed to send registration notification:", notificationError);
 			}
 
 			if (selectedRole === "owner") {

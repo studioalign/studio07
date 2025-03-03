@@ -269,44 +269,23 @@ export default function Invoices() {
 												</p>
 												{invoice.is_recurring && (
 													<p className="text-xs text-blue-600 mt-1">
-														↻ Recurring{" "}
-														{invoice.recurring_interval.toLowerCase()}
+														↻ Recurring {invoice.recurring_interval.toLowerCase()}
 													</p>
 												)}
 											</div>
 										</div>
 										<div className="flex items-center space-x-6">
 											<div className="text-right">
-												{invoice.discount_value > 0 ? (
-													<>
-														<p className="text-sm text-gray-500 line-through">
-															{formatCurrency(invoice.total, currency)}
-														</p>
-														<p className="font-medium text-green-600">
-															{formatCurrency(
-																invoice.discount_type === "percentage"
-																	? invoice.total *
-																			(1 - invoice.discount_value / 100)
-																	: invoice.total - invoice.discount_value,
-																currency
-															)}
-															<span className="text-xs ml-1">
-																(
-																{invoice.discount_type === "percentage"
-																	? `${invoice.discount_value}% off`
-																	: `${formatCurrency(
-																			invoice.discount_value,
-																			currency
-																	  )} off`}
-																)
-															</span>
-														</p>
-													</>
-												) : (
-													<p className="font-medium">
-														{formatCurrency(invoice.total, currency)}
-													</p>
-												)}
+												<p className="font-medium">
+													{formatCurrency(invoice.total, currency)}
+													{invoice.discount_value && invoice.discount_value > 0 ? (
+														<span className="text-xs ml-1 text-green-600">
+															({invoice.discount_type === "percentage" 
+																? `${invoice.discount_value}% off` 
+																: `${formatCurrency(invoice.discount_value, currency)} off`})
+														</span>
+													) : null}
+												</p>
 												<p className="text-sm text-gray-500">
 													Due {formatDate(invoice.due_date, dateFormat)}
 												</p>
