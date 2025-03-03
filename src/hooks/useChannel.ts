@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
+import { createPost } from "../utils/channelUtils";
 
 interface Channel {
   id: string;
@@ -68,6 +69,13 @@ export function useChannel(channelId: string) {
 
   const fetchChannelData = useCallback(async () => {
     if (!channelId || !profile?.id) return;
+
+    // Set loading and clear previous error
+    setState(prev => ({
+      ...prev,
+      loading: { channel: true, posts: true },
+      error: null,
+    }));
 
     try {
       // Fetch channel details
@@ -137,6 +145,7 @@ export function useChannel(channelId: string) {
           channel: false,
           posts: false,
         },
+        error: null,
       }));
     } catch (err) {
       console.error("Error fetching channel data:", err);
@@ -147,6 +156,8 @@ export function useChannel(channelId: string) {
           channel: false,
           posts: false,
         },
+        channel: null,
+        posts: [],
       }));
     }
   }, [channelId, profile?.id]);
@@ -249,7 +260,8 @@ export function useChannel(channelId: string) {
           // Remove deleted post
           setState(prev => ({
             ...prev,
-            posts: prev.posts.filter(post => post.id !== payload.old.id),
+            posts: prev.posts.filter(post => post
+				.id !== payload.old.id),
           }));
         }
       )
@@ -259,41 +271,50 @@ export function useChannel(channelId: string) {
 
     return () => {
       postsChannel.unsubscribe();
-	};
-}, [channelId, fetchChannelData]);
+    };
+  }, [channelId, fetchChannelData]);
 
-// Method to add a new post with optimistic update
-const addPost = useCallback(async (content: string, files: File[]) => {
-  try {
-	setState(prev => ({
-	  ...prev,
-	  loading: { ...prev.loading, posts: true }
-	}));
+  // Method to add a new post with error handling
+  const addPost = useCallback(async (content: string, files: File[]) => {
+    // Reset error state before attempting to add post
+    setState(prev => ({
+      ...prev,
+      error: null,
+    }));
 
-	// Use existing createPost utility function
-	const newPost = await createPost(channelId, content, files);
+    try {
+      setState(prev => ({
+        ...prev,
+        loading: { ...prev.loading, posts: true }
+      }));
 
-	// Optimistically add the post (will be replaced by real-time update)
-	setState(prev => ({
-	  ...prev,
-	  posts: [newPost, ...prev.posts],
-	  loading: { ...prev.loading, posts: false }
-	}));
-  } catch (err) {
-	setState(prev => ({
-	  ...prev,
-	  error: err instanceof Error ? err.message : "Failed to create post",
-	  loading: { ...prev.loading, posts: false }
-	}));
-	throw err;
-  }
-}, [channelId]);
+      // Use existing createPost utility function
+      const newPost = await createPost(channelId, content, files);
 
-return { 
-  channel: state.channel, 
-  posts: state.posts, 
-  loading: state.loading, 
-  error: state.error,
-  addPost
-};
+      // Optimistically add the post (will be replaced by real-time update)
+      setState(prev => ({
+        ...prev,
+        posts: [newPost, ...prev.posts],
+        loading: { ...prev.loading, posts: false }
+      }));
+
+      return newPost;
+    } catch (err) {
+      setState(prev => ({
+        ...prev,
+        error: err instanceof Error ? err.message : "Failed to create post",
+        loading: { ...prev.loading, posts: false }
+      }));
+      throw err;
+    }
+  }, [channelId]);
+
+  return { 
+    channel: state.channel, 
+    posts: state.posts, 
+    loading: state.loading, 
+    error: state.error,
+    addPost,
+    fetchChannelData // Expose for manual refresh if needed
+  };
 }

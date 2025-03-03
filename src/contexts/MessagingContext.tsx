@@ -63,11 +63,13 @@ import React, {
 	const [error, setError] = useState<string | null>(null);
 	const { profile } = useAuth();
   
-	// Fetch conversations with real-time updates
+	// Fetch conversations with robust error handling
 	const fetchConversations = useCallback(async () => {
 	  if (!profile?.id) return;
   
 	  setLoading(prev => ({ ...prev, conversations: true }));
+	  setError(null);
+  
 	  try {
 		const { data, error: fetchError } = await supabase
 		  .from("conversation_participants")
@@ -87,41 +89,55 @@ import React, {
   
 		const sortedConversations: Conversation[] = await Promise.all(
 		  (data || []).map(async (item: any) => {
+			const participantIds = item.conversation.participants
+			  .filter((participantId: string) => participantId !== profile.id);
+			
 			const participantData = await Promise.all(
-			  item.conversation.participants
-				.filter((participantId: string) => participantId !== profile.id)
-				.map(async (userId: string) => {
-				  const { data } = await supabase
-					.from("users")
-					.select("id, name, email")
-					.eq("id", userId)
-					.single();
-				  return data;
-				})
+			  participantIds.map(async (userId: string) => {
+				const { data, error } = await supabase
+				  .from("users")
+				  .select("id, name, email")
+				  .eq("id", userId)
+				  .single();
+				
+				// Return null if user lookup fails, but don't throw
+				return error ? null : data;
+			  })
 			);
+  
+			// Filter out any null participants
+			const validParticipants = participantData.filter(p => p !== null);
   
 			return {
 			  unread_count: item.unread_count,
 			  id: item.conversation.id,
 			  last_message: item.conversation.last_message,
 			  last_message_at: item.conversation.last_message_at,
-			  participants: participantData,
+			  participants: validParticipants,
 			};
 		  })
 		);
   
-		setConversations(sortedConversations);
+		// Only set conversations if some are found
+		if (sortedConversations.length > 0) {
+		  setConversations(sortedConversations);
+		} else {
+		  setConversations([]);
+		}
 	  } catch (err) {
 		console.error("Error fetching conversations:", err);
 		setError(err instanceof Error ? err.message : "Failed to fetch conversations");
+		setConversations([]);
 	  } finally {
 		setLoading(prev => ({ ...prev, conversations: false }));
 	  }
 	}, [profile?.id]);
   
-	// Fetch messages with real-time updates
+	// Fetch messages with error handling
 	const fetchMessages = useCallback(async (conversationId: string) => {
 	  setLoading(prev => ({ ...prev, messages: true }));
+	  setError(null);
+  
 	  try {
 		const { data, error: fetchError } = await supabase
 		  .from("messages")
@@ -133,6 +149,7 @@ import React, {
 		setMessages(data || []);
 	  } catch (err) {
 		setError(err instanceof Error ? err.message : "Failed to fetch messages");
+		setMessages([]);
 	  } finally {
 		setLoading(prev => ({ ...prev, messages: false }));
 	  }
@@ -140,16 +157,18 @@ import React, {
   
 	// Real-time subscriptions
 	useEffect(() => {
+	  if (!profile?.id) return;
+  
 	  // Conversations subscription
 	  const conversationChannel = supabase
-		.channel(`user_conversations:${profile?.id}`)
+		.channel(`user_conversations:${profile.id}`)
 		.on(
 		  "postgres_changes",
 		  {
 			event: "*",
 			schema: "public",
 			table: "conversation_participants",
-			filter: `user_id=eq.${profile?.id}`,
+			filter: `user_id=eq.${profile.id}`,
 		  },
 		  () => {
 			fetchConversations();
@@ -184,7 +203,7 @@ import React, {
 	  };
 	}, [profile?.id, activeConversation, fetchConversations]);
   
-	// Existing methods (sendMessage, createConversation, etc.) remain the same
+	// Existing methods remain the same
 	const sendMessage = async (content: string) => {
 	  if (!activeConversation || !profile?.id) return;
   
