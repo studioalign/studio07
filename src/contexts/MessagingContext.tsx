@@ -57,35 +57,35 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const { profile } = useAuth();
-	const [subscriptions, setSubscriptions] = useState<{
-		conversations?: any;
-		messages?: any;
+	const [channels, setChannels] = useState<{
+		conversations?: ReturnType<typeof supabase.channel>;
+		messages?: ReturnType<typeof supabase.channel>;
 	}>({});
 
-	// Cleanup function for subscriptions
-	const cleanupSubscriptions = async () => {
-		if (subscriptions.conversations) {
-			await subscriptions.conversations.unsubscribe();
+	// Cleanup function for channels
+	const cleanupChannels = async () => {
+		if (channels.conversations) {
+			await channels.conversations.unsubscribe();
 		}
-		if (subscriptions.messages) {
-			await subscriptions.messages.unsubscribe();
+		if (channels.messages) {
+			await channels.messages.unsubscribe();
 		}
-		setSubscriptions({});
+		setChannels({});
 	};
 
 	// Setup realtime subscriptions
 	useEffect(() => {
 		if (!profile?.id) return;
 
-		const setupSubscriptions = async () => {
-			// Cleanup existing subscriptions
-			await cleanupSubscriptions();
+		const setupChannels = async () => {
+			// Cleanup existing channels
+			await cleanupChannels();
 
 			// Fetch initial conversations
 			await fetchConversations();
 
 			// Subscribe to conversation changes
-			const conversationsSubscription = supabase
+			const conversationsChannel = supabase
 				.channel(`conversations:${profile.id}`)
 				.on(
 					"postgres_changes",
@@ -101,14 +101,14 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 				)
 				.subscribe();
 
-			setSubscriptions(prev => ({
+			setChannels(prev => ({
 				...prev,
-				conversations: conversationsSubscription
+				conversations: conversationsChannel
 			}));
 
 			// If there's an active conversation, subscribe to its messages
 			if (activeConversation) {
-				const messagesSubscription = supabase
+				const messagesChannel = supabase
 					.channel(`messages:${activeConversation}`)
 					.on(
 						"postgres_changes",
@@ -116,34 +116,50 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 							event: "INSERT",
 							schema: "public",
 							table: "messages",
-							filter: `conversation_id=eq.${activeConversation}`,
+							filter: `conversation_id=eq.${activeConversation}`
 						},
 						async (payload) => {
 							// Fetch the complete message with sender info
 							const { data: messageData, error: messageError } = await supabase
 								.from("messages")
-								.select("*, sender:users!sender_id(id, name)")
+								.select(`
+									id,
+									content,
+									sender_id,
+									created_at,
+									edited_at,
+									is_deleted,
+									sender:users!sender_id(
+										id,
+										name
+									)
+								`)
 								.eq("id", payload.new.id)
 								.single();
 
 							if (!messageError && messageData) {
-								setMessages(prev => [...prev, messageData]);
+								// Only add if message doesn't already exist
+								setMessages(prev => 
+									prev.some(msg => msg.id === messageData.id) 
+										? prev 
+										: [...prev, messageData]
+								);
 							}
 						}
 					)
 					.subscribe();
 
-				setSubscriptions(prev => ({
+				setChannels(prev => ({
 					...prev,
-					messages: messagesSubscription
+					messages: messagesChannel
 				}));
 			}
 		};
 
-		setupSubscriptions();
+		setupChannels();
 
 		return () => {
-			cleanupSubscriptions();
+			cleanupChannels();
 		};
 	}, [profile?.id, activeConversation]);
 
