@@ -30,16 +30,57 @@ export default function MessageThread({ onBack }: MessageThreadProps) {
     ? conversations.find(conv => conv.id === activeConversation)?.participants[0]
     : null;
 
-  // Fetch messages when conversation changes
+  // Track if messages have already been fetched
+  const fetchedMessagesRef = useRef(false);
+
   useEffect(() => {
-    if (activeConversation) {
+    if (!activeConversation) return;
+
+    // Fetch messages only once when the conversation is first set
+    if (!fetchedMessagesRef.current) {
       fetchMessages(activeConversation);
+      fetchedMessagesRef.current = true;
     }
-  }, [activeConversation]);
+
+    // Subscribe to new messages
+    const channel = supabase
+      .channel(`messages-${activeConversation}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${activeConversation}`,
+        },
+        (payload) => {
+          console.log('New message received:', payload.new);
+
+          // Avoid duplicates by checking if message already exists
+          setMessages((prevMessages) => {
+            const exists = prevMessages.some((msg) => msg.id === payload.new.id);
+            return exists ? prevMessages : [...prevMessages, payload.new];
+          });
+
+          // Scroll to the bottom when a new message is received
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+          }, 100);
+        }
+      )
+      .subscribe();
+
+    // Cleanup function to remove the subscription when unmounting
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeConversation, fetchMessages]);
 
   // Automatically mark messages as read when messages change
   useEffect(() => {
-    markAsRead();
+    if (messages.length > 0) {
+      markAsRead();
+    }
   }, [messages, markAsRead]);
 
   // Scroll to bottom when messages change
