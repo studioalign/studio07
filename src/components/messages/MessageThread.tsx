@@ -1,9 +1,11 @@
+// src/components/messages/MessageThread.tsx
 import React, { useState, useEffect, useRef } from "react";
 import { Send, ArrowLeft } from "lucide-react";
 import { useMessaging } from "../../contexts/MessagingContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { formatMessageDate } from "../../utils/messagingUtils";
 import { supabase } from "../../lib/supabase";
+import { notificationService } from "../../services/notificationService";
 
 interface MessageThreadProps {
 	onBack: () => void;
@@ -31,14 +33,61 @@ export default function MessageThread({ onBack }: MessageThreadProps) {
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!newMessage.trim()) return;
+		if (!newMessage.trim() || !profile?.id || !profile?.studio?.id || !activeConversation) return;
 
-		await sendMessage(newMessage);
+		try {
+            // Send the message
+            await sendMessage(newMessage);
+            
+            // After successfully sending a message, notify the recipient
+            // Get the conversation details to find the recipient
+            const { data: conversationData, error: convError } = await supabase
+                .from('conversations')
+                .select('participants')
+                .eq('id', activeConversation)
+                .single();
+                
+            if (convError) {
+                console.error('Error fetching conversation:', convError);
+            } else if (conversationData && Array.isArray(conversationData.participants)) {
+                // Find the recipient (the user who is not the current user)
+                const recipientId = conversationData.participants.find(
+                    (id: string) => id !== profile.id
+                );
+                
+                if (recipientId) {
+                    console.log("Sending message notification to:", recipientId);
+                    
+                    // Get message preview (truncate long messages)
+                    const messagePreview = newMessage.length > 50 
+                        ? newMessage.substring(0, 47) + '...' 
+                        : newMessage;
+                        
+                    // Send the notification
+                    await notificationService.notifyNewMessage(
+                        profile.id,
+                        profile.name || 'A user',
+                        recipientId,
+                        profile.studio.id,
+                        activeConversation,
+                        messagePreview
+                    );
+                    
+                    console.log("Message notification sent successfully");
+                } else {
+                    console.log("No recipient found for notification");
+                }
+            } else {
+                console.log("Invalid conversation data:", conversationData);
+            }
+        } catch (err) {
+            console.error("Error in message sending/notification:", err);
+        }
+        
 		setNewMessage("");
 	};
 
 	useEffect(() => {
-		console.log("activeConversation", activeConversation);
 		if (activeConversation) {
 			const subscription = supabase
 				.channel(`public:messages`)
@@ -61,8 +110,6 @@ export default function MessageThread({ onBack }: MessageThreadProps) {
 			};
 		}
 	}, [activeConversation, fetchMessages]);
-
-	console.log(messages);
 
 	return (
 		<div className="h-full flex flex-col">

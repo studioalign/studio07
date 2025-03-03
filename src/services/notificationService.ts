@@ -51,6 +51,7 @@ interface NotificationData {
 // Main function to create a notification
 async function createNotification(data: NotificationData) {
   try {
+    console.log("Creating notification:", data);
     const { error } = await supabase.from('notifications').insert({
       user_id: data.user_id,
       studio_id: data.studio_id,
@@ -69,7 +70,12 @@ async function createNotification(data: NotificationData) {
       dismissed: false,
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase error creating notification:', error);
+      throw error;
+    }
+
+    console.log("Notification created successfully");
 
     // For a production system, you would have email logic here
     // This could be a serverless function or API endpoint that sends emails
@@ -109,7 +115,7 @@ async function sendEmailNotification(data: NotificationData) {
 async function getStudioOwners(studioId: string) {
   try {
     const { data, error } = await supabase
-      .from('profiles')
+      .from('users')  // Using users table, not profiles
       .select('id')
       .eq('studio_id', studioId)
       .eq('role', 'owner');
@@ -126,7 +132,7 @@ async function getStudioOwners(studioId: string) {
 async function getStudioTeachers(studioId: string) {
   try {
     const { data, error } = await supabase
-      .from('profiles')
+      .from('users')  // Using users table, not profiles
       .select('id')
       .eq('studio_id', studioId)
       .eq('role', 'teacher');
@@ -156,18 +162,45 @@ async function getClassTeacher(classId: string) {
   }
 }
 
-// Helper function to get student's parents
-async function getStudentParents(studentId: string) {
+// Helper function to get student's parent
+async function getStudentParent(studentId: string) {
   try {
+    // Get parent directly from the students table
     const { data, error } = await supabase
-      .from('parent_student')
+      .from('students')
       .select('parent_id')
-      .eq('student_id', studentId);
+      .eq('id', studentId)
+      .single();
     
     if (error) throw error;
-    return data?.map(item => item.parent_id) || [];
+    return data?.parent_id;
   } catch (error) {
-    console.error('Error fetching student parents:', error);
+    console.error('Error fetching student parent:', error);
+    return null;
+  }
+}
+
+// Helper function to get all parents for a class
+async function getParentsForClass(classId: string) {
+  try {
+    // Get all students in the class
+    const { data: classStudents, error: classError } = await supabase
+      .from('class_students')
+      .select('student_id')
+      .eq('class_id', classId);
+    
+    if (classError) throw classError;
+    
+    // Get parent IDs for all students (no duplicates)
+    const parentIds = new Set<string>();
+    for (const item of classStudents || []) {
+      const parentId = await getStudentParent(item.student_id);
+      if (parentId) parentIds.add(parentId);
+    }
+    
+    return Array.from(parentIds);
+  } catch (error) {
+    console.error('Error fetching parents for class:', error);
     return [];
   }
 }
@@ -176,7 +209,7 @@ async function getStudentParents(studentId: string) {
 
 // OWNER NOTIFICATIONS
 
-export async function notifyStudentEnrollment(studioId: string, studentName: string, className: string, studentId: string, classId: string) {
+async function notifyStudentEnrollment(studioId: string, studentName: string, className: string, studentId: string, classId: string) {
   const owners = await getStudioOwners(studioId);
   
   const title = 'New Student Enrollment';
@@ -199,7 +232,7 @@ export async function notifyStudentEnrollment(studioId: string, studentName: str
   }
 }
 
-export async function notifyConsecutiveAbsences(studioId: string, studentName: string, studentId: string, className: string, absenceCount: number) {
+async function notifyConsecutiveAbsences(studioId: string, studentName: string, studentId: string, className: string, absenceCount: number) {
   const owners = await getStudioOwners(studioId);
   
   const title = 'Student Consecutive Absences';
@@ -240,7 +273,7 @@ export async function notifyConsecutiveAbsences(studioId: string, studentName: s
   }
 }
 
-export async function notifyStudentBirthday(studioId: string, studentName: string, studentId: string) {
+async function notifyStudentBirthday(studioId: string, studentName: string, studentId: string) {
   const owners = await getStudioOwners(studioId);
   const teachers = await getStudioTeachers(studioId);
   
@@ -280,7 +313,7 @@ export async function notifyStudentBirthday(studioId: string, studentName: strin
   }
 }
 
-export async function notifyPaymentReceived(studioId: string, parentName: string, amount: number, invoiceId: string) {
+async function notifyPaymentReceived(studioId: string, parentName: string, amount: number, invoiceId: string) {
   const owners = await getStudioOwners(studioId);
   
   const title = 'Payment Received';
@@ -302,7 +335,7 @@ export async function notifyPaymentReceived(studioId: string, parentName: string
   }
 }
 
-export async function notifyPaymentOverdue(userId: string, studioId: string, invoiceId: string, amount: number, daysOverdue: number) {
+async function notifyPaymentOverdue(userId: string, studioId: string, invoiceId: string, amount: number, daysOverdue: number) {
   const title = 'Payment Overdue';
   const message = `Your payment of $${amount} is ${daysOverdue} days overdue`;
   
@@ -339,7 +372,7 @@ export async function notifyPaymentOverdue(userId: string, studioId: string, inv
   }
 }
 
-export async function notifyMonthlyFinancialSummary(studioId: string, month: string, revenue: number, expenses: number, profit: number) {
+async function notifyMonthlyFinancialSummary(studioId: string, month: string, revenue: number, expenses: number, profit: number) {
   const owners = await getStudioOwners(studioId);
   
   const title = 'Monthly Financial Summary';
@@ -361,7 +394,7 @@ export async function notifyMonthlyFinancialSummary(studioId: string, month: str
   }
 }
 
-export async function notifyStaffRegistration(studioId: string, staffName: string, staffId: string, role: string) {
+async function notifyStaffRegistration(studioId: string, staffName: string, staffId: string, role: string) {
   const owners = await getStudioOwners(studioId);
   
   const title = 'New Staff Registration';
@@ -384,7 +417,7 @@ export async function notifyStaffRegistration(studioId: string, staffName: strin
   }
 }
 
-export async function notifyParentRegistration(studioId: string, parentName: string, parentId: string) {
+async function notifyParentRegistration(studioId: string, parentName: string, parentId: string) {
   const owners = await getStudioOwners(studioId);
   
   const title = 'New Parent Registration';
@@ -406,7 +439,7 @@ export async function notifyParentRegistration(studioId: string, parentName: str
   }
 }
 
-export async function notifyParentDeletion(studioId: string, parentName: string) {
+async function notifyParentDeletion(studioId: string, parentName: string) {
   const owners = await getStudioOwners(studioId);
   
   const title = 'Parent Account Deleted';
@@ -426,7 +459,7 @@ export async function notifyParentDeletion(studioId: string, parentName: string)
   }
 }
 
-export async function notifyAttendanceNotFilled(teacherId: string, teacherName: string, studioId: string, classId: string, className: string) {
+async function notifyAttendanceNotFilled(teacherId: string, teacherName: string, studioId: string, classId: string, className: string) {
   // First notify the teacher
   await createNotification({
     user_id: teacherId,
@@ -462,7 +495,7 @@ export async function notifyAttendanceNotFilled(teacherId: string, teacherName: 
   }
 }
 
-export async function notifyClassCapacityReached(studioId: string, className: string, classId: string) {
+async function notifyClassCapacityReached(studioId: string, className: string, classId: string) {
   const owners = await getStudioOwners(studioId);
   
   const title = 'Drop-in Class Capacity Reached';
@@ -484,7 +517,7 @@ export async function notifyClassCapacityReached(studioId: string, className: st
   }
 }
 
-export async function notifyClassScheduleChange(studioId: string, className: string, classId: string, changes: object) {
+async function notifyClassScheduleChange(studioId: string, className: string, classId: string, changes: object) {
   // Notify owners
   const owners = await getStudioOwners(studioId);
   for (const owner of owners) {
@@ -522,8 +555,6 @@ export async function notifyClassScheduleChange(studioId: string, className: str
   }
   
   // Notify parents of students in the class
-  // This would require getting all students in the class and their parents
-  // For simplicity, we're assuming you have a function to get all parent IDs for a class
   const parentIds = await getParentsForClass(classId);
   for (const parentId of parentIds) {
     await createNotification({
@@ -542,33 +573,7 @@ export async function notifyClassScheduleChange(studioId: string, className: str
   }
 }
 
-// Helper function to get all parents for a class
-async function getParentsForClass(classId: string) {
-  try {
-    // This would be your implementation based on your database structure
-    // For example, you might need to join multiple tables to get all parents of students in a class
-    const { data, error } = await supabase
-      .from('class_students')
-      .select('student_id')
-      .eq('class_id', classId);
-    
-    if (error) throw error;
-    
-    // Get parent IDs for all students
-    const parentIds = new Set<string>();
-    for (const item of data || []) {
-      const parents = await getStudentParents(item.student_id);
-      parents.forEach(id => parentIds.add(id));
-    }
-    
-    return Array.from(parentIds);
-  } catch (error) {
-    console.error('Error fetching parents for class:', error);
-    return [];
-  }
-}
-
-export async function notifyNewMessage(senderId: string, senderName: string, receiverId: string, studioId: string, conversationId: string, messagePreview: string) {
+async function notifyNewMessage(senderId: string, senderName: string, receiverId: string, studioId: string, conversationId: string, messagePreview: string) {
   await createNotification({
     user_id: receiverId,
     studio_id: studioId,
@@ -583,11 +588,11 @@ export async function notifyNewMessage(senderId: string, senderName: string, rec
   });
 }
 
-export async function notifyNewChannelPost(studioId: string, channelId: string, channelName: string, authorName: string, postId: string, postTitle: string) {
+async function notifyNewChannelPost(studioId: string, channelId: string, channelName: string, authorName: string, postId: string, postTitle: string) {
   // Notify all users in the studio
   // In a real app, you'd probably only notify users who have subscribed to the channel
   const { data: users, error } = await supabase
-    .from('profiles')
+    .from('users')  // Changed from 'profiles' to 'users'
     .select('id')
     .eq('studio_id', studioId);
   
@@ -612,11 +617,11 @@ export async function notifyNewChannelPost(studioId: string, channelId: string, 
   }
 }
 
-export async function notifyNewComment(studioId: string, channelId: string, channelName: string, postId: string, postTitle: string, commenterId: string, commenterName: string) {
+async function notifyNewComment(studioId: string, channelId: string, channelName: string, postId: string, postTitle: string, commenterId: string, commenterName: string) {
   // Notify the post author and anyone who has commented
   // For simplicity, we'll notify all users
   const { data: users, error } = await supabase
-    .from('profiles')
+    .from('users')  // Changed from 'profiles' to 'users'
     .select('id')
     .eq('studio_id', studioId);
   
@@ -646,7 +651,7 @@ export async function notifyNewComment(studioId: string, channelId: string, chan
 
 // TEACHER NOTIFICATIONS
 
-export async function notifyClassAssigned(teacherId: string, studioId: string, className: string, classId: string, schedule: object) {
+async function notifyClassAssigned(teacherId: string, studioId: string, className: string, classId: string, schedule: object) {
   await createNotification({
     user_id: teacherId,
     studio_id: studioId,
@@ -662,7 +667,7 @@ export async function notifyClassAssigned(teacherId: string, studioId: string, c
   });
 }
 
-export async function notifyClassReminder(teacherId: string, studioId: string, className: string, classId: string, startTime: string) {
+async function notifyClassReminder(teacherId: string, studioId: string, className: string, classId: string, startTime: string) {
   await createNotification({
     user_id: teacherId,
     studio_id: studioId,
@@ -677,7 +682,7 @@ export async function notifyClassReminder(teacherId: string, studioId: string, c
   });
 }
 
-export async function notifyStudentAddedToClass(studioId: string, teacherId: string, studentName: string, studentId: string, className: string, classId: string) {
+async function notifyStudentAddedToClass(studioId: string, teacherId: string, studentName: string, studentId: string, className: string, classId: string) {
   await createNotification({
     user_id: teacherId,
     studio_id: studioId,
@@ -692,7 +697,7 @@ export async function notifyStudentAddedToClass(studioId: string, teacherId: str
   });
 }
 
-export async function notifyStudentRemovedFromClass(studioId: string, teacherId: string, studentName: string, studentId: string, className: string, classId: string) {
+async function notifyStudentRemovedFromClass(studioId: string, teacherId: string, studentName: string, studentId: string, className: string, classId: string) {
   await createNotification({
     user_id: teacherId,
     studio_id: studioId,
@@ -709,7 +714,7 @@ export async function notifyStudentRemovedFromClass(studioId: string, teacherId:
 
 // PARENT NOTIFICATIONS
 
-export async function notifyClassCancellation(studioId: string, className: string, classId: string, date: string, reason: string) {
+async function notifyClassCancellation(studioId: string, className: string, classId: string, date: string, reason: string) {
   // Get all parents of students in the class
   const parentIds = await getParentsForClass(classId);
   
@@ -729,7 +734,7 @@ export async function notifyClassCancellation(studioId: string, className: strin
   }
 }
 
-export async function notifyAttendanceMarked(parentId: string, studioId: string, studentName: string, className: string, status: string, date: string) {
+async function notifyAttendanceMarked(parentId: string, studioId: string, studentName: string, className: string, status: string, date: string) {
   await createNotification({
     user_id: parentId,
     studio_id: studioId,
@@ -742,7 +747,7 @@ export async function notifyAttendanceMarked(parentId: string, studioId: string,
   });
 }
 
-export async function notifyUnauthorizedAbsence(parentId: string, studioId: string, studentName: string, className: string, date: string) {
+async function notifyUnauthorizedAbsence(parentId: string, studioId: string, studentName: string, className: string, date: string) {
   await createNotification({
     user_id: parentId,
     studio_id: studioId,
@@ -756,23 +761,33 @@ export async function notifyUnauthorizedAbsence(parentId: string, studioId: stri
   });
 }
 
-export async function notifyPaymentRequest(parentId: string, studioId: string, amount: number, dueDate: string, invoiceId: string) {
+async function notifyPaymentRequest(
+  parentId: string, 
+  studioId: string, 
+  amount: number, 
+  dueDate: string, 
+  invoiceId: string,
+  studioCurrency: string // Add this parameter
+) {
   await createNotification({
     user_id: parentId,
     studio_id: studioId,
     type: 'payment_request',
     title: 'Payment Request',
-    message: `Payment of $${amount} is due by ${dueDate}`,
+    message: `Payment of ${new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: studioCurrency // Use the passed currency
+    }).format(amount)} is due by ${dueDate}`,
     priority: 'high',
     entity_id: invoiceId,
     entity_type: 'invoice',
-    link: `/dashboard/billing/${invoiceId}`,
+    link: `/dashboard/payments/`,
     requires_action: true,
     email_required: true
   });
 }
 
-export async function notifyPaymentConfirmation(parentId: string, studioId: string, amount: number, invoiceId: string) {
+async function notifyPaymentConfirmation(parentId: string, studioId: string, amount: number, invoiceId: string) {
   await createNotification({
     user_id: parentId,
     studio_id: studioId,
@@ -786,6 +801,34 @@ export async function notifyPaymentConfirmation(parentId: string, studioId: stri
     email_required: true
   });
 }
+
+// Export all functions
+export {
+  notifyStudentEnrollment,
+  notifyConsecutiveAbsences,
+  notifyStudentBirthday,
+  notifyPaymentReceived,
+  notifyPaymentOverdue,
+  notifyMonthlyFinancialSummary,
+  notifyStaffRegistration,
+  notifyParentRegistration,
+  notifyParentDeletion,
+  notifyAttendanceNotFilled,
+  notifyClassCapacityReached,
+  notifyClassScheduleChange,
+  notifyNewMessage,
+  notifyNewChannelPost,
+  notifyNewComment,
+  notifyClassAssigned,
+  notifyClassReminder,
+  notifyStudentAddedToClass,
+  notifyStudentRemovedFromClass,
+  notifyClassCancellation,
+  notifyAttendanceMarked,
+  notifyUnauthorizedAbsence,
+  notifyPaymentRequest,
+  notifyPaymentConfirmation
+};
 
 // Export all functions as a service
 export const notificationService = {

@@ -1,3 +1,4 @@
+// src/components/payments/CreateInvoiceForm.tsx
 import React, { useState, useEffect } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
@@ -6,6 +7,7 @@ import FormInput from "../FormInput";
 import SearchableDropdown from "../SearchableDropdown";
 import { useAuth } from "../../contexts/AuthContext";
 import { getStudioUsersByRole } from "../../utils/messagingUtils";
+import { notificationService } from "../../services/notificationService";
 
 interface Parent {
 	id: string;
@@ -52,9 +54,7 @@ export default function CreateInvoiceForm({
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isRecurring, setIsRecurring] = useState(false);
-	const [recurringInterval, setRecurringInterval] = useState<
-		"week" | "month" | "year"
-	>("month");
+	const [recurringInterval, setRecurringInterval] = useState<"week" | "month" | "year">("month");
 	const [weeklyDay, setWeeklyDay] = useState<number>(1); // 1 = Monday
 	const [monthlyDate, setMonthlyDate] = useState<number>(1);
 	const [termMonths, setTermMonths] = useState<number[]>([1, 4, 9]); // Default to January, April, September
@@ -119,16 +119,30 @@ export default function CreateInvoiceForm({
 	};
 
 	const calculateTotals = () => {
-		return items.reduce(
-			(acc, item) => {
-				const subtotal = item.quantity * item.unit_price;
-				return {
-					subtotal: acc.subtotal + subtotal,
-					total: acc.total + subtotal,
-				};
-			},
-			{ subtotal: 0, total: 0 }
+		const subtotal = items.reduce(
+			(acc, item) => acc + (item.quantity * item.unit_price),
+			0
 		);
+        
+        // Calculate discount
+		{parseFloat(discountValue) > 0 && (
+			<p>
+				Discount:{" "}
+				{new Intl.NumberFormat("en-US", {
+					style: "currency",
+					currency: profile?.studio?.currency,
+				}).format(calculateTotals().discount)} 
+				{discountType === "percentage" && ` (${discountValue}%)`}
+			</p>
+		)}
+        
+        const total = subtotal - discount;
+        
+		return {
+			subtotal,
+            discount,
+			total
+		};
 	};
 
 	const handleSubmit = async (e: React.FormEvent) => {
@@ -139,6 +153,9 @@ export default function CreateInvoiceForm({
 		setError(null);
 
 		try {
+			// Calculate totals
+			const totals = calculateTotals();
+            
 			// Create invoice
 			const { data: invoice, error: invoiceError } = await supabase
 				.from("invoices")
@@ -148,8 +165,8 @@ export default function CreateInvoiceForm({
 						parent_id: selectedParent.id,
 						due_date: dueDate,
 						notes: notes || null,
-						subtotal: calculateTotals().subtotal,
-						total: calculateTotals().total,
+						subtotal: totals.subtotal,
+						total: totals.total,
 						is_recurring: isRecurring,
 						recurring_interval: recurringInterval,
 						recurring_end_date: recurringEndDate || null,
@@ -217,6 +234,23 @@ export default function CreateInvoiceForm({
 				// Continue even if Stripe invoice creation fails - we can retry later
 			}
 
+            // Send notification to the parent about payment request
+            try {
+                console.log("Sending payment request notification to:", selectedParent.id);
+                await notificationService.notifyPaymentRequest(
+                    selectedParent.id,
+                    profile.studio.id,
+                    totals.total,
+                    dueDate,
+                    invoice.id,
+					profile.studio.currency
+                );
+                console.log("Payment request notification sent successfully");
+            } catch (notificationErr) {
+                console.error("Error sending payment notification:", notificationErr);
+                // Continue even if notification fails
+            }
+
 			onSuccess();
 		} catch (err) {
 			console.error("Error creating invoice:", err);
@@ -229,7 +263,6 @@ export default function CreateInvoiceForm({
 	const getStudentOptions = () => {
 		if (!selectedParent) return [];
 		const parent = parents.find((p) => p.id === selectedParent.id);
-		console.log(parent);
 		return (
 			parent?.students.map((student) => ({
 				id: student.id,
@@ -657,6 +690,16 @@ export default function CreateInvoiceForm({
 							currency: profile?.studio?.currency,
 						}).format(calculateTotals().subtotal)}
 					</p>
+                    {parseFloat(discountValue) > 0 && (
+                        <p>
+                            Discount:{" "}
+                            {new Intl.NumberFormat("en-US", {
+                                style: "currency",
+                                currency: profile?.studio?.currency,
+                            }).format(calculateTotals().discount)} 
+                            {discountType === "percentage" && ` (${discountValue}%)`}
+                        </p>
+                    )}
 					<p className="text-lg font-bold text-brand-primary">
 						Total:{" "}
 						{new Intl.NumberFormat("en-US", {
