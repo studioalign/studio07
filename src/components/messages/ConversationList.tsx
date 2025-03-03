@@ -36,7 +36,7 @@ export default function ConversationList({
 					<div className="divide-y">
 						{conversations.map((conversation) => (
 							<button
-								key={conversation.id}
+								key={`${conversation.id}-${conversation.last_message_at}`}
 								onClick={() => {
 									console.log("clicked");
 									setActiveConversation(conversation.id);
@@ -54,17 +54,15 @@ export default function ConversationList({
 											{conversation.participants[0].email}
 										</h3>
 									</div>
-									{conversation.last_message_at && (
-										<span className="text-xs text-gray-500">
-											{formatMessageDate(conversation.last_message_at)}
-										</span>
-									)}
 								</div>
-								{conversation.last_message && (
-									<p className="text-sm text-gray-500 truncate">
-										{conversation.last_message}
+								<div className="flex justify-between items-center">
+									<p className="text-sm text-gray-500 truncate max-w-[70%]">
+										{conversation.last_message || "No messages yet"}
 									</p>
-								)}
+									<span className="text-xs text-gray-500">
+										{conversation.last_message_at ? formatMessageDate(conversation.last_message_at) : ""}
+									</span>
+								</div>
 								{conversation.unread_count > 0 && (
 									<div className="mt-1">
 										<span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-brand-primary text-white">

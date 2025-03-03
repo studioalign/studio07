@@ -13,6 +13,8 @@ interface MessageThreadProps {
 export default function MessageThread({ onBack }: MessageThreadProps) {
   const {
     messages,
+    fetchMessages,
+    loading,
     sendMessage,
     markAsRead,
     activeConversation,
@@ -27,6 +29,13 @@ export default function MessageThread({ onBack }: MessageThreadProps) {
   const otherParticipant = activeConversation 
     ? conversations.find(conv => conv.id === activeConversation)?.participants[0]
     : null;
+
+  // Fetch messages when conversation changes
+  useEffect(() => {
+    if (activeConversation) {
+      fetchMessages(activeConversation);
+    }
+  }, [activeConversation]);
 
   // Automatically mark messages as read when messages change
   useEffect(() => {
@@ -88,7 +97,15 @@ export default function MessageThread({ onBack }: MessageThreadProps) {
 
       {/* Messages container */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
+        {loading ? (
+          <div className="flex justify-center items-center h-full">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary"></div>
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex justify-center items-center h-full text-gray-500">
+            <p>No messages yet. Start the conversation!</p>
+          </div>
+        ) : messages.map((message) => (
           <div
             key={message.id}
             className={`flex ${

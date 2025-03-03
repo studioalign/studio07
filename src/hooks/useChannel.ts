@@ -164,44 +164,32 @@ export function useChannel(channelId: string) {
 
   // Real-time subscriptions
   useEffect(() => {
-    // Fetch initial data
-    fetchChannelData();
+    let postsChannel: any;
 
-    // Posts subscription
-    const postsChannel = supabase
-      .channel(`channel_posts:${channelId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "channel_posts",
-          filter: `channel_id=eq.${channelId}`,
-        },
-        async (payload) => {
-          // Fetch full post details
-          const { data: fullPostData, error } = await supabase
-            .from("channel_posts")
-            .select(
-              `
-              id,
-              content,
-              author: users(
-                id,
-                name
-              ),
-              created_at,
-              edited_at,
-              media:post_media (
-                id,
-                url,
-                type,
-                filename
-              ),
-              reactions:post_reactions (
-                user_id
-              ),
-              comments:post_comments (
+    const setupSubscriptions = async () => {
+      // Fetch initial data
+      await fetchChannelData();
+
+      // Unsubscribe from existing channel if any
+      if (postsChannel) await postsChannel.unsubscribe();
+
+      // Posts subscription
+      postsChannel = supabase
+        .channel(`channel_posts:${channelId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "channel_posts",
+            filter: `channel_id=eq.${channelId}`,
+          },
+          async (payload) => {
+            // Fetch full post details
+            const { data: fullPostData, error } = await supabase
+              .from("channel_posts")
+              .select(
+                `
                 id,
                 content,
                 author: users(
@@ -209,68 +197,89 @@ export function useChannel(channelId: string) {
                   name
                 ),
                 created_at,
-                edited_at
+                edited_at,
+                media:post_media (
+                  id,
+                  url,
+                  type,
+                  filename
+                ),
+                reactions:post_reactions (
+                  user_id
+                ),
+                comments:post_comments (
+                  id,
+                  content,
+                  author: users(
+                    id,
+                    name
+                  ),
+                  created_at,
+                  edited_at
+                )
+              `
               )
-            `
-            )
-            .eq("id", payload.new.id)
-            .single();
+              .eq("id", payload.new.id)
+              .single();
 
-          if (error) {
-            console.error("Error fetching new post details:", error);
-            return;
+            if (error) {
+              console.error("Error fetching new post details:", error);
+              return;
+            }
+
+            // Optimistically add the new post
+            setState(prev => ({
+              ...prev,
+              posts: [fullPostData, ...prev.posts],
+            }));
           }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "channel_posts",
+            filter: `channel_id=eq.${channelId}`,
+          },
+          (payload) => {
+            // Update existing post
+            setState(prev => ({
+              ...prev,
+              posts: prev.posts.map(post => 
+                post.id === payload.new.id 
+                  ? { ...post, ...payload.new }
+                  : post
+              ),
+            }));
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "DELETE",
+            schema: "public",
+            table: "channel_posts",
+            filter: `channel_id=eq.${channelId}`,
+          },
+          (payload) => {
+            // Remove deleted post
+            setState(prev => ({
+              ...prev,
+              posts: prev.posts.filter(post => post.id !== payload.old.id),
+            }));
+          }
+        )
+        .subscribe();
+    };
 
-          // Optimistically add the new post
-          setState(prev => ({
-            ...prev,
-            posts: [fullPostData, ...prev.posts],
-          }));
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "channel_posts",
-          filter: `channel_id=eq.${channelId}`,
-        },
-        (payload) => {
-          // Update existing post
-          setState(prev => ({
-            ...prev,
-            posts: prev.posts.map(post => 
-              post.id === payload.new.id 
-                ? { ...post, ...payload.new }
-                : post
-            ),
-          }));
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "DELETE",
-          schema: "public",
-          table: "channel_posts",
-          filter: `channel_id=eq.${channelId}`,
-        },
-        (payload) => {
-          // Remove deleted post
-          setState(prev => ({
-            ...prev,
-            posts: prev.posts.filter(post => post
-				.id !== payload.old.id),
-          }));
-        }
-      )
-      .subscribe();
-
-    // Comments and reactions subscriptions can be added similarly
+    setupSubscriptions();
 
     return () => {
-      postsChannel.unsubscribe();
+      const cleanup = async () => {
+        if (postsChannel) await postsChannel.unsubscribe();
+      };
+      cleanup();
     };
   }, [channelId, fetchChannelData]);
 
