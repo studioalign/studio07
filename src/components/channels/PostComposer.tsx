@@ -47,7 +47,8 @@ export default function PostComposer({ channelId, channelName = "this channel" }
             newPost.id, 
             content.length > 50 
               ? content.substring(0, 47) + '...' 
-              : content
+              : content,
+              profile.id
           );
           console.log("Channel post notification sent");
         } catch (notifyError) {

@@ -1,4 +1,3 @@
-// src/services/notificationService.ts
 import { supabase } from '../lib/supabase';
 
 // Define all notification types for type safety
@@ -9,7 +8,6 @@ export type NotificationType =
   | 'student_birthday'
   | 'payment_received'
   | 'payment_overdue'
-  | 'monthly_summary'
   | 'staff_registration'
   | 'parent_registration'
   | 'parent_deletion'
@@ -25,14 +23,71 @@ export type NotificationType =
   | 'class_reminder'
   | 'student_added'
   | 'student_removed'
+  | 'attendance_marked'
+  | 'unauthorized_absence'
   
   // Parent notifications
   | 'class_cancellation'
-  | 'attendance_marked'
-  | 'unauthorized_absence'
   | 'payment_request'
   | 'payment_confirmation';
 
+// Utility function to generate links based on notification type
+export function generateNotificationLink(notification: {
+  type: string;
+  entity_type?: string;
+  entity_id?: string;
+  link?: string;
+}) {
+  // If a specific link is already provided, use that
+  if (notification.link) return notification.link;
+
+  // Route based on notification type
+  switch (notification.type) {
+    // Channel-related notifications
+    case 'new_channel_post':
+    case 'new_comment':
+      return '/dashboard/channels';
+
+    // Message-related notifications
+    case 'new_message':
+      return '/dashboard/messages';
+
+    // User/Account-related notifications
+    case 'staff_registration':
+      return '/dashboard/teachers';
+    case 'parent_registration':
+    case 'parent_deletion':
+      return '/dashboard/users';
+
+    // Student-related notifications
+    case 'student_enrollment':
+    case 'student_consecutive_absence':
+    case 'student_birthday':
+      return '/dashboard/students';
+
+    // Payment-related notifications
+    case 'payment_received':
+    case 'payment_overdue':
+    case 'payment_request':
+    case 'payment_confirmation':
+      return '/dashboard/payments';
+
+    // Class-related notifications
+    case 'class_assigned':
+    case 'class_reminder':
+    case 'class_cancellation':
+    case 'attendance_marked':
+    case 'unauthorized_absence':
+    case 'attendance_missing':
+      return '/dashboard/classes';
+
+    // Default fallback
+    default:
+      return '/dashboard';
+  }
+}
+
+// Interface for Notification Data
 interface NotificationData {
   user_id: string;
   studio_id: string;
@@ -51,7 +106,13 @@ interface NotificationData {
 // Main function to create a notification
 async function createNotification(data: NotificationData) {
   try {
-    console.log("Creating notification:", data);
+    // Generate a default link if not provided
+    const linkToUse = data.link || generateNotificationLink({
+      type: data.type,
+      entity_type: data.entity_type,
+      entity_id: data.entity_id
+    });
+
     const { error } = await supabase.from('notifications').insert({
       user_id: data.user_id,
       studio_id: data.studio_id,
@@ -61,7 +122,7 @@ async function createNotification(data: NotificationData) {
       priority: data.priority || 'medium',
       entity_id: data.entity_id,
       entity_type: data.entity_type,
-      link: data.link,
+      link: linkToUse,
       details: data.details,
       requires_action: data.requires_action || false,
       email_required: data.email_required || false,
@@ -75,14 +136,6 @@ async function createNotification(data: NotificationData) {
       throw error;
     }
 
-    console.log("Notification created successfully");
-
-    // For a production system, you would have email logic here
-    // This could be a serverless function or API endpoint that sends emails
-    if (data.email_required) {
-      await sendEmailNotification(data);
-    }
-
     return { success: true };
   } catch (error) {
     console.error('Error creating notification:', error);
@@ -90,32 +143,11 @@ async function createNotification(data: NotificationData) {
   }
 }
 
-// Placeholder for email sending functionality
-// In a real application, this would connect to an email service
-async function sendEmailNotification(data: NotificationData) {
-  // In a production system, you would implement this with your email provider
-  // For example, using SendGrid, Mailgun, etc.
-  console.log('Would send email for:', data);
-  
-  // After sending email, mark notification as email sent
-  try {
-    await supabase
-      .from('notifications')
-      .update({ email_sent: true })
-      .eq('user_id', data.user_id)
-      .eq('type', data.type)
-      .order('created_at', { ascending: false })
-      .limit(1);
-  } catch (error) {
-    console.error('Error updating email_sent status:', error);
-  }
-}
-
-// Helper function to get all studio owners
+// Helper function to get studio owners
 async function getStudioOwners(studioId: string) {
   try {
     const { data, error } = await supabase
-      .from('users')  // Using users table, not profiles
+      .from('users')
       .select('id')
       .eq('studio_id', studioId)
       .eq('role', 'owner');
@@ -128,11 +160,11 @@ async function getStudioOwners(studioId: string) {
   }
 }
 
-// Helper function to get all studio teachers
+// Helper function to get studio teachers
 async function getStudioTeachers(studioId: string) {
   try {
     const { data, error } = await supabase
-      .from('users')  // Using users table, not profiles
+      .from('users')
       .select('id')
       .eq('studio_id', studioId)
       .eq('role', 'teacher');
@@ -165,7 +197,6 @@ async function getClassTeacher(classId: string) {
 // Helper function to get student's parent
 async function getStudentParent(studentId: string) {
   try {
-    // Get parent directly from the students table
     const { data, error } = await supabase
       .from('students')
       .select('parent_id')
@@ -183,15 +214,12 @@ async function getStudentParent(studentId: string) {
 // Helper function to get all parents for a class
 async function getParentsForClass(classId: string) {
   try {
-    // Get all students in the class
     const { data: classStudents, error: classError } = await supabase
       .from('class_students')
-      .select('student_id')
-      .eq('class_id', classId);
+      .select('student_id');
     
     if (classError) throw classError;
     
-    // Get parent IDs for all students (no duplicates)
     const parentIds = new Set<string>();
     for (const item of classStudents || []) {
       const parentId = await getStudentParent(item.student_id);
@@ -205,27 +233,20 @@ async function getParentsForClass(classId: string) {
   }
 }
 
-// ======= NOTIFICATION CREATION FUNCTIONS =======
-
-// OWNER NOTIFICATIONS
-
+// Owner Notifications
 async function notifyStudentEnrollment(studioId: string, studentName: string, className: string, studentId: string, classId: string) {
   const owners = await getStudioOwners(studioId);
-  
-  const title = 'New Student Enrollment';
-  const message = `${studentName} has enrolled in ${className}`;
   
   for (const owner of owners) {
     await createNotification({
       user_id: owner.id,
       studio_id: studioId,
       type: 'student_enrollment',
-      title,
-      message,
+      title: 'New Student Enrollment',
+      message: `${studentName} has enrolled in ${className}`,
       priority: 'medium',
       entity_id: studentId,
       entity_type: 'student',
-      link: `/dashboard/students/${studentId}`,
       details: { classId, className },
       email_required: true
     });
@@ -235,20 +256,16 @@ async function notifyStudentEnrollment(studioId: string, studentName: string, cl
 async function notifyConsecutiveAbsences(studioId: string, studentName: string, studentId: string, className: string, absenceCount: number) {
   const owners = await getStudioOwners(studioId);
   
-  const title = 'Student Consecutive Absences';
-  const message = `${studentName} has missed ${absenceCount} consecutive classes in ${className}`;
-  
   for (const owner of owners) {
     await createNotification({
       user_id: owner.id,
       studio_id: studioId,
       type: 'student_consecutive_absence',
-      title,
-      message,
+      title: 'Student Consecutive Absences',
+      message: `${studentName} has missed ${absenceCount} consecutive classes in ${className}`,
       priority: 'high',
       entity_id: studentId,
       entity_type: 'student',
-      link: `/dashboard/students/${studentId}/attendance`,
       details: { absenceCount, className },
       email_required: true
     });
@@ -261,53 +278,12 @@ async function notifyConsecutiveAbsences(studioId: string, studentName: string, 
       user_id: teacherId,
       studio_id: studioId,
       type: 'student_consecutive_absence',
-      title,
-      message,
+      title: 'Student Consecutive Absences',
+      message: `${studentName} has missed ${absenceCount} consecutive classes in ${className}`,
       priority: 'medium',
       entity_id: studentId,
       entity_type: 'student',
-      link: `/dashboard/students/${studentId}/attendance`,
       details: { absenceCount, className },
-      email_required: false
-    });
-  }
-}
-
-async function notifyStudentBirthday(studioId: string, studentName: string, studentId: string) {
-  const owners = await getStudioOwners(studioId);
-  const teachers = await getStudioTeachers(studioId);
-  
-  const title = 'Student Birthday';
-  const message = `Today is ${studentName}'s birthday!`;
-  
-  // Notify owners
-  for (const owner of owners) {
-    await createNotification({
-      user_id: owner.id,
-      studio_id: studioId,
-      type: 'student_birthday',
-      title,
-      message,
-      priority: 'low',
-      entity_id: studentId,
-      entity_type: 'student',
-      link: `/dashboard/students/${studentId}`,
-      email_required: false
-    });
-  }
-  
-  // Notify teachers
-  for (const teacher of teachers) {
-    await createNotification({
-      user_id: teacher.id,
-      studio_id: studioId,
-      type: 'student_birthday',
-      title,
-      message,
-      priority: 'low',
-      entity_id: studentId,
-      entity_type: 'student',
-      link: `/dashboard/students/${studentId}`,
       email_required: false
     });
   }
@@ -316,40 +292,32 @@ async function notifyStudentBirthday(studioId: string, studentName: string, stud
 async function notifyPaymentReceived(studioId: string, parentName: string, amount: number, invoiceId: string) {
   const owners = await getStudioOwners(studioId);
   
-  const title = 'Payment Received';
-  const message = `${parentName} has made a payment of $${amount}`;
-  
   for (const owner of owners) {
     await createNotification({
       user_id: owner.id,
       studio_id: studioId,
       type: 'payment_received',
-      title,
-      message,
+      title: 'Payment Received',
+      message: `${parentName} has made a payment of $${amount}`,
       priority: 'medium',
       entity_id: invoiceId,
       entity_type: 'invoice',
-      link: `/dashboard/billing/${invoiceId}`,
       email_required: false
     });
   }
 }
 
 async function notifyPaymentOverdue(userId: string, studioId: string, invoiceId: string, amount: number, daysOverdue: number) {
-  const title = 'Payment Overdue';
-  const message = `Your payment of $${amount} is ${daysOverdue} days overdue`;
-  
   // Notify parent
   await createNotification({
     user_id: userId,
     studio_id: studioId,
     type: 'payment_overdue',
-    title,
-    message,
+    title: 'Payment Overdue',
+    message: `Your payment of $${amount} is ${daysOverdue} days overdue`,
     priority: 'high',
     entity_id: invoiceId,
     entity_type: 'invoice',
-    link: `/dashboard/billing/${invoiceId}`,
     requires_action: true,
     email_required: true
   });
@@ -366,29 +334,6 @@ async function notifyPaymentOverdue(userId: string, studioId: string, invoiceId:
       priority: 'medium',
       entity_id: invoiceId,
       entity_type: 'invoice',
-      link: `/dashboard/billing/${invoiceId}`,
-      email_required: true
-    });
-  }
-}
-
-async function notifyMonthlyFinancialSummary(studioId: string, month: string, revenue: number, expenses: number, profit: number) {
-  const owners = await getStudioOwners(studioId);
-  
-  const title = 'Monthly Financial Summary';
-  const message = `Your financial summary for ${month} is ready`;
-  
-  for (const owner of owners) {
-    await createNotification({
-      user_id: owner.id,
-      studio_id: studioId,
-      type: 'monthly_summary',
-      title,
-      message,
-      priority: 'medium',
-      entity_type: 'financial_summary',
-      link: `/dashboard/reports/financial`,
-      details: { month, revenue, expenses, profit },
       email_required: true
     });
   }
@@ -397,20 +342,16 @@ async function notifyMonthlyFinancialSummary(studioId: string, month: string, re
 async function notifyStaffRegistration(studioId: string, staffName: string, staffId: string, role: string) {
   const owners = await getStudioOwners(studioId);
   
-  const title = 'New Staff Registration';
-  const message = `${staffName} has registered as a ${role}`;
-  
   for (const owner of owners) {
     await createNotification({
       user_id: owner.id,
       studio_id: studioId,
       type: 'staff_registration',
-      title,
-      message,
+      title: 'New Staff Registration',
+      message: `${staffName} has registered as a ${role}`,
       priority: 'high',
       entity_id: staffId,
       entity_type: 'staff',
-      link: `/dashboard/staff/${staffId}`,
       requires_action: true,
       email_required: true
     });
@@ -420,20 +361,16 @@ async function notifyStaffRegistration(studioId: string, staffName: string, staf
 async function notifyParentRegistration(studioId: string, parentName: string, parentId: string) {
   const owners = await getStudioOwners(studioId);
   
-  const title = 'New Parent Registration';
-  const message = `${parentName} has registered as a parent`;
-  
   for (const owner of owners) {
     await createNotification({
       user_id: owner.id,
       studio_id: studioId,
       type: 'parent_registration',
-      title,
-      message,
+      title: 'New Parent Registration',
+      message: `${parentName} has registered as a parent`,
       priority: 'medium',
       entity_id: parentId,
       entity_type: 'parent',
-      link: `/dashboard/parents/${parentId}`,
       email_required: true
     });
   }
@@ -442,16 +379,13 @@ async function notifyParentRegistration(studioId: string, parentName: string, pa
 async function notifyParentDeletion(studioId: string, parentName: string) {
   const owners = await getStudioOwners(studioId);
   
-  const title = 'Parent Account Deleted';
-  const message = `${parentName} has deleted their account`;
-  
   for (const owner of owners) {
     await createNotification({
       user_id: owner.id,
       studio_id: studioId,
       type: 'parent_deletion',
-      title,
-      message,
+      title: 'Parent Account Deleted',
+      message: `${parentName} has deleted their account`,
       priority: 'medium',
       entity_type: 'parent',
       email_required: true
@@ -460,7 +394,7 @@ async function notifyParentDeletion(studioId: string, parentName: string) {
 }
 
 async function notifyAttendanceNotFilled(teacherId: string, teacherName: string, studioId: string, classId: string, className: string) {
-  // First notify the teacher
+  // Notify the teacher
   await createNotification({
     user_id: teacherId,
     studio_id: studioId,
@@ -470,13 +404,11 @@ async function notifyAttendanceNotFilled(teacherId: string, teacherName: string,
     priority: 'high',
     entity_id: classId,
     entity_type: 'class',
-    link: `/dashboard/classes/${classId}/attendance`,
     requires_action: true,
     email_required: true
   });
   
-  // After 4 hours, notify owners (this would be handled by a scheduled function)
-  // This is a placeholder for the concept - in a real app you'd use a cron job or scheduler
+  // Notify owners
   const owners = await getStudioOwners(studioId);
   
   for (const owner of owners) {
@@ -489,7 +421,6 @@ async function notifyAttendanceNotFilled(teacherId: string, teacherName: string,
       priority: 'medium',
       entity_id: classId,
       entity_type: 'class',
-      link: `/dashboard/classes/${classId}/attendance`,
       email_required: true
     });
   }
@@ -498,20 +429,16 @@ async function notifyAttendanceNotFilled(teacherId: string, teacherName: string,
 async function notifyClassCapacityReached(studioId: string, className: string, classId: string) {
   const owners = await getStudioOwners(studioId);
   
-  const title = 'Drop-in Class Capacity Reached';
-  const message = `${className} has reached its capacity limit`;
-  
   for (const owner of owners) {
     await createNotification({
       user_id: owner.id,
       studio_id: studioId,
       type: 'class_capacity',
-      title,
-      message,
+      title: 'Drop-in Class Capacity Reached',
+      message: `${className} has reached its capacity limit`,
       priority: 'medium',
       entity_id: classId,
       entity_type: 'class',
-      link: `/dashboard/classes/${classId}`,
       email_required: true
     });
   }
@@ -530,7 +457,6 @@ async function notifyClassScheduleChange(studioId: string, className: string, cl
       priority: 'medium',
       entity_id: classId,
       entity_type: 'class',
-      link: `/dashboard/classes/${classId}`,
       details: changes,
       email_required: true
     });
@@ -548,7 +474,6 @@ async function notifyClassScheduleChange(studioId: string, className: string, cl
       priority: 'high',
       entity_id: classId,
       entity_type: 'class',
-      link: `/dashboard/classes/${classId}`,
       details: changes,
       email_required: true
     });
@@ -566,7 +491,6 @@ async function notifyClassScheduleChange(studioId: string, className: string, cl
       priority: 'high',
       entity_id: classId,
       entity_type: 'class',
-      link: `/dashboard/classes/${classId}`,
       details: changes,
       email_required: true
     });
@@ -583,74 +507,100 @@ async function notifyNewMessage(senderId: string, senderName: string, receiverId
     priority: 'medium',
     entity_id: conversationId,
     entity_type: 'conversation',
-    link: `/dashboard/messages/${conversationId}`,
     email_required: true
   });
 }
 
-async function notifyNewChannelPost(studioId: string, channelId: string, channelName: string, authorName: string, postId: string, postTitle: string) {
-  // Notify all users in the studio
-  // In a real app, you'd probably only notify users who have subscribed to the channel
-  const { data: users, error } = await supabase
-    .from('users')  // Changed from 'profiles' to 'users'
-    .select('id')
-    .eq('studio_id', studioId);
-  
-  if (error) {
-    console.error('Error fetching users:', error);
-    return;
-  }
-  
-  for (const user of users || []) {
-    await createNotification({
-      user_id: user.id,
-      studio_id: studioId,
-      type: 'new_channel_post',
-      title: 'New Post in Channel',
-      message: `${authorName} posted "${postTitle}" in ${channelName}`,
-      priority: 'medium',
-      entity_id: postId,
-      entity_type: 'post',
-      link: `/dashboard/channels/${channelId}/posts/${postId}`,
-      email_required: true
-    });
-  }
-}
-
-async function notifyNewComment(studioId: string, channelId: string, channelName: string, postId: string, postTitle: string, commenterId: string, commenterName: string) {
-  // Notify the post author and anyone who has commented
-  // For simplicity, we'll notify all users
-  const { data: users, error } = await supabase
-    .from('users')  // Changed from 'profiles' to 'users'
-    .select('id')
-    .eq('studio_id', studioId);
-  
-  if (error) {
-    console.error('Error fetching users:', error);
-    return;
-  }
-  
-  for (const user of users || []) {
-    // Don't notify the commenter
-    if (user.id === commenterId) continue;
+async function notifyNewChannelPost(
+  studioId: string, 
+  channelId: string, 
+  channelName: string, 
+  authorName: string, 
+  postId: string, 
+  postTitle: string
+) {
+  try {
+    const { data: channelMembers, error: memberError } = await supabase
+      .from('channel_members')
+      .select('user_id')
+      .eq('channel_id', channelId);
     
-    await createNotification({
-      user_id: user.id,
-      studio_id: studioId,
-      type: 'new_comment',
-      title: 'New Comment on Post',
-      message: `${commenterName} commented on "${postTitle}" in ${channelName}`,
-      priority: 'medium',
-      entity_id: postId,
-      entity_type: 'post',
-      link: `/dashboard/channels/${channelId}/posts/${postId}`,
-      email_required: true
-    });
+    if (memberError) {
+      console.error('Error fetching channel members:', memberError);
+      return;
+    }
+    
+    if (!channelMembers || channelMembers.length === 0) {
+      return;
+    }
+    
+    const memberUserIds = channelMembers.map(member => member.user_id);
+    
+    for (const userId of memberUserIds) {
+      await createNotification({
+        user_id: userId,
+        studio_id: studioId,
+        type: 'new_channel_post',
+        title: 'New Post in Channel',
+        message: `${authorName} posted "${postTitle}" in ${channelName}`,
+        priority: 'medium',
+        entity_id: postId,
+        entity_type: 'post',
+        email_required: true
+      });
+    }
+  } catch (error) {
+    console.error('Error in notifyNewChannelPost:', error);
   }
 }
 
-// TEACHER NOTIFICATIONS
+async function notifyNewComment(
+  studioId: string, 
+  channelId: string, 
+  postId: string, 
+  postTitle: string, 
+  commenterId: string, 
+  commenterName: string
+) {
+  try {
+    const { data: channelMembers, error: memberError } = await supabase
+      .from('channel_members')
+      .select('user_id')
+      .eq('channel_id', channelId);
+    
+    if (memberError) {
+      console.error('Error fetching channel members:', memberError);
+      return;
+    }
+    
+    if (!channelMembers || channelMembers.length === 0) {
+      return;
+    }
+    
+    const memberUserIds = channelMembers.map(member => member.user_id);
+    
+    for (const userId of memberUserIds) {
+      // Skip sending notification to the commenter
+      if (userId === commenterId) continue;
+      
+      await createNotification({
+        user_id: userId,
+        studio_id: studioId,
+        type: 'new_comment',
+        title: 'New Comment on Post',
+        message: `${commenterName} commented on "${postTitle}"`,
+        priority: 'medium',
+        entity_id: postId,
+        entity_type: 'post',
+        email_required: true
+      });
+    }
+  } catch (error) {
+    console.error('Error in notifyNewComment:', error);
+  }
+}
 
+// Teacher Notifications
 async function notifyClassAssigned(teacherId: string, studioId: string, className: string, classId: string, schedule: object) {
   await createNotification({
     user_id: teacherId,
@@ -661,7 +611,6 @@ async function notifyClassAssigned(teacherId: string, studioId: string, classNam
     priority: 'high',
     entity_id: classId,
     entity_type: 'class',
-    link: `/dashboard/classes/${classId}`,
     details: schedule,
     email_required: true
   });
@@ -677,7 +626,6 @@ async function notifyClassReminder(teacherId: string, studioId: string, classNam
     priority: 'medium',
     entity_id: classId,
     entity_type: 'class',
-    link: `/dashboard/classes/${classId}`,
     email_required: false
   });
 }
@@ -692,7 +640,6 @@ async function notifyStudentAddedToClass(studioId: string, teacherId: string, st
     priority: 'medium',
     entity_id: studentId,
     entity_type: 'student',
-    link: `/dashboard/classes/${classId}/roster`,
     email_required: false
   });
 }
@@ -707,15 +654,12 @@ async function notifyStudentRemovedFromClass(studioId: string, teacherId: string
     priority: 'medium',
     entity_id: studentId,
     entity_type: 'student',
-    link: `/dashboard/classes/${classId}/roster`,
     email_required: false
   });
 }
 
-// PARENT NOTIFICATIONS
-
+// Parent Notifications
 async function notifyClassCancellation(studioId: string, className: string, classId: string, date: string, reason: string) {
-  // Get all parents of students in the class
   const parentIds = await getParentsForClass(classId);
   
   for (const parentId of parentIds) {
@@ -767,7 +711,7 @@ async function notifyPaymentRequest(
   amount: number, 
   dueDate: string, 
   invoiceId: string,
-  studioCurrency: string // Add this parameter
+  studioCurrency: string
 ) {
   await createNotification({
     user_id: parentId,
@@ -776,12 +720,11 @@ async function notifyPaymentRequest(
     title: 'Payment Request',
     message: `Payment of ${new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: studioCurrency // Use the passed currency
+      currency: studioCurrency
     }).format(amount)} is due by ${dueDate}`,
     priority: 'high',
     entity_id: invoiceId,
     entity_type: 'invoice',
-    link: `/dashboard/payments/`,
     requires_action: true,
     email_required: true
   });
@@ -797,19 +740,18 @@ async function notifyPaymentConfirmation(parentId: string, studioId: string, amo
     priority: 'medium',
     entity_id: invoiceId,
     entity_type: 'invoice',
-    link: `/dashboard/billing/${invoiceId}`,
     email_required: true
   });
 }
 
 // Export all functions
 export {
+  createNotification,
+  // Owner notifications
   notifyStudentEnrollment,
   notifyConsecutiveAbsences,
-  notifyStudentBirthday,
   notifyPaymentReceived,
   notifyPaymentOverdue,
-  notifyMonthlyFinancialSummary,
   notifyStaffRegistration,
   notifyParentRegistration,
   notifyParentDeletion,
@@ -819,10 +761,14 @@ export {
   notifyNewMessage,
   notifyNewChannelPost,
   notifyNewComment,
+  
+  // Teacher notifications
   notifyClassAssigned,
   notifyClassReminder,
   notifyStudentAddedToClass,
   notifyStudentRemovedFromClass,
+  
+  // Parent notifications
   notifyClassCancellation,
   notifyAttendanceMarked,
   notifyUnauthorizedAbsence,
@@ -830,15 +776,16 @@ export {
   notifyPaymentConfirmation
 };
 
-// Export all functions as a service
+// Export as a service object
 export const notificationService = {
+  createNotification,
+  generateNotificationLink,
+  
   // Owner notifications
   notifyStudentEnrollment,
   notifyConsecutiveAbsences,
-  notifyStudentBirthday,
   notifyPaymentReceived,
   notifyPaymentOverdue,
-  notifyMonthlyFinancialSummary,
   notifyStaffRegistration,
   notifyParentRegistration,
   notifyParentDeletion,

@@ -166,10 +166,10 @@ export default function MediaGalleryModal({
 
   const renderSelectedMedia = () => {
     if (!selectedMedia) return null;
-  
+
     return (
       <div
-        className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-8"
+        className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4"
         onClick={() => setSelectedMedia(null)}
       >
         <button
@@ -182,16 +182,19 @@ export default function MediaGalleryModal({
         >
           <X className="w-8 h-8" />
         </button>
-  
-        <div onClick={(e) => e.stopPropagation()} className="relative">
+
+        <div 
+          onClick={(e) => e.stopPropagation()} 
+          className="relative max-w-[90%] max-h-[90%] flex flex-col items-center"
+        >
           {selectedMedia.type === 'image' ? (
             <img
               src={selectedMedia.url}
               alt={selectedMedia.filename}
-              className="max-w-[90vw] max-h-[90vh] object-contain mx-auto"
+              className="max-w-full max-h-full object-contain rounded-lg"
             />
           ) : selectedMedia.type === 'video' ? (
-            <div className="bg-black max-w-[90vw] max-h-[90vh] mx-auto">
+            <div className="bg-black max-w-full max-h-full">
               <video
                 src={selectedMedia.url}
                 controls
@@ -208,13 +211,15 @@ export default function MediaGalleryModal({
                 autoPlay
                 className="w-full mb-4"
               />
-              <a
-                href={selectedMedia.url}
-                download={selectedMedia.filename}
-                className="text-brand-primary hover:underline"
-              >
-                Download Audio
-              </a>
+              <div>
+                <a
+                  href={selectedMedia.url}
+                  download={selectedMedia.filename}
+                  className="text-brand-primary hover:underline"
+                >
+                  Download Audio
+                </a>
+              </div>
             </div>
           ) : (
             <div className="bg-white p-6 rounded-lg max-w-md w-full">
