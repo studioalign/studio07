@@ -9,6 +9,11 @@ interface PostComposerProps {
   channelName?: string; // Made optional for backward compatibility
 }
 
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB (appropriate for ~3min video)
+const MAX_AUDIO_SIZE = 20 * 1024 * 1024; // 20MB
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB for other files
+
 export default function PostComposer({ channelId, channelName = "this channel" }: PostComposerProps) {
   const [content, setContent] = useState('');
   const [files, setFiles] = useState<File[]>([]);
@@ -65,6 +70,18 @@ export default function PostComposer({ channelId, channelName = "this channel" }
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
+      
+      // Validate each file
+      const invalidFiles = newFiles.map(file => ({
+        file,
+        error: validateFile(file)
+      })).filter(item => item.error);
+      
+      if (invalidFiles.length > 0) {
+        setError(invalidFiles.map(item => `${item.file.name}: ${item.error}`).join(', '));
+        return;
+      }
+      
       setFiles(prev => [...prev, ...newFiles]);
       
       // Initialize progress for new files
@@ -114,6 +131,22 @@ export default function PostComposer({ channelId, channelName = "this channel" }
     }
   };
   
+  const validateFile = (file) => {
+    if (file.type.startsWith('video/') && file.size > MAX_VIDEO_SIZE) {
+      return `Video files must be under ${Math.round(MAX_VIDEO_SIZE/1024/1024)}MB`;
+    }
+    if (file.type.startsWith('audio/') && file.size > MAX_AUDIO_SIZE) {
+      return `Audio files must be under ${Math.round(MAX_AUDIO_SIZE/1024/1024)}MB`;
+    }
+    if (file.type.startsWith('image/') && file.size > MAX_IMAGE_SIZE) {
+      return `Images must be under ${Math.round(MAX_IMAGE_SIZE/1024/1024)}MB`;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      return `Files must be under ${Math.round(MAX_FILE_SIZE/1024/1024)}MB`;
+    }
+    return null;
+  };
+
   // Handle paste for images
   const handlePaste = (e: React.ClipboardEvent) => {
     const items = e.clipboardData.items;
@@ -201,12 +234,12 @@ export default function PostComposer({ channelId, channelName = "this channel" }
             type="button"
             onClick={() => {
               if (fileInputRef.current) {
-                fileInputRef.current.accept = "image/*";
+                fileInputRef.current.accept = "image/*,video/*,audio/*";
                 fileInputRef.current.click();
               }
             }}
             className="p-2 text-gray-500 hover:text-brand-primary rounded-full hover:bg-gray-100"
-            title="Attach images"
+            title="Attach Media"
           >
             <Image className="w-5 h-5" />
           </button>

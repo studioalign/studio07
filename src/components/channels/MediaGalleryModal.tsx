@@ -5,20 +5,22 @@ import { Image as ImageIcon, File, X } from 'lucide-react';
 interface MediaGalleryModalProps {
   channelId: string;
   onClose: () => void;
+  selectedMediaId?: string | null;
 }
 
 interface MediaItem {
   id: string;
   url: string;
-  type: 'image' | 'file';
+  type: 'image' | 'video' | 'audio' | 'file';
   filename: string;
   created_at: string;
   post_id: string;
 }
 
-export default function MediaGalleryModal({ 
-  channelId, 
-  onClose 
+export default function MediaGalleryModal({
+  channelId,
+  onClose,
+  selectedMediaId,
 }: MediaGalleryModalProps) {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,15 +46,21 @@ export default function MediaGalleryModal({
 
         if (error) throw error;
 
-        // Flatten the media items
-        const flattenedMedia = data?.flatMap(post => 
-          post.post_media.map(media => ({
+        const flattenedMedia = data?.flatMap((post) =>
+          post.post_media.map((media) => ({
             ...media,
-            post_id: post.id
+            post_id: post.id,
           }))
         ) || [];
 
         setMediaItems(flattenedMedia);
+
+        if (selectedMediaId && flattenedMedia.length > 0) {
+          const initialSelected = flattenedMedia.find(
+            (media) => media.id === selectedMediaId
+          );
+          setSelectedMedia(initialSelected || null);
+        }
       } catch (err) {
         console.error('Error fetching channel media:', err);
         setError(err instanceof Error ? err.message : 'Failed to load media');
@@ -62,7 +70,7 @@ export default function MediaGalleryModal({
     };
 
     fetchChannelMedia();
-  }, [channelId]);
+  }, [channelId, selectedMediaId]);
 
   const renderMediaThumbnail = (media: MediaItem) => {
     if (media.type === 'image') {
@@ -73,6 +81,33 @@ export default function MediaGalleryModal({
           className="w-full h-full object-cover rounded-lg"
           onClick={() => setSelectedMedia(media)}
         />
+      );
+    } else if (media.type === 'video') {
+      return (
+        <div 
+          className="w-full h-full bg-gray-100 flex items-center justify-center rounded-lg relative cursor-pointer"
+          onClick={() => setSelectedMedia(media)}
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-12 h-12 bg-black bg-opacity-50 rounded-full flex items-center justify-center">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 5v14l11-7z" fill="white"/>
+              </svg>
+            </div>
+          </div>
+          <video src={media.url} className="absolute inset-0 w-full h-full object-cover opacity-0" />
+        </div>
+      );
+    } else if (media.type === 'audio') {
+      return (
+        <div 
+          className="w-full h-full bg-gray-100 flex items-center justify-center rounded-lg cursor-pointer"
+          onClick={() => setSelectedMedia(media)}
+        >
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" fill="#4B5563"/>
+          </svg>
+        </div>
       );
     }
     return (
@@ -131,40 +166,74 @@ export default function MediaGalleryModal({
 
   const renderSelectedMedia = () => {
     if (!selectedMedia) return null;
-
+  
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-8">
-        <button 
-          onClick={() => setSelectedMedia(null)}
+      <div
+        className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-8"
+        onClick={() => setSelectedMedia(null)}
+      >
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedMedia(null);
+          }}
           className="absolute top-4 right-4 text-white hover:bg-white/20 rounded-full p-2"
+          aria-label="Close"
         >
           <X className="w-8 h-8" />
         </button>
-        
-        {selectedMedia.type === 'image' ? (
-          <img 
-            src={selectedMedia.url} 
-            alt={selectedMedia.filename} 
-            className="max-w-full max-h-full object-contain"
-          />
-        ) : (
-          <div className="bg-white p-6 rounded-lg max-w-md w-full">
-            <div className="flex items-center mb-4">
-              <File className="w-12 h-12 text-gray-500 mr-4" />
-              <div>
-                <p className="font-medium">{selectedMedia.filename}</p>
-                <a 
-                  href={selectedMedia.url} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-brand-primary hover:underline"
-                >
-                  Download File
-                </a>
+  
+        <div onClick={(e) => e.stopPropagation()} className="relative">
+          {selectedMedia.type === 'image' ? (
+            <img
+              src={selectedMedia.url}
+              alt={selectedMedia.filename}
+              className="max-w-[90vw] max-h-[90vh] object-contain mx-auto"
+            />
+          ) : selectedMedia.type === 'video' ? (
+            <div className="bg-black max-w-[90vw] max-h-[90vh] mx-auto">
+              <video
+                src={selectedMedia.url}
+                controls
+                autoPlay
+                className="max-w-full max-h-full object-contain"
+              />
+            </div>
+          ) : selectedMedia.type === 'audio' ? (
+            <div className="bg-white p-6 rounded-lg max-w-md w-full">
+              <p className="font-medium mb-3">{selectedMedia.filename}</p>
+              <audio
+                src={selectedMedia.url}
+                controls
+                autoPlay
+                className="w-full mb-4"
+              />
+              <a
+                href={selectedMedia.url}
+                download={selectedMedia.filename}
+                className="text-brand-primary hover:underline"
+              >
+                Download Audio
+              </a>
+            </div>
+          ) : (
+            <div className="bg-white p-6 rounded-lg max-w-md w-full">
+              <div className="flex items-center mb-4">
+                <File className="w-12 h-12 text-gray-500 mr-4" />
+                <div>
+                  <p className="font-medium">{selectedMedia.filename}</p>
+                  <a
+                    href={selectedMedia.url}
+                    download={selectedMedia.filename}
+                    className="text-brand-primary hover:underline"
+                  >
+                    Download File
+                  </a>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   };

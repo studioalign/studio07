@@ -1,5 +1,13 @@
 import { supabase } from '../lib/supabase';
 
+// Helper function to determine media type from file
+const getMediaType = (file: File): string => {
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type.startsWith('video/')) return 'video';
+  if (file.type.startsWith('audio/')) return 'audio';
+  return 'file';
+};
+
 export async function createPost(channelId: string, content: string, files: File[]) {
   try {
     // Get the current user explicitly
@@ -68,13 +76,15 @@ export async function createPost(channelId: string, content: string, files: File
     }
 
     // If there are files, upload them and create media records
+    const uploadedMedia = [];
     if (files.length > 0) {
       for (const file of files) {
         try {
           // Upload file to storage
-          const fileExt = file.name.split('.').pop();
-          const filePath = `channel-media/${post.id}/${Date.now()}.${fileExt}`;
-          
+          // Fix the file path construction
+          const fileExt = file.name.includes('.') ? file.name.split('.').pop() : '';
+          const filePath = `${post.id}/${Date.now()}.${fileExt}`;
+
           const { error: uploadError } = await supabase.storage
             .from('channel-media')
             .upload(filePath, file);
@@ -86,7 +96,7 @@ export async function createPost(channelId: string, content: string, files: File
               details: uploadError.details,
               hint: uploadError.hint
             });
-            throw uploadError;
+            continue; // Skip to next file instead of throwing
           }
 
           // Get public URL
@@ -94,24 +104,29 @@ export async function createPost(channelId: string, content: string, files: File
             .from('channel-media')
             .getPublicUrl(filePath);
 
+          // Determine the media type
+          const mediaType = getMediaType(file);
+
           // Create media record
           console.log('Attempting to insert media record:', {
             post_id: post.id,
             url: publicUrl,
-            type: file.type.startsWith('image/') ? 'image' : 'file',
+            type: mediaType,
             filename: file.name,
             size_bytes: file.size,
           });
 
-          const { error: mediaError } = await supabase
+          const { data: mediaData, error: mediaError } = await supabase
             .from('post_media')
             .insert({
               post_id: post.id,
               url: publicUrl,
-              type: file.type.startsWith('image/') ? 'image' : 'file',
+              type: mediaType,
               filename: file.name,
               size_bytes: file.size,
-            });
+            })
+            .select()
+            .single();
 
           if (mediaError) {
             console.error('Media insertion error:', {
@@ -120,17 +135,26 @@ export async function createPost(channelId: string, content: string, files: File
               details: mediaError.details,
               hint: mediaError.hint
             });
-            throw mediaError;
+            continue; // Skip to next file instead of throwing
+          }
+
+          // Add to successfully uploaded media
+          if (mediaData) {
+            uploadedMedia.push(mediaData);
           }
         } catch (fileError) {
           console.error('Error processing file:', fileError);
-          // Optionally handle file processing errors
-          throw fileError;
+          // Continue with next file instead of throwing
+          continue;
         }
       }
     }
 
-    return post;
+    // Return post with successfully uploaded media
+    return {
+      ...post,
+      media: uploadedMedia
+    };
   } catch (err) {
     console.error('Comprehensive error in createPost:', {
       errorType: typeof err,
