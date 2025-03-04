@@ -22,29 +22,34 @@ export default function NewMessageModal({ onClose }: NewMessageModalProps) {
 		id: string;
 		label: string;
 	} | null>(null);
+	const [isSubmitting, setIsSubmitting] = useState(false);
 
 	useEffect(() => {
 		async function fetchRecipients() {
+			if (!profile?.role || !profile?.studio?.id) {
+				setLoading(false);
+				return;
+			}
+
 			try {
-				console.log(profile?.role);
 				let users: UserData[] = [];
-				if (profile?.role === "owner") {
+				
+				if (profile.role === "owner") {
 					const [teachers, parents] = await Promise.all([
-						getStudioUsersByRole("teacher", profile?.studio?.id || ""),
-						getStudioUsersByRole("parent", profile?.studio?.id || ""),
+						getStudioUsersByRole("teacher", profile.studio.id),
+						getStudioUsersByRole("parent", profile.studio.id),
 					]);
 					users = [...teachers, ...parents];
-				} else if (profile?.role === "teacher") {
+				} else if (profile.role === "teacher") {
 					const [owners, parents] = await Promise.all([
-						getStudioUsersByRole("owner", profile?.studio?.id || ""),
-						getStudioUsersByRole("parent", profile?.studio?.id || ""),
+						getStudioUsersByRole("owner", profile.studio.id),
+						getStudioUsersByRole("parent", profile.studio.id),
 					]);
-					console.log(owners, parents);
 					users = [...owners, ...parents];
-				} else if (profile?.role === "parent") {
+				} else if (profile.role === "parent") {
 					const [owners, teachers] = await Promise.all([
-						getStudioUsersByRole("owner", profile?.studio?.id || ""),
-						getStudioUsersByRole("teacher", profile?.studio?.id || ""),
+						getStudioUsersByRole("owner", profile.studio.id),
+						getStudioUsersByRole("teacher", profile.studio.id),
 					]);
 					users = [...owners, ...teachers];
 				}
@@ -52,10 +57,11 @@ export default function NewMessageModal({ onClose }: NewMessageModalProps) {
 				setRecipients(
 					users.map((user) => ({
 						id: user.id,
-						label: `${user.name} (${user.email})`,
+						label: user.name ? `${user.name} (${user.email})` : user.email,
 					}))
 				);
 			} catch (err) {
+				console.error("Error fetching recipients:", err);
 				setError(
 					err instanceof Error ? err.message : "Failed to load recipients"
 				);
@@ -65,18 +71,23 @@ export default function NewMessageModal({ onClose }: NewMessageModalProps) {
 		}
 
 		fetchRecipients();
-	}, [profile?.role]);
+	}, [profile?.role, profile?.studio?.id]);
 
 	const handleStartConversation = async () => {
-		if (!selectedRecipient) return;
-		if (!profile?.id) return;
+		if (!selectedRecipient || !profile?.id) {
+			return;
+		}
+
+		setIsSubmitting(true);
+		setError(null);
 
 		try {
 			// Include both the current user and the recipient
-			const conversationId = await createConversation(profile?.id, [
-				profile?.id,
+			const conversationId = await createConversation(profile.id, [
+				profile.id,
 				selectedRecipient.id,
 			]);
+			
 			setActiveConversation(conversationId);
 			onClose();
 		} catch (err) {
@@ -84,6 +95,8 @@ export default function NewMessageModal({ onClose }: NewMessageModalProps) {
 			setError(
 				err instanceof Error ? err.message : "Failed to start conversation"
 			);
+		} finally {
+			setIsSubmitting(false);
 		}
 	};
 
@@ -123,15 +136,24 @@ export default function NewMessageModal({ onClose }: NewMessageModalProps) {
 							type="button"
 							onClick={onClose}
 							className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+							disabled={isSubmitting}
 						>
 							Cancel
 						</button>
 						<button
 							onClick={handleStartConversation}
-							disabled={!selectedRecipient}
+							disabled={!selectedRecipient || isSubmitting}
 							className="px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 disabled:bg-gray-400"
 						>
-							Start Conversation
+							{isSubmitting ? (
+								<span className="inline-flex items-center">
+									<svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+										<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+										<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+									</svg>
+									Processing...
+								</span>
+							) : "Start Conversation"}
 						</button>
 					</div>
 				</div>

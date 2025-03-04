@@ -18,7 +18,7 @@ export default function MessagesLayout() {
   }, [activeConversation]);
 
   // Render loading state with more detailed UI
-  if (loading.conversations) {
+  if (loading.conversations && conversations.length === 0) {
     return (
       <div className="h-[calc(100vh-4rem)] flex items-center justify-center">
         <div className="text-center">

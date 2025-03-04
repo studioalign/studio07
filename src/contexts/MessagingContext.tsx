@@ -3,7 +3,9 @@ import React, {
 	useContext,
 	useState,
 	useEffect,
+	useCallback,
 	ReactNode,
+	useRef,
   } from "react";
   import { supabase } from "../lib/supabase";
   import { useAuth } from "./AuthContext";
@@ -36,12 +38,14 @@ import React, {
 	setActiveConversation: (id: string | null) => void;
 	sendMessage: (content: string) => Promise<void>;
 	fetchMessages: (conversationId: string) => Promise<void>;
-	markAsRead: () => Promise<void>;
 	createConversation: (
 	  createdBy: string,
 	  participantIds: string[]
 	) => Promise<string>;
-	loading: boolean;
+	loading: {
+	  conversations: boolean;
+	  messages: boolean;
+	};
 	error: string | null;
   }
   
@@ -49,126 +53,44 @@ import React, {
   
   export function MessagingProvider({ children }: { children: ReactNode }) {
 	const [conversations, setConversations] = useState<Conversation[]>([]);
-	const [activeConversation, setActiveConversation] = useState<string | null>(
-	  null
-	);
-  
+	const [activeConversation, setActiveConversation] = useState<string | null>(null);
 	const [messages, setMessages] = useState<Message[]>([]);
-	const [loading, setLoading] = useState(true);
+	const [loading, setLoading] = useState({
+	  conversations: false,
+	  messages: false
+	});
 	const [error, setError] = useState<string | null>(null);
 	const { profile } = useAuth();
-	const [channels, setChannels] = useState<{
-	  conversations?: ReturnType<typeof supabase.channel>;
-	  messages?: ReturnType<typeof supabase.channel>;
-	}>({});
+	const conversationChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+	const messagesChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+	const currentConversationIdRef = useRef<string | null>(null);
+	const initialLoadDoneRef = useRef(false);
+	
+	// Track processed message IDs to prevent duplicates
+	const processedMessageIdsRef = useRef<Set<string>>(new Set());
   
-	// Cleanup function for channels
-	const cleanupChannels = async () => {
-	  if (channels.conversations) {
-		await channels.conversations.unsubscribe();
+	// Cleanup function to unsubscribe from all channels
+	const cleanupChannels = useCallback(() => {
+	  if (conversationChannelRef.current) {
+		console.log("Removing conversation channel");
+		supabase.removeChannel(conversationChannelRef.current);
+		conversationChannelRef.current = null;
 	  }
-	  if (channels.messages) {
-		await channels.messages.unsubscribe();
+	  if (messagesChannelRef.current) {
+		console.log("Removing messages channel");
+		supabase.removeChannel(messagesChannelRef.current);
+		messagesChannelRef.current = null;
 	  }
-	  setChannels({});
-	};
+	}, []);
   
-	// Setup realtime subscriptions
-	useEffect(() => {
+	// Fetch conversations function
+	const fetchConversations = useCallback(async () => {
 	  if (!profile?.id) return;
-  
-	  const setupChannels = async () => {
-		// Cleanup existing channels
-		await cleanupChannels();
-  
-		// Fetch initial conversations
-		await fetchConversations();
-  
-		// Subscribe to conversation changes
-		const conversationsChannel = supabase
-		  .channel(`conversations:${profile.id}`)
-		  .on(
-			"postgres_changes",
-			{
-			  event: "*",
-			  schema: "public",
-			  table: "conversation_participants",
-			  filter: `user_id=eq.${profile.id}`,
-			},
-			() => {
-			  fetchConversations();
-			}
-		  )
-		  .subscribe();
-  
-		setChannels((prev) => ({
-		  ...prev,
-		  conversations: conversationsChannel,
-		}));
-  
-		// If there's an active conversation, subscribe to its messages
-		if (activeConversation) {
-		  const messagesChannel = supabase
-			.channel(`messages:${activeConversation}`)
-			.on(
-			  "postgres_changes",
-			  {
-				event: "INSERT",
-				schema: "public",
-				table: "messages",
-				filter: `conversation_id=eq.${activeConversation}`,
-			  },
-			  async (payload) => {
-				// Fetch the complete message with sender info
-				const { data: messageData, error: messageError } = await supabase
-				  .from("messages")
-				  .select(
-					`
-					  id,
-					  content,
-					  sender_id,
-					  created_at,
-					  edited_at,
-					  is_deleted,
-					  sender:users!sender_id(
-						id,
-						name
-					  )
-					`
-				  )
-				  .eq("id", payload.new.id)
-				  .single();
-  
-				if (!messageError && messageData) {
-				  // Only add if message doesn't already exist
-				  setMessages((prev) =>
-					prev.some((msg) => msg.id === messageData.id)
-					  ? prev
-					  : [...prev, messageData]
-				  );
-				}
-			  }
-			)
-			.subscribe();
-  
-		  setChannels((prev) => ({
-			...prev,
-			messages: messagesChannel,
-		  }));
-		}
-	  };
-  
-	  setupChannels();
-  
-	  return () => {
-		cleanupChannels();
-	  };
-	}, [profile?.id, activeConversation]); // Only trigger on profile id or activeConversation change
-  
-	const fetchConversations = async () => {
-	  setLoading(true);
+	  
+	  setLoading(prev => ({ ...prev, conversations: true }));
+	  
 	  try {
-		// First get all conversations for the user
+		console.log("Fetching conversations for user", profile.id);
 		const { data, error: fetchError } = await supabase
 		  .from("conversation_participants")
 		  .select(
@@ -182,7 +104,7 @@ import React, {
 			  participants:participant_ids
 			)`
 		  )
-		  .eq("user_id", profile?.id!);
+		  .eq("user_id", profile.id);
   
 		if (fetchError) throw fetchError;
   
@@ -198,7 +120,7 @@ import React, {
 		  sortedConversations.map(async (item: any) => {
 			const participantData = await Promise.all(
 			  item.conversation.participants
-				.filter((participantId: string) => participantId !== profile?.id)
+				.filter((participantId: string) => participantId !== profile.id)
 				.map(async (userId: string) => {
 				  const { data } = await supabase
 					.from("users")
@@ -219,21 +141,53 @@ import React, {
 		  })
 		);
   
+		console.log("Fetched conversations:", mappedConversations.length);
 		setConversations(mappedConversations);
+  
+		// Auto-mark as read if there's an active conversation
+		if (activeConversation) {
+		  const activeConvo = mappedConversations.find(c => c.id === activeConversation);
+		  if (activeConvo && activeConvo.unread_count > 0) {
+			// Call RPC to mark messages as read, but don't update state
+			await supabase.rpc("mark_messages_as_read", {
+			  p_conversation_id: activeConversation,
+			  p_user_id: profile.id,
+			});
+			
+			// Update the conversation in our local state as well
+			setConversations(prev => 
+			  prev.map(conv => 
+				conv.id === activeConversation 
+				  ? { ...conv, unread_count: 0 } 
+				  : conv
+			  )
+			);
+		  }
+		}
 	  } catch (err) {
 		console.error("Error fetching conversations:", err);
 		setError(
 		  err instanceof Error ? err.message : "Failed to fetch conversations"
 		);
 	  } finally {
-		setLoading(false);
+		setLoading(prev => ({ ...prev, conversations: false }));
 	  }
-	};
+	}, [profile?.id, activeConversation]);
   
-	const fetchMessages = async (conversationId: string) => {
-	  if (messages.length > 0) return; // Prevent fetching if we already have messages
-  
+	// Fetch messages function
+	const fetchMessages = useCallback(async (conversationId: string) => {
+	  if (!conversationId) return;
+	  
+	  // Only clear messages if we're switching conversations
+	  if (currentConversationIdRef.current !== conversationId) {
+		setMessages([]);
+	  }
+	  
+	  currentConversationIdRef.current = conversationId;
+	  setLoading(prev => ({ ...prev, messages: true }));
+	  
 	  try {
+		console.log("Fetching messages for conversation", conversationId);
 		const { data, error: fetchError } = await supabase
 		  .from("messages")
 		  .select(
@@ -243,44 +197,57 @@ import React, {
 			  sender_id,
 			  created_at,
 			  edited_at,
-			  is_deleted,
-			  sender:users!sender_id(
-				id,
-				name
-			  )
+			  is_deleted
 			`
 		  )
 		  .eq("conversation_id", conversationId)
 		  .order("created_at", { ascending: true });
   
 		if (fetchError) throw fetchError;
-		setMessages(data || []);
+		
+		// Only set messages if this is still the current conversation
+		if (currentConversationIdRef.current === conversationId) {
+		  console.log("Setting", data?.length || 0, "messages");
+		  
+		  // Store processed message IDs
+		  data?.forEach(msg => processedMessageIdsRef.current.add(msg.id));
+		  
+		  setMessages(data || []);
+		  
+		  // Mark messages as read if there are any
+		  if (data && data.length > 0 && profile?.id) {
+			// Call RPC to mark messages as read
+			await supabase.rpc("mark_messages_as_read", {
+			  p_conversation_id: conversationId,
+			  p_user_id: profile.id,
+			});
+			
+			// Update unread count in local state as well
+			setConversations(prev => 
+			  prev.map(conv => 
+				conv.id === conversationId 
+				  ? { ...conv, unread_count: 0 } 
+				  : conv
+			  )
+			);
+		  }
+		}
 	  } catch (err) {
+		console.error("Error fetching messages:", err);
 		setError(err instanceof Error ? err.message : "Failed to fetch messages");
+	  } finally {
+		if (currentConversationIdRef.current === conversationId) {
+		  setLoading(prev => ({ ...prev, messages: false }));
+		}
 	  }
-	};
+	}, [profile?.id]);
   
-	const sendMessage = async (content: string) => {
+	// Send message function
+	const sendMessage = useCallback(async (content: string) => {
 	  if (!activeConversation || !profile?.id) return;
   
-	  // Create optimistic message
-	  const optimisticMessage = {
-		id: crypto.randomUUID(),
-		content,
-		sender_id: profile.id,
-		created_at: new Date().toISOString(),
-		edited_at: null,
-		is_deleted: false,
-		sender: {
-		  id: profile.id,
-		  name: profile.name || "",
-		},
-	  };
-  
-	  // Add optimistic message to state
-	  setMessages((prev) => [...prev, optimisticMessage]);
-  
 	  try {
+		console.log("Sending message to conversation", activeConversation);
 		const { data: newMessage, error: sendError } = await supabase
 		  .from("messages")
 		  .insert([
@@ -290,20 +257,7 @@ import React, {
 			  content,
 			},
 		  ])
-		  .select(
-			`
-			  id,
-			  content,
-			  sender_id,
-			  created_at,
-			  edited_at,
-			  is_deleted,
-			  sender:users!sender_id(
-				id,
-				name
-			  )
-			`
-		  )
+		  .select()
 		  .single();
   
 		if (sendError) throw sendError;
@@ -321,45 +275,31 @@ import React, {
 		  console.error("Error updating conversation:", updateError);
 		}
   
-		// Replace optimistic message with real one
-		setMessages((prev) =>
-		  prev.map((msg) => (msg.id === optimisticMessage.id ? newMessage : msg))
-		);
-  
-		// Update conversations list to show latest message
-		setConversations((prev) =>
-		  prev.map((conv) =>
-			conv.id === activeConversation
-			  ? {
-				  ...conv,
-				  last_message: content,
-				  last_message_at: new Date().toISOString(),
-				}
-			  : conv
-		  )
-		);
+		// Optimistically add message to local state (this helps with reliable real-time)
+		if (newMessage && newMessage.id) {
+		  // Check if we've already processed this message to avoid duplicates
+		  if (!processedMessageIdsRef.current.has(newMessage.id)) {
+			processedMessageIdsRef.current.add(newMessage.id);
+			
+			setMessages(prev => [...prev, {
+			  id: newMessage.id,
+			  content: newMessage.content,
+			  sender_id: profile.id,
+			  created_at: newMessage.created_at || new Date().toISOString(),
+			  edited_at: null,
+			  is_deleted: false
+			}]);
+		  }
+		}
 	  } catch (err) {
-		// Remove optimistic message on error
-		setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
+		console.error("Error sending message:", err);
 		setError(err instanceof Error ? err.message : "Failed to send message");
 		throw err;
 	  }
-	};
+	}, [activeConversation, profile?.id]);
   
-	const markAsRead = async () => {
-	  if (!activeConversation || !profile?.id) return;
-  
-	  try {
-		await supabase.rpc("mark_messages_as_read", {
-		  p_conversation_id: activeConversation,
-		  p_user_id: profile?.id,
-		});
-	  } catch (err) {
-		console.error("Error marking messages as read:", err);
-	  }
-	};
-  
-	const createConversation = async (
+	// Create conversation function
+	const createConversation = useCallback(async (
 	  createdBy: string,
 	  participantIds: string[]
 	): Promise<string> => {
@@ -369,6 +309,7 @@ import React, {
 		  throw new Error("At least two participants are required");
 		}
   
+		console.log("Creating conversation with participants:", participantIds);
 		const { data, error } = await supabase.rpc("create_conversation", {
 		  created_by: createdBy,
 		  participant_ids: participantIds,
@@ -394,7 +335,151 @@ import React, {
 		);
 		throw err;
 	  }
-	};
+	}, [fetchConversations]);
+  
+	// Set up conversation subscription
+	useEffect(() => {
+	  if (!profile?.id) return;
+	  
+	  // Initial fetch on mount
+	  if (!initialLoadDoneRef.current) {
+		fetchConversations();
+		initialLoadDoneRef.current = true;
+	  }
+	  
+	  // Clean up any existing conversation subscription
+	  if (conversationChannelRef.current) {
+		supabase.removeChannel(conversationChannelRef.current);
+		conversationChannelRef.current = null;
+	  }
+	  
+	  console.log("Setting up conversation subscription for user", profile.id);
+	  
+	  // Create new subscription for conversations
+	  const channel = supabase
+		.channel(`conversations-${profile.id}`)
+		.on(
+		  "postgres_changes",
+		  {
+			event: "*",
+			schema: "public",
+			table: "conversation_participants",
+			filter: `user_id=eq.${profile.id}`,
+		  },
+		  (payload) => {
+			console.log("Conversation participants change detected:", payload);
+			fetchConversations();
+		  }
+		)
+		.on(
+		  "postgres_changes",
+		  {
+			event: "UPDATE",
+			schema: "public",
+			table: "conversations",
+		  },
+		  (payload) => {
+			console.log("Conversation update detected:", payload);
+			fetchConversations();
+		  }
+		)
+		.subscribe();
+	  
+	  conversationChannelRef.current = channel;
+	  
+	  return () => {
+		if (conversationChannelRef.current) {
+		  supabase.removeChannel(conversationChannelRef.current);
+		  conversationChannelRef.current = null;
+		}
+	  };
+	}, [profile?.id, fetchConversations]);
+  
+	// Set up message subscription when active conversation changes
+	useEffect(() => {
+	  if (!activeConversation || !profile?.id) return;
+  
+	  // Reset message tracking when conversation changes
+	  processedMessageIdsRef.current = new Set();
+	  
+	  // Fetch initial messages when conversation changes
+	  fetchMessages(activeConversation);
+	  
+	  // Clean up existing messages subscription
+	  if (messagesChannelRef.current) {
+		supabase.removeChannel(messagesChannelRef.current);
+		messagesChannelRef.current = null;
+	  }
+	  
+	  console.log("Setting up messages subscription for conversation", activeConversation);
+	  
+	  // Create new subscription for messages
+	  const channel = supabase
+		.channel(`messages-${activeConversation}`)
+		.on(
+		  "postgres_changes",
+		  {
+			event: "INSERT",
+			schema: "public",
+			table: "messages",
+			filter: `conversation_id=eq.${activeConversation}`,
+		  },
+		  (payload) => {
+			console.log("New message received from subscription:", payload.new);
+			
+			// Extract the new message
+			const newMessage = payload.new as Message;
+			
+			// Check if we've already processed this message
+			if (!processedMessageIdsRef.current.has(newMessage.id)) {
+			  processedMessageIdsRef.current.add(newMessage.id);
+			  
+			  // Add the new message to state
+			  setMessages(prev => [...prev, newMessage]);
+			  
+			  // If it's not from the current user, mark as read
+			  if (newMessage.sender_id !== profile.id) {
+				console.log("Marking message as read");
+				// Call RPC to mark messages as read (without waiting)
+				supabase.rpc("mark_messages_as_read", {
+				  p_conversation_id: activeConversation,
+				  p_user_id: profile.id,
+				}).then(() => {
+				  // Update local state
+				  setConversations(prev => 
+					prev.map(conv => 
+					  conv.id === activeConversation 
+						? { ...conv, unread_count: 0 } 
+						: conv
+					)
+				  );
+				});
+			  }
+			} else {
+			  console.log("Message already processed, skipping:", newMessage.id);
+			}
+		  }
+		)
+		.subscribe((status) => {
+		  console.log("Messages subscription status:", status);
+		});
+	  
+	  messagesChannelRef.current = channel;
+	  
+	  return () => {
+		if (messagesChannelRef.current) {
+		  supabase.removeChannel(messagesChannelRef.current);
+		  messagesChannelRef.current = null;
+		}
+	  };
+	}, [activeConversation, profile?.id, fetchMessages]);
+  
+	// Cleanup on unmount
+	useEffect(() => {
+	  return () => {
+		cleanupChannels();
+	  };
+	}, [cleanupChannels]);
   
 	return (
 	  <MessagingContext.Provider
@@ -405,7 +490,6 @@ import React, {
 		  setActiveConversation,
 		  sendMessage,
 		  fetchMessages,
-		  markAsRead,
 		  createConversation,
 		  loading,
 		  error,
@@ -423,4 +507,3 @@ import React, {
 	}
 	return context;
   }
-  

@@ -9,8 +9,11 @@ interface ConversationListProps {
 export default function ConversationList({
 	onNewMessage,
 }: ConversationListProps) {
-	const { conversations, activeConversation, setActiveConversation } =
-		useMessaging();
+	const { conversations, activeConversation, setActiveConversation, loading } = useMessaging();
+
+	const handleConversationSelect = (conversationId: string) => {
+		setActiveConversation(conversationId);
+	};
 
 	return (
 		<div className="h-full flex flex-col">
@@ -25,7 +28,12 @@ export default function ConversationList({
 			</div>
 
 			<div className="flex-1 overflow-y-auto">
-				{conversations.length === 0 ? (
+				{loading.conversations ? (
+					<div className="p-4 text-center">
+						<div className="animate-spin mx-auto h-6 w-6 border-2 border-brand-primary border-t-transparent rounded-full"></div>
+						<p className="mt-2 text-sm text-gray-500">Loading conversations...</p>
+					</div>
+				) : conversations.length === 0 ? (
 					<div className="p-4 text-center text-gray-500">
 						<p>No conversations yet</p>
 						<p className="text-sm">
@@ -36,11 +44,8 @@ export default function ConversationList({
 					<div className="divide-y">
 						{conversations.map((conversation) => (
 							<button
-								key={`${conversation.id}-${conversation.last_message_at}`}
-								onClick={() => {
-									console.log("clicked");
-									setActiveConversation(conversation.id);
-								}}
+								key={conversation.id}
+								onClick={() => handleConversationSelect(conversation.id)}
 								className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${
 									activeConversation === conversation.id
 										? "bg-brand-secondary-100/10"
@@ -51,7 +56,7 @@ export default function ConversationList({
 									<div className="flex items-center">
 										<User className="w-5 h-5 text-gray-400 mr-2" />
 										<h3 className="font-medium text-gray-900">
-											{conversation.participants[0].email}
+											{conversation.participants[0]?.name || conversation.participants[0]?.email || "Unknown"}
 										</h3>
 									</div>
 								</div>
