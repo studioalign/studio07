@@ -1,0 +1,8 @@
+{
+    "name": "netlify-functions",
+    "version": "1.0.0",
+    "description": "Netlify Functions for Studio Align",
+    "dependencies": {
+      "@sendgrid/mail": "^7.7.0"
+    }
+  }

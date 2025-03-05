@@ -1,0 +1,13 @@
+[build]
+  publish = "dist"  # Make sure this matches your build output directory
+  functions = "netlify/functions"
+  command = "npm run build"  # Your build command
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
