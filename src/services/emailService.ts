@@ -10,6 +10,12 @@ export class EmailService {
     html: string;
   }): Promise<boolean> {
     try {
+      console.log(`Attempting to send email`, {
+        recipient: params.to,
+        subject: params.subject,
+        htmlLength: params.html.length
+      });
+
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           to: params.to,
@@ -19,13 +25,51 @@ export class EmailService {
       });
 
       if (error) {
-        console.error('Email sending error:', error);
+        console.error('Email sending error:', {
+          recipient: params.to,
+          subject: params.subject,
+          errorDetails: error
+        });
         return false;
       }
 
+      console.log(`Email sent successfully`, {
+        recipient: params.to,
+        subject: params.subject
+      });
+
       return true;
     } catch (err) {
-      console.error('Comprehensive email sending error:', err);
+      console.error('Comprehensive email sending error:', {
+        recipient: params.to,
+        subject: params.subject,
+        errorDetails: err instanceof Error ? err.message : err
+      });
+      return false;
+    }
+  }
+
+  // Test email configuration
+  async testEmailConfiguration(email: string): Promise<boolean> {
+    console.log(`Testing email configuration for: ${email}`);
+
+    const testEmailHtml = `
+      <h1>StudioAlign Email Configuration Test</h1>
+      <p>If you can read this, your email configuration is working correctly.</p>
+      <p>Sent: ${new Date().toLocaleString()}</p>
+    `;
+
+    try {
+      const result = await this.sendEmail({
+        to: email,
+        subject: 'StudioAlign Email Configuration Test',
+        html: testEmailHtml
+      });
+
+      console.log(`Email configuration test ${result ? 'PASSED' : 'FAILED'}`);
+      return result;
+    } catch (err) {
+      console.error('Email configuration test failed:', err);
       return false;
     }
   }
@@ -38,6 +82,14 @@ export class EmailService {
     className: string;
     studioId: string;
   }): Promise<boolean> {
+    console.log('Preparing student enrollment email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      studentName: params.studentName,
+      className: params.className,
+      studioId: params.studioId
+    });
+
     const dashboardUrl = `https://app.studioalignpro.com/dashboard/students`;
 
     const emailHtml = emailTemplates.studentEnrollmentTemplate({
@@ -47,11 +99,18 @@ export class EmailService {
       dashboardUrl
     });
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: params.recipientEmail,
       subject: 'New Student Enrollment',
       html: emailHtml
     });
+
+    console.log('Student enrollment email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+
+    return result;
   }
 
   async sendConsecutiveAbsencesEmail(params: {
@@ -62,6 +121,14 @@ export class EmailService {
     absenceCount: number;
     studioId: string;
   }): Promise<boolean> {
+    console.log('Preparing consecutive absences email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      studentName: params.studentName,
+      className: params.className,
+      absenceCount: params.absenceCount
+    });
+
     const dashboardUrl = `https://app.studioalignpro.com/dashboard/attendance`;
 
     const emailHtml = emailTemplates.consecutiveAbsencesTemplate({
@@ -72,11 +139,18 @@ export class EmailService {
       dashboardUrl
     });
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: params.recipientEmail,
       subject: 'Student Consecutive Absences Alert',
       html: emailHtml
     });
+
+    console.log('Consecutive absences email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+
+    return result;
   }
 
   async sendPaymentOverdueEmail(params: {
@@ -87,6 +161,14 @@ export class EmailService {
     invoiceId: string;
     currency: string;
   }): Promise<boolean> {
+    console.log('Preparing payment overdue email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      amount: params.amount,
+      daysOverdue: params.daysOverdue,
+      invoiceId: params.invoiceId
+    });
+
     const invoiceUrl = `https://app.studioalignpro.com/dashboard/payments/${params.invoiceId}`;
 
     const emailHtml = emailTemplates.paymentOverdueTemplate({
@@ -97,11 +179,18 @@ export class EmailService {
       currency: params.currency
     });
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: params.recipientEmail,
       subject: 'Payment Overdue',
       html: emailHtml
     });
+
+    console.log('Payment overdue email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+
+    return result;
   }
 
   async sendMonthlyFinancialSummaryEmail(params: {
@@ -113,6 +202,15 @@ export class EmailService {
     profit: number;
     currency: string;
   }): Promise<boolean> {
+    console.log('Preparing monthly financial summary email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      month: params.month,
+      revenue: params.revenue,
+      expenses: params.expenses,
+      profit: params.profit
+    });
+
     const dashboardUrl = `https://app.studioalignpro.com/dashboard/reports/financial`;
 
     const emailHtml = emailTemplates.monthlyFinancialSummaryTemplate({
@@ -125,11 +223,18 @@ export class EmailService {
       dashboardUrl
     });
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: params.recipientEmail,
       subject: `Monthly Financial Summary - ${params.month}`,
       html: emailHtml
     });
+
+    console.log('Monthly financial summary email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+
+    return result;
   }
 
   async sendStaffRegistrationEmail(params: {
@@ -139,6 +244,13 @@ export class EmailService {
     role: string;
     studioId: string;
   }): Promise<boolean> {
+    console.log('Preparing staff registration email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      staffName: params.staffName,
+      role: params.role
+    });
+
     const dashboardUrl = `https://app.studioalignpro.com/dashboard/staff`;
 
     const emailHtml = emailTemplates.staffRegistrationTemplate({
@@ -148,11 +260,18 @@ export class EmailService {
       dashboardUrl
     });
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: params.recipientEmail,
       subject: 'New Staff Registration',
       html: emailHtml
     });
+
+    console.log('Staff registration email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+
+    return result;
   }
 
   async sendParentAccountEmail(params: {
@@ -162,6 +281,13 @@ export class EmailService {
     type: 'registration' | 'deletion';
     studioId: string;
   }): Promise<boolean> {
+    console.log('Preparing parent account email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      parentName: params.parentName,
+      type: params.type
+    });
+
     const dashboardUrl = `https://app.studioalignpro.com/dashboard/parents`;
 
     const emailHtml = emailTemplates.parentAccountTemplate({
@@ -171,11 +297,18 @@ export class EmailService {
       dashboardUrl
     });
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: params.recipientEmail,
       subject: `Parent Account ${params.type === 'registration' ? 'Registration' : 'Deletion'}`,
       html: emailHtml
     });
+
+    console.log('Parent account email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+
+    return result;
   }
 
   async sendAttendanceNotFilledEmail(params: {
@@ -185,6 +318,13 @@ export class EmailService {
     teacherName: string;
     studioId: string;
   }): Promise<boolean> {
+    console.log('Preparing attendance not filled email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      className: params.className,
+      teacherName: params.teacherName
+    });
+
     const dashboardUrl = `https://app.studioalignpro.com/dashboard/attendance`;
 
     const emailHtml = emailTemplates.attendanceNotFilledTemplate({
@@ -194,11 +334,18 @@ export class EmailService {
       dashboardUrl
     });
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: params.recipientEmail,
       subject: 'Attendance Register Not Filled',
       html: emailHtml
     });
+
+    console.log('Attendance not filled email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+
+    return result;
   }
 
   async sendClassCapacityReachedEmail(params: {
@@ -207,6 +354,12 @@ export class EmailService {
     className: string;
     studioId: string;
   }): Promise<boolean> {
+    console.log('Preparing class capacity reached email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      className: params.className
+    });
+
     const dashboardUrl = `https://app.studioalignpro.com/dashboard/classes`;
 
     const emailHtml = emailTemplates.classCapacityTemplate({
@@ -215,11 +368,18 @@ export class EmailService {
       dashboardUrl
     });
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: params.recipientEmail,
       subject: 'Class Capacity Reached',
       html: emailHtml
     });
+
+    console.log('Class capacity reached email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+
+    return result;
   }
 
   async sendClassScheduleChangeEmail(params: {
@@ -229,6 +389,13 @@ export class EmailService {
     changes: string;
     studioId: string;
   }): Promise<boolean> {
+    console.log('Preparing class schedule change email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      className: params.className,
+      changes: params.changes
+    });
+
     const dashboardUrl = `https://app.studioalignpro.com/dashboard/classes`;
 
     const emailHtml = emailTemplates.classScheduleChangeTemplate({
@@ -238,11 +405,18 @@ export class EmailService {
       dashboardUrl
     });
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: params.recipientEmail,
       subject: 'Class Schedule Updated',
       html: emailHtml
     });
+
+    console.log('Class schedule change email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+
+    return result;
   }
 
   async sendNewMessageEmail(params: {
@@ -252,6 +426,12 @@ export class EmailService {
     messagePreview: string;
     conversationId: string;
   }): Promise<boolean> {
+    console.log('Preparing new message email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      senderName: params.senderName
+    });
+
     const conversationUrl = `https://app.studioalignpro.com/dashboard/messages/${params.conversationId}`;
 
     const emailHtml = emailTemplates.newMessageTemplate({
@@ -261,11 +441,18 @@ export class EmailService {
       conversationUrl
     });
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: params.recipientEmail,
       subject: 'New Message',
       html: emailHtml
     });
+
+    console.log('New message email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+
+    return result;
   }
 
   async sendChannelActivityEmail(params: {
@@ -278,6 +465,14 @@ export class EmailService {
     channelId: string;
     postId: string;
   }): Promise<boolean> {
+    console.log('Preparing channel activity email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      type: params.type,
+      channelName: params.channelName,
+      authorName: params.authorName
+    });
+
     const activityUrl = `https://app.studioalignpro.com/dashboard/channels/${params.channelId}/posts/${params.postId}`;
 
     const emailHtml = emailTemplates.channelActivityTemplate({
@@ -289,11 +484,18 @@ export class EmailService {
       activityUrl
     });
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: params.recipientEmail,
       subject: `New ${params.type === 'post' ? 'Post' : 'Comment'} in ${params.channelName}`,
       html: emailHtml
     });
+
+    console.log('Channel activity email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+
+    return result;
   }
 
   async sendPaymentConfirmationEmail(params: {
@@ -303,6 +505,13 @@ export class EmailService {
     invoiceId: string;
     currency: string;
   }): Promise<boolean> {
+    console.log('Preparing payment confirmation email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      amount: params.amount,
+      invoiceId: params.invoiceId
+    });
+
     const invoiceUrl = `https://app.studioalignpro.com/dashboard/payments/${params.invoiceId}`;
 
     const emailHtml = emailTemplates.paymentConfirmationTemplate({
@@ -313,11 +522,18 @@ export class EmailService {
       currency: params.currency
     });
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: params.recipientEmail,
       subject: 'Payment Confirmation',
       html: emailHtml
     });
+
+    console.log('Payment confirmation email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+
+    return result;
   }
 
   async sendClassCancellationEmail(params: {
@@ -328,6 +544,14 @@ export class EmailService {
     reason?: string;
     studioId: string;
   }): Promise<boolean> {
+    console.log('Preparing class cancellation email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      className: params.className,
+      date: params.date,
+      reason: params.reason
+    });
+
     const dashboardUrl = `https://app.studioalignpro.com/dashboard/classes`;
 
     const emailHtml = emailTemplates.classCancellationTemplate({
@@ -338,11 +562,18 @@ export class EmailService {
       dashboardUrl
     });
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: params.recipientEmail,
       subject: 'Class Cancellation',
       html: emailHtml
     });
+
+    console.log('Class cancellation email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+
+    return result;
   }
 }
 
