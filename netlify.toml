@@ -1,7 +1,11 @@
 [build]
-  command = "npm run build"
-  publish = "dist"
+  publish = "dist"  # Make sure this matches your build output directory
   functions = "netlify/functions"
+  command = "npm run build"  # Your build command
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
 
 [[redirects]]
   from = "/*"
