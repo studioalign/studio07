@@ -35,6 +35,9 @@ export class EmailService {
           subject: params.subject,
           html: params.html
         }
+        headers: {
+          Authorization: `Bearer ${supabase.auth.getSession()?.access_token || ''}`
+        }
       });
   
       if (error) {
