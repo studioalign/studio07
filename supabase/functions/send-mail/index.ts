@@ -7,11 +7,12 @@ sgMail.setApiKey(Deno.env.get('SENDGRID_API_KEY') || '');
 Deno.serve(async (req: Request) => {
   // CORS handling
   const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': '*', // Change '*' to your specific domain in production
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   };
 
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders, status: 200 });
   }
@@ -48,7 +49,7 @@ Deno.serve(async (req: Request) => {
     console.error('Email sending error:', error); // Log full error
 
     // Generic error response
-    return new Response(JSON.stringify({ error: 'Failed to send email' }), {
+    return new Response(JSON.stringify({ error: error.message }), { // Return specific error message
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
     });
