@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { emailService } from './emailService';
 
 // Define all notification types for type safety
 export type NotificationType = 
@@ -113,7 +114,8 @@ async function createNotification(data: NotificationData) {
       entity_id: data.entity_id
     });
 
-    const { error } = await supabase.from('notifications').insert({
+    // Create in-app notification
+    const { data: notificationData, error } = await supabase.from('notifications').insert({
       user_id: data.user_id,
       studio_id: data.studio_id,
       type: data.type,
@@ -129,11 +131,208 @@ async function createNotification(data: NotificationData) {
       email_sent: false,
       read: false,
       dismissed: false,
-    });
+    }).select().single();
 
     if (error) {
       console.error('Supabase error creating notification:', error);
       throw error;
+    }
+
+    // Only attempt to send email if it's required
+    if (data.email_required) {
+      try {
+        console.log('Email notification required, fetching user details...');
+        
+        // Get user email and name for email sending
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('email, name')
+          .eq('id', data.user_id)
+          .single();
+        
+        if (userError || !userData?.email) {
+          console.error('Error fetching user email:', userError || 'No email found');
+          return { success: true, emailSent: false };
+        }
+
+        // Send the appropriate email based on notification type
+        let emailResult = false;
+
+        console.log('Sending email notification of type:', data.type);
+        
+        // Handle different notification types and send appropriate emails
+        switch (data.type) {
+          case 'payment_request':
+            emailResult = await emailService.sendPaymentOverdueEmail({
+              recipientEmail: userData.email,
+              recipientName: userData.name || 'User',
+              amount: data.details?.amount || 0,
+              daysOverdue: 0, // New request, not overdue yet
+              invoiceId: data.entity_id || '',
+              currency: data.details?.currency || 'USD'
+            });
+            break;
+            
+          case 'payment_overdue':
+            emailResult = await emailService.sendPaymentOverdueEmail({
+              recipientEmail: userData.email,
+              recipientName: userData.name || 'User',
+              amount: data.details?.amount || 0,
+              daysOverdue: data.details?.daysOverdue || 1,
+              invoiceId: data.entity_id || '',
+              currency: data.details?.currency || 'USD'
+            });
+            break;
+            
+          case 'payment_confirmation':
+            emailResult = await emailService.sendPaymentConfirmationEmail({
+              recipientEmail: userData.email,
+              recipientName: userData.name || 'User',
+              amount: data.details?.amount || 0,
+              invoiceId: data.entity_id || '',
+              currency: data.details?.currency || 'USD'
+            });
+            break;
+            
+          case 'class_schedule':
+            emailResult = await emailService.sendClassScheduleChangeEmail({
+              recipientEmail: userData.email,
+              recipientName: userData.name || 'User',
+              className: data.details?.className || 'Your class',
+              changes: typeof data.details === 'string' 
+                ? data.details 
+                : JSON.stringify(data.details || {}),
+              studioId: data.studio_id
+            });
+            break;
+            
+          case 'class_assigned':
+            emailResult = await emailService.sendClassAssignedEmail({
+              recipientEmail: userData.email,
+              recipientName: userData.name || 'User',
+              className: data.details?.className || 'Your class',
+              classId: data.entity_id || '',
+              studioId: data.studio_id,
+              schedule: data.details?.schedule || {}
+            });
+            break;
+            
+          case 'class_cancellation':
+            emailResult = await emailService.sendClassCancellationEmail({
+              recipientEmail: userData.email,
+              recipientName: userData.name || 'User',
+              className: data.details?.className || 'Your class',
+              date: data.details?.date || new Date().toISOString().split('T')[0],
+              reason: data.details?.reason,
+              studioId: data.studio_id
+            });
+            break;
+            
+          case 'student_enrollment':
+            emailResult = await emailService.sendStudentEnrollmentEmail({
+              recipientEmail: userData.email,
+              recipientName: userData.name || 'User',
+              studentName: data.details?.studentName || 'A student',
+              className: data.details?.className || 'a class',
+              studioId: data.studio_id
+            });
+            break;
+            
+          case 'student_consecutive_absence':
+            emailResult = await emailService.sendConsecutiveAbsencesEmail({
+              recipientEmail: userData.email,
+              recipientName: userData.name || 'User',
+              studentName: data.details?.studentName || 'A student',
+              className: data.details?.className || 'a class',
+              absenceCount: data.details?.absenceCount || 2,
+              studioId: data.studio_id
+            });
+            break;
+            
+          case 'new_message':
+            emailResult = await emailService.sendNewMessageEmail({
+              recipientEmail: userData.email,
+              recipientName: userData.name || 'User',
+              senderName: data.details?.senderName || 'Another user',
+              messagePreview: data.details?.messagePreview || data.message || 'You have a new message',
+              conversationId: data.details?.conversationId || data.entity_id || ''
+            });
+            break;
+            
+          case 'new_channel_post':
+            emailResult = await emailService.sendChannelActivityEmail({
+              recipientEmail: userData.email,
+              recipientName: userData.name || 'User',
+              type: 'post',
+              channelName: data.details?.channelName || 'a channel',
+              authorName: data.details?.authorName || 'Another user',
+              content: data.details?.content || data.message || 'New post',
+              channelId: data.details?.channelId || '',
+              postId: data.entity_id || ''
+            });
+            break;
+            
+          case 'new_comment':
+            emailResult = await emailService.sendChannelActivityEmail({
+              recipientEmail: userData.email,
+              recipientName: userData.name || 'User',
+              type: 'comment',
+              channelName: data.details?.channelName || 'a channel',
+              authorName: data.details?.authorName || 'Another user',
+              content: data.details?.content || data.message || 'New comment',
+              channelId: data.details?.channelId || '',
+              postId: data.entity_id || ''
+            });
+            break;
+            
+          case 'staff_registration':
+            emailResult = await emailService.sendStaffRegistrationEmail({
+              recipientEmail: userData.email,
+              recipientName: userData.name || 'User',
+              staffName: data.details?.staffName || 'A new staff member',
+              role: data.details?.role || 'staff',
+              studioId: data.studio_id
+            });
+            break;
+            
+          case 'unauthorized_absence':
+            // This is usually sent to parents
+            emailResult = await emailService.sendAttendanceNotFilledEmail({
+              recipientEmail: userData.email,
+              recipientName: userData.name || 'User',
+              className: data.details?.className || 'Your class',
+              teacherName: data.details?.teacherName || 'The teacher',
+              studioId: data.studio_id
+            });
+            break;
+            
+          // Add more cases for other notification types as needed
+            
+          default:
+            // Generic email for types without specific templates
+            console.log('No specific email template for notification type:', data.type);
+            break;
+        }
+
+        // Update the notification record to mark email as sent
+        if (notificationData?.id) {
+          await supabase
+            .from('notifications')
+            .update({ 
+              email_sent: true,
+              email_sent_at: new Date().toISOString(),
+              email_success: emailResult 
+            })
+            .eq('id', notificationData.id);
+          
+          console.log('Notification updated with email status:', emailResult);
+        }
+        
+        return { success: true, emailSent: emailResult };
+      } catch (emailError) {
+        console.error('Error sending email notification:', emailError);
+        return { success: true, emailSent: false };
+      }
     }
 
     return { success: true };
@@ -247,7 +446,7 @@ async function notifyStudentEnrollment(studioId: string, studentName: string, cl
       priority: 'medium',
       entity_id: studentId,
       entity_type: 'student',
-      details: { classId, className },
+      details: { studentName, className, classId },
       email_required: true
     });
   }
@@ -266,7 +465,7 @@ async function notifyConsecutiveAbsences(studioId: string, studentName: string, 
       priority: 'high',
       entity_id: studentId,
       entity_type: 'student',
-      details: { absenceCount, className },
+      details: { studentName, absenceCount, className },
       email_required: true
     });
   }
@@ -283,7 +482,7 @@ async function notifyConsecutiveAbsences(studioId: string, studentName: string, 
       priority: 'medium',
       entity_id: studentId,
       entity_type: 'student',
-      details: { absenceCount, className },
+      details: { studentName, absenceCount, className },
       email_required: false
     });
   }
@@ -302,6 +501,7 @@ async function notifyPaymentReceived(studioId: string, parentName: string, amoun
       priority: 'medium',
       entity_id: invoiceId,
       entity_type: 'invoice',
+      details: { parentName, amount },
       email_required: false
     });
   }
@@ -318,6 +518,7 @@ async function notifyPaymentOverdue(userId: string, studioId: string, invoiceId:
     priority: 'high',
     entity_id: invoiceId,
     entity_type: 'invoice',
+    details: { amount, daysOverdue },
     requires_action: true,
     email_required: true
   });
@@ -334,6 +535,7 @@ async function notifyPaymentOverdue(userId: string, studioId: string, invoiceId:
       priority: 'medium',
       entity_id: invoiceId,
       entity_type: 'invoice',
+      details: { amount, daysOverdue },
       email_required: true
     });
   }
@@ -352,6 +554,7 @@ async function notifyStaffRegistration(studioId: string, staffName: string, staf
       priority: 'high',
       entity_id: staffId,
       entity_type: 'staff',
+      details: { staffName, role },
       requires_action: true,
       email_required: true
     });
@@ -371,6 +574,7 @@ async function notifyParentRegistration(studioId: string, parentName: string, pa
       priority: 'medium',
       entity_id: parentId,
       entity_type: 'parent',
+      details: { parentName },
       email_required: true
     });
   }
@@ -388,6 +592,7 @@ async function notifyParentDeletion(studioId: string, parentName: string) {
       message: `${parentName} has deleted their account`,
       priority: 'medium',
       entity_type: 'parent',
+      details: { parentName },
       email_required: true
     });
   }
@@ -404,6 +609,7 @@ async function notifyAttendanceNotFilled(teacherId: string, teacherName: string,
     priority: 'high',
     entity_id: classId,
     entity_type: 'class',
+    details: { className, teacherName },
     requires_action: true,
     email_required: true
   });
@@ -421,6 +627,7 @@ async function notifyAttendanceNotFilled(teacherId: string, teacherName: string,
       priority: 'medium',
       entity_id: classId,
       entity_type: 'class',
+      details: { className, teacherName },
       email_required: true
     });
   }
@@ -439,6 +646,7 @@ async function notifyClassCapacityReached(studioId: string, className: string, c
       priority: 'medium',
       entity_id: classId,
       entity_type: 'class',
+      details: { className },
       email_required: true
     });
   }
@@ -457,7 +665,7 @@ async function notifyClassScheduleChange(studioId: string, className: string, cl
       priority: 'medium',
       entity_id: classId,
       entity_type: 'class',
-      details: changes,
+      details: { className, ...changes },
       email_required: true
     });
   }
@@ -474,7 +682,7 @@ async function notifyClassScheduleChange(studioId: string, className: string, cl
       priority: 'high',
       entity_id: classId,
       entity_type: 'class',
-      details: changes,
+      details: { className, ...changes },
       email_required: true
     });
   }
@@ -491,7 +699,7 @@ async function notifyClassScheduleChange(studioId: string, className: string, cl
       priority: 'high',
       entity_id: classId,
       entity_type: 'class',
-      details: changes,
+      details: { className, ...changes },
       email_required: true
     });
   }
@@ -507,6 +715,7 @@ async function notifyNewMessage(senderId: string, senderName: string, receiverId
     priority: 'medium',
     entity_id: conversationId,
     entity_type: 'conversation',
+    details: { senderName, messagePreview, conversationId },
     email_required: true
   });
 }
@@ -517,7 +726,8 @@ async function notifyNewChannelPost(
   channelName: string, 
   authorName: string, 
   postId: string, 
-  postTitle: string
+  postTitle: string,
+  authorId: string
 ) {
   try {
     const { data: channelMembers, error: memberError } = await supabase
@@ -537,6 +747,9 @@ async function notifyNewChannelPost(
     const memberUserIds = channelMembers.map(member => member.user_id);
     
     for (const userId of memberUserIds) {
+      // Skip notification to the author
+      if (userId === authorId) continue;
+      
       await createNotification({
         user_id: userId,
         studio_id: studioId,
@@ -546,6 +759,7 @@ async function notifyNewChannelPost(
         priority: 'medium',
         entity_id: postId,
         entity_type: 'post',
+        details: { authorName, postTitle, channelName, channelId, content: postTitle },
         email_required: true
       });
     }
@@ -560,7 +774,8 @@ async function notifyNewComment(
   postId: string, 
   postTitle: string, 
   commenterId: string, 
-  commenterName: string
+  commenterName: string,
+  commentContent: string
 ) {
   try {
     const { data: channelMembers, error: memberError } = await supabase
@@ -592,6 +807,7 @@ async function notifyNewComment(
         priority: 'medium',
         entity_id: postId,
         entity_type: 'post',
+        details: { commenterName, postTitle, channelId, content: commentContent },
         email_required: true
       });
     }
@@ -611,7 +827,7 @@ async function notifyClassAssigned(teacherId: string, studioId: string, classNam
     priority: 'high',
     entity_id: classId,
     entity_type: 'class',
-    details: schedule,
+    details: { className, schedule },
     email_required: true
   });
 }
@@ -626,6 +842,7 @@ async function notifyClassReminder(teacherId: string, studioId: string, classNam
     priority: 'medium',
     entity_id: classId,
     entity_type: 'class',
+    details: { className, startTime },
     email_required: false
   });
 }
@@ -640,6 +857,7 @@ async function notifyStudentAddedToClass(studioId: string, teacherId: string, st
     priority: 'medium',
     entity_id: studentId,
     entity_type: 'student',
+    details: { studentName, className, classId },
     email_required: false
   });
 }
@@ -654,11 +872,12 @@ async function notifyStudentRemovedFromClass(studioId: string, teacherId: string
     priority: 'medium',
     entity_id: studentId,
     entity_type: 'student',
+    details: { studentName, className, classId },
     email_required: false
   });
 }
 
-// Parent Notifications
+// Parent Notifications (continued)
 async function notifyClassCancellation(studioId: string, className: string, classId: string, date: string, reason: string) {
   const parentIds = await getParentsForClass(classId);
   
@@ -672,7 +891,7 @@ async function notifyClassCancellation(studioId: string, className: string, clas
       priority: 'high',
       entity_id: classId,
       entity_type: 'class',
-      details: { reason },
+      details: { className, date, reason },
       email_required: true
     });
   }
@@ -687,6 +906,7 @@ async function notifyAttendanceMarked(parentId: string, studioId: string, studen
     message: `${studentName} was marked as ${status} in ${className} on ${date}`,
     priority: 'low',
     entity_type: 'attendance',
+    details: { studentName, className, status, date },
     email_required: false
   });
 }
@@ -700,6 +920,7 @@ async function notifyUnauthorizedAbsence(parentId: string, studioId: string, stu
     message: `${studentName} was marked as absent in ${className} on ${date}`,
     priority: 'high',
     entity_type: 'attendance',
+    details: { studentName, className, date },
     requires_action: true,
     email_required: true
   });
@@ -711,7 +932,7 @@ async function notifyPaymentRequest(
   amount: number, 
   dueDate: string, 
   invoiceId: string,
-  studioCurrency: string
+  currency: string
 ) {
   await createNotification({
     user_id: parentId,
@@ -720,26 +941,31 @@ async function notifyPaymentRequest(
     title: 'Payment Request',
     message: `Payment of ${new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: studioCurrency
+      currency: currency
     }).format(amount)} is due by ${dueDate}`,
     priority: 'high',
     entity_id: invoiceId,
     entity_type: 'invoice',
+    details: { amount, dueDate, currency },
     requires_action: true,
     email_required: true
   });
 }
 
-async function notifyPaymentConfirmation(parentId: string, studioId: string, amount: number, invoiceId: string) {
+async function notifyPaymentConfirmation(parentId: string, studioId: string, amount: number, invoiceId: string, currency: string) {
   await createNotification({
     user_id: parentId,
     studio_id: studioId,
     type: 'payment_confirmation',
     title: 'Payment Confirmation',
-    message: `Your payment of $${amount} has been received. Thank you!`,
+    message: `Your payment of ${new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency
+    }).format(amount)} has been received. Thank you!`,
     priority: 'medium',
     entity_id: invoiceId,
     entity_type: 'invoice',
+    details: { amount, currency },
     email_required: true
   });
 }

@@ -15,15 +15,28 @@ export class EmailService {
         subject: params.subject,
         htmlLength: params.html.length
       });
-
-      const { data, error } = await supabase.functions.invoke('send-email', {
+  
+      // Check if we're in local development
+      const isLocalDevelopment = window.location.hostname.includes('local') || 
+                                window.location.hostname.includes('localhost') || 
+                                window.location.hostname.includes('webcontainer');
+  
+      if (isLocalDevelopment) {
+        console.log('Running in local environment - email would be sent to:', params.to);
+        console.log('Subject:', params.subject);
+        console.log('Email content length:', params.html.length);
+        return true; // Pretend it succeeded in local development
+      }
+  
+      // For production, actually send the email
+      const { data, error } = await supabase.functions.invoke('send-mail', {
         body: {
           to: params.to,
           subject: params.subject,
           html: params.html
         }
       });
-
+  
       if (error) {
         console.error('Email sending error:', {
           recipient: params.to,
@@ -32,12 +45,12 @@ export class EmailService {
         });
         return false;
       }
-
+  
       console.log(`Email sent successfully`, {
         recipient: params.to,
         subject: params.subject
       });
-
+  
       return true;
     } catch (err) {
       console.error('Comprehensive email sending error:', {
