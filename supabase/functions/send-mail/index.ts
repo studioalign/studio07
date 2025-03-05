@@ -5,16 +5,21 @@ import * as sgMail from "npm:@sendgrid/mail";
 sgMail.setApiKey(Deno.env.get('SENDGRID_API_KEY') || '');
 
 Deno.serve(async (req: Request) => {
-  // CORS handling
+  // Comprehensive CORS headers
   const corsHeaders = {
-    'Access-Control-Allow-Origin': '*', // Change '*' to your specific domain in production
+    'Access-Control-Allow-Origin': '*', // Try wildcard first for testing
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, X-Requested-With',
+    'Access-Control-Max-Age': '86400', // 24 hours
+    'Access-Control-Allow-Credentials': 'true'
   };
 
-  // Handle preflight requests
+  // Make sure OPTIONS requests are handled properly
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders, status: 200 });
+    return new Response('ok', { 
+      headers: corsHeaders,
+      status: 200 
+    });
   }
 
   try {

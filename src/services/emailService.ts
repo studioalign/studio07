@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase';
 import * as emailTemplates from '../utils/emailTemplates';
 
 export class EmailService {
-  // Base method for sending emails via Supabase edge function
   private async sendEmail(params: {
     to: string;
     subject: string;
@@ -15,52 +14,48 @@ export class EmailService {
         subject: params.subject,
         htmlLength: params.html.length
       });
-  
-      // Check if we're in local development
-      const isLocalDevelopment = window.location.hostname.includes('local') || 
-                                window.location.hostname.includes('localhost') || 
-                                window.location.hostname.includes('webcontainer');
-  
-      if (isLocalDevelopment) {
-        console.log('Running in local environment - email would be sent to:', params.to);
-        console.log('Subject:', params.subject);
-        console.log('Email content length:', params.html.length);
-        return true; // Pretend it succeeded in local development
+
+      // Get the current session and token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      if (!token) {
+        console.error('No authentication token available');
+        return false;
       }
-  
-      // For production, actually send the email
-      const { data, error } = await supabase.functions.invoke('send-mail', {
-        body: {
+
+      // Direct fetch to edge function
+      const response = await fetch('https://pyenidvolmrgecfviciv.supabase.co/functions/v1/send-mail', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
           to: params.to,
           subject: params.subject,
           html: params.html
-        }
-        headers: {
-          Authorization: `Bearer ${supabase.auth.getSession()?.access_token || ''}`
-        }
+        })
       });
-  
-      if (error) {
-        console.error('Email sending error:', {
-          recipient: params.to,
-          subject: params.subject,
-          errorDetails: error
-        });
+
+      // Check for CORS-related errors
+      if (!response.ok) {
+        // Try to get error details
+        let errorDetails;
+        try {
+          errorDetails = await response.json();
+        } catch {
+          errorDetails = { status: response.status, statusText: response.statusText };
+        }
+        
+        console.error('Email sending error response:', errorDetails);
         return false;
       }
-  
-      console.log(`Email sent successfully`, {
-        recipient: params.to,
-        subject: params.subject
-      });
-  
+
+      console.log(`Email sent successfully`);
       return true;
     } catch (err) {
-      console.error('Comprehensive email sending error:', {
-        recipient: params.to,
-        subject: params.subject,
-        errorDetails: err instanceof Error ? err.message : err
-      });
+      console.error('Email sending error:', err);
       return false;
     }
   }
@@ -590,6 +585,38 @@ export class EmailService {
     });
 
     return result;
+  }
+
+  async testAuthToken(): Promise<boolean> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    
+    if (!token) {
+      console.error('No authentication token available');
+      return false;
+    }
+
+    console.log('Token available:', token.substring(0, 10) + '...');
+    
+    // Try to access a protected resource to test the token
+    const { data, error } = await supabase
+      .from('users')
+      .select('id')
+      .limit(1)
+      .single();
+      
+    if (error) {
+      console.error('Token validation failed:', error);
+      return false;
+    }
+    
+    console.log('Token is valid and working');
+    return true;
+    } catch (err) {
+    console.error('Token validation error:', err);
+    return false;
+    }
   }
 }
 
