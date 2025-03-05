@@ -14,22 +14,23 @@ export class EmailService {
         subject: params.subject,
         htmlLength: params.html.length
       });
-
-      // Get the current session and token
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
       
-      if (!token) {
-        console.error('No authentication token available');
-        return false;
+      // Check if we're in Stackblitz
+      const isStackblitz = window.location.hostname.includes('stackblitz') ||
+                            window.location.hostname.includes('webcontainer');
+  
+      if (isStackblitz) {
+        console.log('Running in Stackblitz - email would be sent to:', params.to);
+        console.log('Subject:', params.subject);
+        console.log('Email content length:', params.html.length);
+        return true; // Pretend it succeeded in Stackblitz
       }
-
-      // Direct fetch to edge function
-      const response = await fetch('https://pyenidvolmrgecfviciv.supabase.co/functions/v1/send-mail', {
+      
+      // Use the Netlify function
+      const response = await fetch('/.netlify/functions/send-email', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           to: params.to,
@@ -37,21 +38,13 @@ export class EmailService {
           html: params.html
         })
       });
-
-      // Check for CORS-related errors
+      
       if (!response.ok) {
-        // Try to get error details
-        let errorDetails;
-        try {
-          errorDetails = await response.json();
-        } catch {
-          errorDetails = { status: response.status, statusText: response.statusText };
-        }
-        
-        console.error('Email sending error response:', errorDetails);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Email function error:', errorData);
         return false;
       }
-
+      
       console.log(`Email sent successfully`);
       return true;
     } catch (err) {
