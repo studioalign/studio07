@@ -7,7 +7,7 @@ sgMail.setApiKey(Deno.env.get('SENDGRID_API_KEY') || '');
 Deno.serve(async (req: Request) => {
   // CORS handling
   const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': 'https://studioalign.netlify.app',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   };
 
