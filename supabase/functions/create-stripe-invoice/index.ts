@@ -149,13 +149,30 @@ serve(async (req) => {
 				: invoice.parent.stripe_customer_id,
 			auto_advance: true,
 			collection_method: "send_invoice",
-			days_until_due: 30,
+			days_until_due: calculateDaysUntilDue(invoice.due_date),
 			currency: studioData?.currency,
 			metadata: {
 				internal_invoice_id: invoice.id,
 				studio_id: invoice.studio_id,
 			},
 		};
+
+		// Helper function to calculate days until due based on invoice.due_date
+		function calculateDaysUntilDue(dueDate: string): number {
+			if (!dueDate) return 30; // Fallback to 30 days if no due date is provided
+
+			const currentDate = new Date();
+			const dueDateObj = new Date(dueDate);
+
+			// Calculate the difference in milliseconds
+			const diffTime = dueDateObj.getTime() - currentDate.getTime();
+
+			// Convert milliseconds to days and round up to ensure we don't set it to less than 1 day
+			const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+			// Ensure at least 1 day until due
+			return Math.max(1, diffDays);
+		}
 
 		try {
 			const stripeInvoice = useConnectAccount
