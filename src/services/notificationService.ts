@@ -309,7 +309,37 @@ async function createNotification(data: NotificationData) {
             });
             break;
             
-          // Add more cases for other notification types as needed
+            case 'document_assigned':
+              emailResult = await emailService.sendDocumentAssignedEmail({
+                recipientEmail: userData.email,
+                recipientName: userData.name || 'User',
+                documentName: data.details?.documentName || 'A document',
+                requiresSignature: data.details?.requiresSignature || false,
+                description: data.details?.description,
+                studioId: data.studio_id
+              });
+              break;
+              
+            case 'document_reminder':
+              emailResult = await emailService.sendDocumentReminderEmail({
+                recipientEmail: userData.email,
+                recipientName: userData.name || 'User',
+                documentName: data.details?.documentName || 'A document',
+                requiresSignature: data.details?.requiresSignature || false,
+                studioId: data.studio_id
+              });
+              break;
+              
+            case 'document_deadline_missed':
+              emailResult = await emailService.sendDocumentDeadlineEmail({
+                recipientEmail: userData.email,
+                recipientName: userData.name || 'User',
+                documentName: data.details?.documentName || 'A document',
+                requiresSignature: data.details?.requiresSignature || false,
+                unprocessedCount: data.details?.unprocessedCount,
+                studioId: data.studio_id
+              });
+              break;
             
           default:
             // Generic email for types without specific templates
