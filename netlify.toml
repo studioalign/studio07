@@ -12,8 +12,9 @@
   to = "/index.html"
   status = 200
 
-  [[plugins]]
-package = "@netlify/plugin-functions-install-core"
+[[plugins]]
+  package = "@netlify/plugin-functions-install-core"
 
 [[functions]]
   schedule = "0 0 * * *"  # Run daily at midnight
+  path = "netlify/functions/check-document-deadlines.js"
