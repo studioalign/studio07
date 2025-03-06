@@ -122,25 +122,64 @@ export default function UploadDocumentModal({
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!file) {
-			setError("Please select a file to upload");
-			return;
+		  setError("Please select a file to upload");
+		  return;
 		}
-
+	  
 		setIsSubmitting(true);
 		setError(null);
-
+	  
 		try {
-			// Mock success - replace with actual implementation
-			await new Promise((resolve) => setTimeout(resolve, 1000));
-			onClose();
+		  // 1. Upload file to Supabase Storage
+		  const fileExt = file.name.split('.').pop();
+		  const fileName = `${crypto.randomUUID()}.${fileExt}`;
+		  const { error: uploadError } = await supabase.storage
+			.from('documents')
+			.upload(fileName, file);
+	  
+		  if (uploadError) throw uploadError;
+	  
+		  // Get the public URL
+		  const { data: { publicUrl } } = supabase.storage
+			.from('documents')
+			.getPublicUrl(fileName);
+	  
+		  // 2. Create document record in database
+		  const { data: document, error: docError } = await supabase
+			.from('documents')
+			.insert({
+			  studio_id: profile?.studio?.id,
+			  name,
+			  description,
+			  file_url: publicUrl,
+			  requires_signature: requiresSignature,
+			  expires_at: expiryDate ? new Date(expiryDate).toISOString() : null,
+			  created_by: profile?.id
+			})
+			.select()
+			.single();
+	  
+		  if (docError) throw docError;
+	  
+		  // 3. Add recipients
+		  const recipientData = selectedUsers.map(user => ({
+			document_id: document.id,
+			user_id: user.id
+		  }));
+	  
+		  const { error: recipientError } = await supabase
+			.from('document_recipients')
+			.insert(recipientData);
+	  
+		  if (recipientError) throw recipientError;
+	  
+		  onClose();
 		} catch (err) {
-			setError(
-				err instanceof Error ? err.message : "Failed to upload document"
-			);
+		  setError(err instanceof Error ? err.message : "Failed to upload document");
 		} finally {
-			setIsSubmitting(false);
+		  setIsSubmitting(false);
 		}
-	};
+	  };
 
 	return (
 		<>

@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { File, FileCheck, Clock, AlertCircle, Search, Plus, Send, Eye, PenSquare } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import UploadDocumentModal from './UploadDocumentModal';
 import ViewDocumentModal from './ViewDocumentModal';
 import OwnerDocumentTable from './OwnerDocumentTable';
 import UserDocumentTable from './UserDocumentTable';
+import { supabase } from '../../lib/supabase';
 
 interface Document {
   id: string;
@@ -25,64 +26,119 @@ export default function DocumentList() {
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending' | 'signed'>('all');
   const [search, setSearch] = useState('');
+  
+  // Define the document state variables
+  const [ownerDocuments, setOwnerDocuments] = useState<any[]>([]);
+  const [userDocuments, setUserDocuments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock data for owners - replace with actual data fetching
-  const ownerDocuments = [
-    {
-      id: '1',
-      name: 'Studio Policy Document',
-      description: 'Annual studio policies and guidelines',
-      file_url: '#',
-      requires_signature: true,
-      created_at: '2024-02-14T12:00:00Z',
-      expires_at: '2025-02-14T12:00:00Z',
-      status: 'active',
-      viewed_at: null,
-      signed_at: null,
-      recipients: [{ id: '1', name: 'John Doe', email: 'john@example.com', viewed_at: null, signed_at: null, last_reminder_sent: null }],
-    },
-    {
-      id: '2',
-      name: 'Performance Agreement',
-      description: 'Agreement for upcoming spring showcase',
-      file_url: '#',
-      requires_signature: true,
-      created_at: '2024-02-10T12:00:00Z',
-      expires_at: null,
-      status: 'active',
-      viewed_at: '2024-02-11T15:30:00Z',
-      signed_at: '2024-02-11T15:35:00Z',
-      recipients: [{ id: '2', name: 'Jane Smith', email: 'jane@example.com', viewed_at: '2024-02-11T15:30:00Z', signed_at: '2024-02-11T15:35:00Z', last_reminder_sent: null }],
-    },
-  ];
+  // Load documents when component mounts
+  useEffect(() => {
+    if (profile) {
+      loadDocuments();
+    }
+  }, [profile]);
 
-  // Mock data for teachers/parents - replace with actual data fetching
-  const userDocuments = [
-    {
-      id: '1',
-      name: 'Studio Policy Document',
-      description: 'Annual studio policies and guidelines',
-      file_url: '#',
-      requires_signature: true,
-      created_at: '2024-02-14T12:00:00Z',
-      expires_at: '2025-02-14T12:00:00Z',
-      status: 'active',
-      viewed_at: null,
-      signed_at: null,
-    },
-    {
-      id: '2',
-      name: 'Performance Agreement',
-      description: 'Agreement for upcoming spring showcase',
-      file_url: '#',
-      requires_signature: true,
-      created_at: '2024-02-10T12:00:00Z',
-      expires_at: null,
-      status: 'active',
-      viewed_at: '2024-02-11T15:30:00Z',
-      signed_at: '2024-02-11T15:35:00Z',
-    },
-  ];
+  // Load the appropriate documents based on user role
+  const loadDocuments = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      if (profile?.role === 'owner') {
+        const documents = await fetchOwnerDocuments();
+        setOwnerDocuments(documents);
+      } else {
+        const documents = await fetchUserDocuments();
+        setUserDocuments(documents);
+      }
+    } catch (err) {
+      console.error('Error loading documents:', err);
+      setError('Failed to load documents. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // For owner
+  const fetchOwnerDocuments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('documents')
+        .select(`
+          *,
+          recipients:document_recipients(
+            id,
+            user_id,
+            viewed_at,
+            signed_at,
+            last_reminder_sent,
+            user:users(id, name, email)
+          )
+        `)
+        .eq('studio_id', profile?.studio?.id)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Transform data to match component expectations
+      const transformedData = data.map(doc => ({
+        ...doc,
+        recipients: doc.recipients.map(r => ({
+          id: r.id,
+          name: r.user?.name || 'Unknown',
+          email: r.user?.email || '',
+          viewed_at: r.viewed_at,
+          signed_at: r.signed_at,
+          last_reminder_sent: r.last_reminder_sent
+        }))
+      }));
+      
+      return transformedData;
+    } catch (err) {
+      console.error('Error fetching documents:', err);
+      return [];
+    }
+  };
+
+  // For users (teachers/parents)
+  const fetchUserDocuments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('document_recipients')
+        .select(`
+          id,
+          viewed_at,
+          signed_at,
+          document:documents(*)
+        `)
+        .eq('user_id', profile?.id);
+      
+      if (error) throw error;
+      
+      // Transform data to match component expectations
+      const transformedData = data.map(item => ({
+        id: item.document?.id || '',
+        name: item.document?.name || 'Unknown Document',
+        description: item.document?.description || '',
+        file_url: item.document?.file_url || '',
+        requires_signature: item.document?.requires_signature || false,
+        created_at: item.document?.created_at || new Date().toISOString(),
+        expires_at: item.document?.expires_at || null,
+        status: item.document?.status || 'active',
+        viewed_at: item.viewed_at,
+        signed_at: item.signed_at,
+        // Include recipient id for easier access when signing
+        recipient_id: item.id
+      }));
+      
+      return transformedData;
+    } catch (err) {
+      console.error('Error fetching documents:', err);
+      return [];
+    }
+  };
 
   const getStatusIcon = (doc: Document) => {
     if (doc.signed_at) {
@@ -124,6 +180,19 @@ export default function DocumentList() {
   const finalOwnerDocuments = filteredDocuments.filter(searchFilter);
   const finalUserDocuments = filteredUserDocuments.filter(searchFilter);
 
+  const handleDocumentUpdated = () => {
+    // Refresh documents when a document is updated or signed
+    loadDocuments();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary"></div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -140,6 +209,12 @@ export default function DocumentList() {
           </button>
         )}
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+          {error}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow">
         <div className="p-4 border-b">
@@ -189,7 +264,20 @@ export default function DocumentList() {
           </div>
         </div>
 
-        {profile?.role === 'owner' ? (
+        {(profile?.role === 'owner' ? finalOwnerDocuments : finalUserDocuments).length === 0 ? (
+          <div className="py-8 text-center text-gray-500">
+            <File className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+            <p>No documents found</p>
+            {profile?.role === 'owner' && (
+              <button
+                onClick={() => setShowUploadModal(true)}
+                className="mt-4 text-brand-primary hover:underline"
+              >
+                Upload your first document
+              </button>
+            )}
+          </div>
+        ) : profile?.role === 'owner' ? (
           <OwnerDocumentTable documents={finalOwnerDocuments} />
         ) : (
           <UserDocumentTable documents={finalUserDocuments} />
@@ -197,13 +285,19 @@ export default function DocumentList() {
       </div>
 
       {showUploadModal && (
-        <UploadDocumentModal onClose={() => setShowUploadModal(false)} />
+        <UploadDocumentModal 
+          onClose={() => setShowUploadModal(false)} 
+          onSuccess={handleDocumentUpdated}
+        />
       )}
 
       {selectedDocument && (
         <ViewDocumentModal
           document={selectedDocument}
-          onClose={() => setSelectedDocument(null)}
+          onClose={() => {
+            setSelectedDocument(null);
+            handleDocumentUpdated();
+          }}
         />
       )}
     </div>

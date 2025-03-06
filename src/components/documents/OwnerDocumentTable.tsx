@@ -30,11 +30,56 @@ export default function OwnerDocumentTable({ documents }: OwnerDocumentTableProp
 
   const sendReminder = async (documentId: string, recipientId: string) => {
     try {
-      // Mock sending reminder - replace with actual implementation
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 1. Get recipient details
+      const { data: recipient, error: recipientError } = await supabase
+        .from('document_recipients')
+        .select(`
+          id,
+          user:users(id, name, email)
+        `)
+        .eq('id', recipientId)
+        .single();
+  
+      if (recipientError) throw recipientError;
+  
+      // 2. Get document details
+      const { data: document, error: docError } = await supabase
+        .from('documents')
+        .select('id, name, requires_signature')
+        .eq('id', documentId)
+        .single();
+  
+      if (docError) throw docError;
+  
+      // 3. Update last reminder timestamp
+      const { error: updateError } = await supabase
+        .from('document_recipients')
+        .update({ last_reminder_sent: new Date().toISOString() })
+        .eq('id', recipientId);
+  
+      if (updateError) throw updateError;
+  
+      // 4. Send notification (integrate with your notification service)
+      const action = document.requires_signature ? 'sign' : 'view';
+      await notificationService.createNotification({
+        user_id: recipient.user.id,
+        studio_id: profile?.studio?.id,
+        type: 'document_reminder',
+        title: `Reminder: Please ${action} document`,
+        message: `You need to ${action} "${document.name}"`,
+        priority: 'high',
+        entity_id: documentId,
+        entity_type: 'document',
+        details: { documentName: document.name },
+        requires_action: true,
+        email_required: true
+      });
+  
+      // Success feedback
       alert('Reminder sent successfully');
     } catch (err) {
       console.error('Error sending reminder:', err);
+      alert('Failed to send reminder');
     }
   };
 
