@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { UserPlus, Shield, User, X } from "lucide-react";
+import { UserPlus, Shield, User, X, Trash2 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
 import SearchableDropdown from "../SearchableDropdown";
@@ -16,6 +16,7 @@ interface Member {
 		email: string;
 		name: string;
 	};
+	user_id?: string; // Added to support both formats
 }
 
 export default function ChannelMembers({
@@ -40,15 +41,17 @@ export default function ChannelMembers({
 
 	useEffect(() => {
 		fetchMembers();
-	}, []);
+	}, [channelId]);
 
 	const fetchMembers = async () => {
 		try {
+			setLoading(true);
 			const { data, error: fetchError } = await supabase
 				.from("channel_members")
 				.select(
 					`
 					role,
+					user_id,
 					user: users(
 						id,
 						email,
@@ -59,7 +62,7 @@ export default function ChannelMembers({
 				.eq("channel_id", channelId);
 
 			if (fetchError) throw fetchError;
-			setMembers(data);
+			setMembers(data || []);
 
 			// Fetch available users
 			const { data: classData } = await supabase
@@ -69,6 +72,9 @@ export default function ChannelMembers({
 				.single();
 
 			if (classData) {
+				const memberIds = data ? data.map((m) => m.user_id || m.user?.id).filter(Boolean) : [];
+				const idList = memberIds.length > 0 ? `(${memberIds.join(",")})` : '(0)';
+				
 				const { data: users } = await supabase
 					.from("users")
 					.select(
@@ -78,7 +84,8 @@ export default function ChannelMembers({
 						name
 					`
 					)
-					.not("id", "in", `(${(data || []).map((m) => m.user.id).join(",")})`);
+					.not("id", "in", idList)
+					.eq("studio_id", classData.class?.studio_id);
 
 				setAvailableUsers(
 					(users || []).map((user) => ({
@@ -156,12 +163,12 @@ export default function ChannelMembers({
 	};
 
 	const getMemberName = (member: Member) => {
-		return member.user.name || "Unknown";
+		return member.user?.name || "Unknown";
 	};
 
 	if (loading) {
 		return (
-			<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+			<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
 				<div className="bg-white rounded-lg p-6 w-full max-w-2xl">
 					<div className="animate-pulse space-y-4">
 						<div className="h-8 bg-gray-200 rounded w-1/2" />
@@ -177,7 +184,7 @@ export default function ChannelMembers({
 	}
 
 	return (
-		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
 			<div className="bg-white rounded-lg p-6 w-full max-w-2xl">
 				<div className="flex justify-between items-center mb-6">
 					<h2 className="text-xl font-semibold text-brand-primary">
@@ -257,7 +264,7 @@ export default function ChannelMembers({
 				<div className="space-y-4">
 					{members.map((member) => (
 						<div
-							key={member.id}
+							key={member.user?.id || member.user_id}
 							className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
 						>
 							<div className="flex items-center">
@@ -270,7 +277,7 @@ export default function ChannelMembers({
 									<p className="font-medium text-gray-900">
 										{getMemberName(member)}
 									</p>
-									<p className="text-sm text-gray-500">{member.user.email}</p>
+									<p className="text-sm text-gray-500">{member.user?.email}</p>
 								</div>
 							</div>
 
@@ -280,7 +287,7 @@ export default function ChannelMembers({
 										value={member.role}
 										onChange={(e) =>
 											handleRoleChange(
-												member.user_id,
+												member.user_id || member.user?.id || "",
 												e.target.value as "admin" | "member"
 											)
 										}
@@ -290,7 +297,7 @@ export default function ChannelMembers({
 										<option value="admin">Admin</option>
 									</select>
 									<button
-										onClick={() => handleRemoveMember(member.user_id)}
+										onClick={() => handleRemoveMember(member.user_id || member.user?.id || "")}
 										className="p-1 text-gray-400 hover:text-red-500"
 									>
 										<Trash2 className="w-5 h-5" />

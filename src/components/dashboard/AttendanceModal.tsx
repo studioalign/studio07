@@ -1,6 +1,10 @@
+// src/components/dashboard/AttendanceModal.tsx
 import React, { useState, useEffect } from 'react';
 import { X, Save } from 'lucide-react';
 import StudentDetailsModal from '../StudentDetailsModal';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { notificationService } from '../../services/notificationService';
 
 import {
   fetchInstanceStudents,
@@ -77,6 +81,7 @@ export default function AttendanceModal({
   date, 
   onClose 
 }: AttendanceModalProps) {
+  const { profile } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
@@ -180,6 +185,41 @@ export default function AttendanceModal({
     }));
   };
 
+  // Function to check if student has consecutive unauthorized absences
+  const checkConsecutiveAbsences = async (studentId: string, classStudentId: string) => {
+    if (!profile?.studio?.id) return;
+    
+    try {
+      // Get recent attendance records for this student in this class
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('class_student_id', classStudentId)
+        .order('created_at', { ascending: false })
+        .limit(3); // Get last 3 attendance records
+        
+      if (error || !data || data.length < 2) return;
+      
+      // Check if the last two records are unauthorized absences
+      const consecutiveAbsences = data.filter(record => 
+        record.status === 'unauthorised'
+      );
+      
+      if (consecutiveAbsences.length >= 2) {
+        // Notify about consecutive absences
+        await notificationService.notifyConsecutiveAbsences(
+          profile.studio.id,
+          students.find(s => s.id === studentId)?.name || 'Student',
+          studentId,
+          className,
+          consecutiveAbsences.length
+        );
+      }
+    } catch (err) {
+      console.error('Error checking consecutive absences:', err);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
 
@@ -197,6 +237,47 @@ export default function AttendanceModal({
         students.map(s => s.class_student_id),
         attendanceRecords
       );
+
+      // Process notifications for unauthorized absences
+      const unauthorizedAbsences = students.filter(
+        student => student.attendance?.status === 'unauthorised'
+      );
+
+      if (unauthorizedAbsences.length > 0 && profile?.studio?.id) {
+        // For each unauthorized absence, notify parents
+        for (const student of unauthorizedAbsences) {
+          try {
+            // Get parent ID directly from the student record
+            const { data: studentData, error: studentError } = await supabase
+              .from('students')
+              .select('parent_id')
+              .eq('id', student.id)
+              .single();
+              
+            if (studentError) {
+              console.error('Error fetching student parent:', studentError);
+              continue;
+            }
+            
+            // Only continue if we have a parent ID
+            if (studentData?.parent_id) {
+              // Send notification to the parent
+              await notificationService.notifyUnauthorizedAbsence(
+                studentData.parent_id,
+                profile.studio.id,
+                student.name,
+                className,
+                new Date(selectedDate).toLocaleDateString()
+              );
+            }
+            
+            // Check for consecutive absences
+            await checkConsecutiveAbsences(student.id, student.class_student_id);
+          } catch (err) {
+            console.error('Error processing notification for student:', student.id, err);
+          }
+        }
+      }
 
       onClose();
     } catch (err) {

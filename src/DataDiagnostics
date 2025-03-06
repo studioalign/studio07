@@ -1,0 +1,47 @@
+import React, { useEffect } from 'react';
+import { useAuth } from './contexts/AuthContext';
+import { useMessaging } from './contexts/MessagingContext';
+import { useChannels } from './hooks/useChannels';
+
+export function DataDiagnostics() {
+  const { user, profile, loading: authLoading } = useAuth();
+  const { 
+    conversations, 
+    messages, 
+    loading: messagingLoading, 
+    error: messagingError 
+  } = useMessaging();
+  const { 
+    channels, 
+    loading: channelsLoading, 
+    error: channelsError 
+  } = useChannels();
+
+  useEffect(() => {
+    console.group('Data Diagnostics');
+    console.log('Auth Loading:', authLoading);
+    console.log('User:', user);
+    console.log('Profile:', profile);
+    console.log('Messaging Loading:', messagingLoading);
+    console.log('Messaging Error:', messagingError);
+    console.log('Conversations:', conversations);
+    console.log('Messages:', messages);
+    console.log('Channels Loading:', channelsLoading);
+    console.log('Channels Error:', channelsError);
+    console.log('Channels:', channels);
+    console.groupEnd();
+  }, [
+    authLoading, 
+    user, 
+    profile, 
+    messagingLoading, 
+    messagingError, 
+    conversations, 
+    messages, 
+    channelsLoading, 
+    channelsError, 
+    channels
+  ]);
+
+  return null; // This is just for logging, doesn't render anything
+}

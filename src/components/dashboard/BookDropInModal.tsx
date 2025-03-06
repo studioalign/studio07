@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { X, CreditCard } from 'lucide-react';
 import SearchableDropdown from '../SearchableDropdown';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { notificationService } from '../../services/notificationService';
 
 interface BookDropInModalProps {
   classInfo: {
@@ -12,6 +15,7 @@ interface BookDropInModalProps {
     drop_in_price: number;
     capacity: number;
     booked_count: number;
+    teacher_id: string;
   };
   students: { id: string; label: string }[];
   onClose: () => void;
@@ -19,30 +23,88 @@ interface BookDropInModalProps {
 }
 
 export default function BookDropInModal({ classInfo, students, onClose, onSuccess }: BookDropInModalProps) {
+  const { profile } = useAuth();
   const [selectedStudent, setSelectedStudent] = useState<{ id: string; label: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedStudent) return;
+  // Modify your BookDropInModal.tsx handleSubmit function:
 
-    setIsSubmitting(true);
-    setError(null);
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!selectedStudent || !profile?.studio?.id) return;
 
-    try {
-      // Mock success - in real implementation, this would:
-      // 1. Create a booking record
-      // 2. Process payment
-      // 3. Add student to class attendance
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      onSuccess();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to book class');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  setIsSubmitting(true);
+  setError(null);
+
+  try {
+    // In a real implementation, you would:
+    // 1. Create a booking record in the database
+    // 2. Process payment
+    // 3. Add student to class attendance
+    
+    // For now, we'll just add a mock booking
+    const spotsRemaining = classInfo.capacity - classInfo.booked_count;
+    
+    // Mock booking success
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Success first - close the modal and refresh the data
+    onSuccess();
+    
+    // Send notifications in the background
+    setTimeout(() => {
+      try {
+        // 1. Notify the teacher about the new student
+        notificationService.notifyStudentAddedToClass(
+          profile.studio.id,
+          classInfo.teacher_id,
+          selectedStudent.label,
+          selectedStudent.id,
+          classInfo.name,
+          classInfo.id
+        ).catch(err => console.error("Teacher notification failed:", err));
+        
+        // 2. If this was the last spot, notify studio owners that capacity is reached
+        if (spotsRemaining === 1) {
+          notificationService.notifyClassCapacityReached(
+            profile.studio.id,
+            classInfo.name,
+            classInfo.id
+          ).catch(err => console.error("Capacity notification failed:", err));
+        }
+        
+        // 3. Get the parent ID to notify them about payment confirmation
+        supabase
+          .from("students")
+          .select("parent_id")
+          .eq("id", selectedStudent.id)
+          .single()
+          .then(({ data: studentData, error: studentError }) => {
+            if (!studentError && studentData?.parent_id) {
+              // Send payment confirmation to parent
+              notificationService.notifyPaymentConfirmation(
+                studentData.parent_id,
+                profile.studio.id,
+                classInfo.drop_in_price,
+                classInfo.id // Using class ID in place of invoice ID for this context
+              ).catch(err => console.error("Payment confirmation notification failed:", err));
+            }
+          })
+          .catch(err => console.error("Error getting parent ID:", err));
+        
+        console.log("Drop-in booking notifications initiated");
+      } catch (notificationErr) {
+        console.error("Error initiating drop-in booking notifications:", notificationErr);
+        // Notifications failed but booking succeeded
+      }
+    }, 100);
+    
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Failed to book class');
+    setIsSubmitting(false);
+  }
+};
 
   const spotsRemaining = classInfo.capacity - classInfo.booked_count;
 
@@ -112,4 +174,4 @@ export default function BookDropInModal({ classInfo, students, onClose, onSucces
       </div>
     </div>
   );
-} 
+}

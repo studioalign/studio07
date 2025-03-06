@@ -423,31 +423,16 @@ export default function ParentInvoices() {
 									</div>
 									<div className="text-right">
 										<div className="space-y-1">
-											{invoice.discount_value > 0 && (
-												<div className="flex items-center justify-end space-x-2">
-													<p className="text-sm text-gray-500 line-through">
-														{formatCurrency(invoice.total, currency)}
-													</p>
-													<span className="text-sm text-green-600">
-														{invoice.discount_type === "percentage"
-															? `${invoice.discount_value}% off`
-															: `${formatCurrency(
-																	invoice.discount_value,
-																	currency
-															  )} off`}
-													</span>
-												</div>
+										{invoice.discount_value > 0 && (
+											<span className="text-sm text-green-600">
+												{invoice.discount_type === "percentage"
+												? `${invoice.discount_value}% off`
+												: `${formatCurrency(invoice.discount_value, currency)} off`}
+												{invoice.discount_reason && ` - ${invoice.discount_reason}`}
+											</span>
 											)}
 											<p className="text-2xl font-bold text-brand-primary">
-												{formatCurrency(
-													invoice.discount_value
-														? invoice.discount_type === "percentage"
-															? invoice.total *
-															  (1 - invoice.discount_value / 100)
-															: invoice.total - invoice.discount_value
-														: invoice.total,
-													currency
-												)}
+											{formatCurrency(invoice.total, currency)}
 											</p>
 											{invoice.discount_reason && (
 												<p className="text-sm text-gray-500">

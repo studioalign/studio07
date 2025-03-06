@@ -6,6 +6,7 @@ import { useData } from "../../contexts/DataContext";
 import MultiSelectDropdown from "../MultiSelectDropdown";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
+import { notificationService } from "../../services/notificationService";
 
 interface Student {
 	id: string;
@@ -43,9 +44,7 @@ export default function AddClassForm({
 	const [isDropIn, setIsDropIn] = useState(false);
 	const [capacity, setCapacity] = useState("");
 	const [dropInPrice, setDropInPrice] = useState("");
-	const [selectedStudents, setSelectedStudents] = useState<
-		{ id: string; label: string }[]
-	>([]);
+	const [selectedStudents, setSelectedStudents] = useState<{ id: string; label: string }[]>([]);	
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -72,6 +71,8 @@ export default function AddClassForm({
 
 		fetchStudents();
 	}, [profile?.studio?.id]);
+
+	// Modify your AddClassForm.tsx handleSubmit function:
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -209,8 +210,8 @@ export default function AddClassForm({
 			}
 
 			// Add students to the class if any are selected
-			if (selectedStudents.length > 0 && classIds) {
-				classIds.forEach(async (classId) => {
+			if (selectedStudents.length > 0 && classIds.length > 0) {
+				for (const classId of classIds) {
 					const { error: studentsError } = await supabase
 						.from("class_students")
 						.insert(
@@ -220,17 +221,70 @@ export default function AddClassForm({
 							}))
 						);
 					if (studentsError) throw studentsError;
-				});
+				}
 			}
 
+			// Class creation successful - call success first
 			onSuccess();
+
+			// Send notifications in the background
+			if (classIds.length > 0) {
+				// Don't await these notifications - let them happen in the background
+				setTimeout(() => {
+					try {
+						// 1. Notify the teacher about the assigned class
+						const formattedStartTime = new Date(`2000-01-01T${startTime}`).toLocaleTimeString([], {
+							hour: '2-digit',
+							minute: '2-digit'
+						});
+						
+						const scheduleDetails = {
+							startTime,
+							endTime,
+							dayOfWeek: isRecurring ? dayOfWeek : null,
+							date: !isRecurring ? date : null,
+							endDate: isRecurring ? endDate : null,
+							isRecurring,
+							location: selectedRoom?.label
+						};
+						
+						// Send notification to teacher about class assignment
+						notificationService.notifyClassAssigned(
+							selectedTeacher.id,
+							profile.studio.id,
+							name,
+							classIds[0], // Use the first class ID
+							scheduleDetails
+						).catch(err => console.error("Teacher notification failed:", err));
+						
+						console.log("Teacher notification initiated for class assignment");
+
+						// 2. If students were added, notify the teacher about each student
+						if (selectedStudents.length > 0) {
+							for (const student of selectedStudents) {
+								notificationService.notifyStudentAddedToClass(
+									profile.studio.id,
+									selectedTeacher.id,
+									student.label,
+									student.id,
+									name,
+									classIds[0] // Use the first class ID
+								).catch(err => console.error("Student notification failed:", err));
+							}
+							console.log(`${selectedStudents.length} student notifications initiated`);
+						}
+					} catch (notificationErr) {
+						console.error("Error initiating notifications:", notificationErr);
+						// Notifications failed but class creation succeeded
+					}
+				}, 100);
+			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to create class");
 		} finally {
 			setIsSubmitting(false);
 		}
 	};
-
 	return (
 		<form onSubmit={handleSubmit} className="space-y-4">
 			<FormInput

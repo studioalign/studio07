@@ -42,14 +42,7 @@ const CheckoutForm = ({ invoice, onClose }: ProcessPaymentModalProps) => {
 	const { currency } = useLocalization();
 
 	const calculateDiscountedAmount = () => {
-		if (!invoice.discount_value) return invoice.total;
-
-		if (invoice.discount_type === "percentage") {
-			return invoice.total * (1 - invoice.discount_value / 100);
-		} else if (invoice.discount_type === "fixed") {
-			return invoice.total - invoice.discount_value;
-		}
-		return invoice.total;
+		return invoice.total; // Use the total as-is from the database
 	};
 
 	const finalAmount = calculateDiscountedAmount();
@@ -122,14 +115,12 @@ const CheckoutForm = ({ invoice, onClose }: ProcessPaymentModalProps) => {
 						Invoice #{invoice.stripe_invoice_id?.slice(-6) || "N/A"}
 					</p>
 					{invoice.discount_value > 0 && (
-						<div className="flex items-center space-x-2">
-							<p className="text-sm text-gray-500 line-through">
-								{formatCurrency(invoice.total, currency)}
-							</p>
+						<div className="space-y-1">
 							<span className="text-sm text-green-600">
 								{invoice.discount_type === "percentage"
 									? `${invoice.discount_value}% off`
 									: `${formatCurrency(invoice.discount_value, currency)} off`}
+								{invoice.discount_reason && ` - ${invoice.discount_reason}`}
 							</span>
 						</div>
 					)}

@@ -1,8 +1,10 @@
+// src/components/AddStudentForm.tsx
 import React, { useState } from "react";
 import { UserPlus } from "lucide-react";
 import FormInput from "./FormInput";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
+import { notificationService } from "../services/notificationService";
 
 interface AddStudentFormProps {
   onSuccess: () => void;
@@ -131,6 +133,48 @@ export default function AddStudentForm({
             ]);
 
           if (contactError) throw contactError;
+        }
+        
+        // Step 3: Send notification to studio owners about new student enrollment
+        try {
+          console.log("Sending new student enrollment notification");
+          
+          // Get studio owners
+          const { data: owners, error: ownersError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('studio_id', userData.studio_id)
+            .eq('role', 'owner');
+          
+          if (ownersError) {
+            console.error("Error fetching studio owners:", ownersError);
+          } else if (owners && owners.length > 0) {
+            // Get parent name for the notification
+            const { data: parentData } = await supabase
+              .from('users')
+              .select('name')
+              .eq('id', profile.id)
+              .single();
+              
+            const parentName = parentData?.name || 'A parent';
+            
+            // Send notification to each owner
+            for (const owner of owners) {
+              await notificationService.notifyStudentEnrollment(
+                userData.studio_id,
+                name, // Student name
+                "New enrollment", // No specific class yet
+                studentData.id,
+                "" // No specific class ID yet
+              );
+              console.log("Notification sent to owner:", owner.id);
+            }
+          } else {
+            console.log("No studio owners found for notification");
+          }
+        } catch (notificationErr) {
+          console.error("Error sending enrollment notification:", notificationErr);
+          // Continue even if notification fails
         }
       }
 

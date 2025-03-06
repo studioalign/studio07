@@ -257,7 +257,6 @@ export default function InvoiceDetailsModal({
 													` (${invoice.discount_reason})`}
 											</td>
 											<td className="px-6 py-4 text-sm text-green-600 text-right">
-												-
 												{invoice.discount_type === "percentage"
 													? `${invoice.discount_value}%`
 													: formatCurrency(invoice.discount_value, currency)}
@@ -270,14 +269,7 @@ export default function InvoiceDetailsModal({
 											Final Amount
 										</td>
 										<td className="px-6 py-4 text-lg font-bold text-brand-primary text-right">
-											{formatCurrency(
-												invoice.discount_value && invoice.discount_type
-													? invoice.discount_type === "percentage"
-														? invoice.total * (1 - invoice.discount_value / 100)
-														: invoice.total - invoice.discount_value
-													: invoice.total,
-												currency
-											)}
+											{formatCurrency(invoice.total, currency)}
 										</td>
 									</tr>
 								</tfoot>
@@ -307,14 +299,7 @@ export default function InvoiceDetailsModal({
 								>
 									<CreditCard className="w-5 h-5 mr-3" />
 									Pay{" "}
-									{formatCurrency(
-										invoice.discount_value && invoice.discount_type
-											? invoice.discount_type === "percentage"
-												? invoice.total * (1 - invoice.discount_value / 100)
-												: invoice.total - invoice.discount_value
-											: invoice.total,
-										currency
-									)}
+									{formatCurrency(invoice.total, currency)}
 								</button>
 							) : (
 								<div className="text-right">

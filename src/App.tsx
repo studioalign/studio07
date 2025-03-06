@@ -12,7 +12,7 @@ import Plans from "./components/payments/Plans";
 import Invoices from "./components/payments/Invoices";
 import ParentInvoices from "./components/payments/ParentInvoices";
 import MessagesLayout from "./components/messages/MessagesLayout";
-import Overview from "./components/dashboard/Overview";
+import DashboardOverview from "./components/dashboard/DashboardOverview"; // Updated import
 import MyStudents from "./components/dashboard/MyStudents";
 import ChannelLayout from "./components/channels/ChannelLayout";
 import NotificationsPage from "./components/notifications/NotificationsPage";
@@ -26,6 +26,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { DataProvider } from "./contexts/DataContext";
 import { MessagingProvider } from "./contexts/MessagingContext";
 import { LocalizationProvider } from "./contexts/LocalizationContext";
+import { DashboardProvider } from "./contexts/DashboardContext"; // Import the DashboardProvider
 import PrivateRoute from "./components/PrivateRoute";
 import { useAuth } from "./contexts/AuthContext";
 import PaymentSettings from "./pages/dashboard/payment-settings";
@@ -74,12 +75,14 @@ const DashboardRoutes = () => {
 				element={
 					<PrivateRoute requiredRole="owner,teacher,parent">
 						<DataProvider>
-							<DashboardLayout />
+							<DashboardProvider> {/* Add DashboardProvider here */}
+								<DashboardLayout />
+							</DashboardProvider>
 						</DataProvider>
 					</PrivateRoute>
 				}
 			>
-				<Route index element={<Overview />} />
+				<Route index element={<DashboardOverview />} /> {/* Use the new DashboardOverview component */}
 
 				{/* Common routes for all authenticated users */}
 				<Route path="classes" element={<Classes />} />
