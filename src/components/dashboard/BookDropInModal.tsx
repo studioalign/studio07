@@ -1,9 +1,14 @@
-import React, { useState } from 'react';
-import { X, CreditCard } from 'lucide-react';
+// src/components/dashboard/BookDropInModal.tsx
+
+import React, { useState, useEffect } from 'react';
+import { X, CreditCard, Plus, AlertCircle, CheckCircle } from 'lucide-react';
 import SearchableDropdown from '../SearchableDropdown';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { notificationService } from '../../services/notificationService';
+import { usePaymentMethods } from '../../hooks/usePaymentMethods';
+import { bookDropInClass } from '../../utils/bookingUtils';
+import { formatCurrency } from '../../utils/formatters';
+import AddPaymentMethodModal from '../payments/AddPaymentMethodModal';
 
 interface BookDropInModalProps {
   classInfo: {
@@ -24,89 +29,84 @@ interface BookDropInModalProps {
 
 export default function BookDropInModal({ classInfo, students, onClose, onSuccess }: BookDropInModalProps) {
   const { profile } = useAuth();
+  const { paymentMethods, loading: loadingPaymentMethods, refresh: refreshPaymentMethods } = usePaymentMethods();
   const [selectedStudent, setSelectedStudent] = useState<{ id: string; label: string } | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bookingStatus, setBookingStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
+  const [showAddPaymentMethod, setShowAddPaymentMethod] = useState(false);
 
-  // Modify your BookDropInModal.tsx handleSubmit function:
-
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!selectedStudent || !profile?.studio?.id) return;
-
-  setIsSubmitting(true);
-  setError(null);
-
-  try {
-    // In a real implementation, you would:
-    // 1. Create a booking record in the database
-    // 2. Process payment
-    // 3. Add student to class attendance
-    
-    // For now, we'll just add a mock booking
-    const spotsRemaining = classInfo.capacity - classInfo.booked_count;
-    
-    // Mock booking success
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Success first - close the modal and refresh the data
-    onSuccess();
-    
-    // Send notifications in the background
-    setTimeout(() => {
-      try {
-        // 1. Notify the teacher about the new student
-        notificationService.notifyStudentAddedToClass(
-          profile.studio.id,
-          classInfo.teacher_id,
-          selectedStudent.label,
-          selectedStudent.id,
-          classInfo.name,
-          classInfo.id
-        ).catch(err => console.error("Teacher notification failed:", err));
-        
-        // 2. If this was the last spot, notify studio owners that capacity is reached
-        if (spotsRemaining === 1) {
-          notificationService.notifyClassCapacityReached(
-            profile.studio.id,
-            classInfo.name,
-            classInfo.id
-          ).catch(err => console.error("Capacity notification failed:", err));
-        }
-        
-        // 3. Get the parent ID to notify them about payment confirmation
-        supabase
-          .from("students")
-          .select("parent_id")
-          .eq("id", selectedStudent.id)
-          .single()
-          .then(({ data: studentData, error: studentError }) => {
-            if (!studentError && studentData?.parent_id) {
-              // Send payment confirmation to parent
-              notificationService.notifyPaymentConfirmation(
-                studentData.parent_id,
-                profile.studio.id,
-                classInfo.drop_in_price,
-                classInfo.id // Using class ID in place of invoice ID for this context
-              ).catch(err => console.error("Payment confirmation notification failed:", err));
-            }
-          })
-          .catch(err => console.error("Error getting parent ID:", err));
-        
-        console.log("Drop-in booking notifications initiated");
-      } catch (notificationErr) {
-        console.error("Error initiating drop-in booking notifications:", notificationErr);
-        // Notifications failed but booking succeeded
+  // Use default payment method if available
+  useEffect(() => {
+    if (paymentMethods.length > 0 && !selectedPaymentMethod) {
+      const defaultMethod = paymentMethods.find(method => method.is_default);
+      if (defaultMethod) {
+        setSelectedPaymentMethod(defaultMethod.id);
+      } else {
+        setSelectedPaymentMethod(paymentMethods[0].id);
       }
-    }, 100);
-    
-  } catch (err) {
-    setError(err instanceof Error ? err.message : 'Failed to book class');
-    setIsSubmitting(false);
-  }
-};
+    }
+  }, [paymentMethods, selectedPaymentMethod]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudent || !selectedPaymentMethod || !profile?.studio?.id) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    setBookingStatus('processing');
+
+    try {
+      const result = await bookDropInClass(
+        classInfo.id,
+        selectedStudent.id,
+        selectedPaymentMethod
+      );
+
+      if (!result.success) {
+        setError(result.error || 'Failed to book class');
+        setBookingStatus('error');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Success!
+      setBookingStatus('success');
+      
+      // Wait briefly to show success message before closing
+      setTimeout(() => {
+        onSuccess();
+      }, 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to book class');
+      setBookingStatus('error');
+      setIsSubmitting(false);
+    }
+  };
 
   const spotsRemaining = classInfo.capacity - classInfo.booked_count;
+
+  // Success state
+  if (bookingStatus === 'success') {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-8 w-full max-w-md text-center">
+          <CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-4" />
+          <h2 className="text-2xl font-bold text-green-700 mb-2">Booking Successful!</h2>
+          <p className="text-gray-600 mb-6">
+            Your drop-in class has been booked and payment processed successfully.
+          </p>
+          <button
+            onClick={onSuccess}
+            className="px-6 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -129,7 +129,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           </p>
           <div className="mt-2 flex items-center justify-between">
             <span className="text-brand-primary font-medium">
-              ${classInfo.drop_in_price.toFixed(2)}
+              {formatCurrency(classInfo.drop_in_price, profile?.studio?.currency || 'USD')}
             </span>
             <span className={`text-sm ${
               spotsRemaining <= 3 ? 'text-red-600' : 'text-gray-600'
@@ -149,29 +149,130 @@ const handleSubmit = async (e: React.FormEvent) => {
             required
           />
 
+          {/* Payment Method Selection */}
+          <div>
+            <label className="block text-sm font-medium text-brand-secondary-400 mb-2">
+              Payment Method
+            </label>
+            
+            {loadingPaymentMethods ? (
+              <div className="animate-pulse space-y-2">
+                <div className="h-14 bg-gray-200 rounded-md" />
+                <div className="h-14 bg-gray-200 rounded-md" />
+              </div>
+            ) : paymentMethods.length > 0 ? (
+              <div className="space-y-2">
+                {paymentMethods.map(method => (
+                  <div 
+                    key={method.id}
+                    className={`p-3 border rounded-md cursor-pointer ${
+                      selectedPaymentMethod === method.id ? 'border-brand-primary bg-brand-secondary-100/10' : 'border-gray-300'
+                    }`}
+                    onClick={() => setSelectedPaymentMethod(method.id)}
+                  >
+                    <div className="flex items-center">
+                      <CreditCard className="w-5 h-5 mr-2 text-gray-500" />
+                      <div>
+                        <p className="font-medium">
+                          {method.type === 'card' ? `••••${method.last_four}` : `Bank account ending in ${method.last_four}`}
+                        </p>
+                        {method.type === 'card' && method.expiry_month && (
+                          <p className="text-sm text-gray-500">
+                            Expires {method.expiry_month}/{method.expiry_year}
+                          </p>
+                        )}
+                      </div>
+                      {method.is_default && (
+                        <span className="ml-auto text-xs bg-gray-100 px-2 py-1 rounded-full">
+                          Default
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                
+                <button
+                  type="button"
+                  onClick={() => setShowAddPaymentMethod(true)}
+                  className="text-brand-primary hover:underline text-sm flex items-center"
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Add new payment method
+                </button>
+              </div>
+            ) : (
+              <div className="text-center py-4 border rounded-md">
+                <p className="text-gray-500 mb-2">No payment methods found</p>
+                <button
+                  type="button"
+                  onClick={() => setShowAddPaymentMethod(true)}
+                  className="px-4 py-2 bg-brand-primary text-white rounded-md"
+                >
+                  Add Payment Method
+                </button>
+              </div>
+            )}
+          </div>
+
           {error && (
-            <p className="text-red-500 text-sm">{error}</p>
+            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-md flex items-start">
+              <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
           )}
+
+          <div className="bg-gray-50 p-4 rounded-md mt-4">
+            <div className="flex justify-between text-sm text-gray-600 mb-2">
+              <span>Drop-in class fee</span>
+              <span>{formatCurrency(classInfo.drop_in_price, profile?.studio?.currency || 'USD')}</span>
+            </div>
+            <div className="flex justify-between font-medium text-gray-900 border-t pt-2">
+              <span>Total</span>
+              <span>{formatCurrency(classInfo.drop_in_price, profile?.studio?.currency || 'USD')}</span>
+            </div>
+          </div>
 
           <div className="flex justify-end space-x-3 pt-4">
             <button
               type="button"
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+              disabled={isSubmitting}
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !selectedStudent || spotsRemaining === 0}
+              disabled={isSubmitting || !selectedStudent || !selectedPaymentMethod || spotsRemaining === 0}
               className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 disabled:bg-gray-400"
             >
-              <CreditCard className="w-4 h-4 mr-2" />
-              {isSubmitting ? 'Processing...' : `Pay $${classInfo.drop_in_price.toFixed(2)}`}
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-opacity-50 border-t-transparent rounded-full animate-spin mr-2"></div>
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  Pay {formatCurrency(classInfo.drop_in_price, profile?.studio?.currency || 'USD')}
+                </>
+              )}
             </button>
           </div>
         </form>
       </div>
+
+      {showAddPaymentMethod && (
+        <AddPaymentMethodModal
+          onClose={() => setShowAddPaymentMethod(false)}
+          onSuccess={() => {
+            setShowAddPaymentMethod(false);
+            // Refresh payment methods
+            if (refreshPaymentMethods) {
+              refreshPaymentMethods();
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

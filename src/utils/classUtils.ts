@@ -38,3 +38,27 @@ export async function getEnrolledStudents(classId: string, userId: string): Prom
     return [];
   }
 }
+
+/**
+ * Gets the number of available spots for a drop-in class
+ */
+export async function getAvailableDropInSpots(classId: string): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from('classes')
+      .select('capacity, booked_count')
+      .eq('id', classId)
+      .single();
+      
+    if (error) throw error;
+    
+    if (!data) {
+      throw new Error('Class not found');
+    }
+    
+    return Math.max(0, data.capacity - (data.booked_count || 0));
+  } catch (err) {
+    console.error('Error getting available spots:', err);
+    throw err;
+  }
+}
