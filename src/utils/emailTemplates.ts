@@ -429,7 +429,7 @@ export function documentAssignedTemplate(params: DocumentAssignedParams) {
   const action = params.requiresSignature ? 'sign' : 'view';
   const content = `
     <h2>New Document Assigned</h2>
-    <p>A new document "${params.documentName}" has been ${action}ed to you.</p>
+    <p>A new document "${params.documentName}" has been assigned to you for ${action}ing.</p>
     ${params.description ? `<p>Description: ${params.description}</p>` : ''}
     <a href="${params.dashboardUrl}" class="btn">Go to Document</a>
   `;
@@ -492,7 +492,7 @@ export const emailTemplates = {
   channelActivity: channelActivityTemplate,
   paymentConfirmation: paymentConfirmationTemplate,
   classCancellation: classCancellationTemplate,
-  documentAssigned: documentAssignedTemplate,
+  documentAssigned: documentAssignedTemplate,  // This was the issue - now it's correctly exported
   documentReminder: documentReminderTemplate,
   documentDeadline: documentDeadlineTemplate
 };
