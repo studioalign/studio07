@@ -71,7 +71,7 @@ exports.handler = async function(event, context) {
       to,
       from: {
         email: 'noreply@studioalignpro.com',
-        name: 'Studio Align Pro'
+        name: 'StudioAlign'
       },
       subject,
       html
