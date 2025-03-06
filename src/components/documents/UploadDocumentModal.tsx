@@ -5,6 +5,7 @@ import { getStudioUsersByRole } from "../../utils/messagingUtils";
 import FormInput from "../FormInput";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from '../../lib/supabase';
+import { notificationService } from '../../services/notificationService';
 
 interface UploadDocumentModalProps {
 	onClose: () => void;
