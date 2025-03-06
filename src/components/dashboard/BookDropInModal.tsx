@@ -40,7 +40,7 @@ export default function BookDropInModal({ classInfo, students, onClose, onSucces
   // Use default payment method if available
   useEffect(() => {
     if (paymentMethods.length > 0 && !selectedPaymentMethod) {
-      const defaultMethod = paymentMethods.find(method => method.is_default);
+        const defaultMethod = paymentMethods.find(method => method.is_default);
       if (defaultMethod) {
         setSelectedPaymentMethod(defaultMethod.id);
       } else {

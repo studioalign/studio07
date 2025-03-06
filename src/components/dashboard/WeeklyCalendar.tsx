@@ -9,6 +9,8 @@ import {
     isSameDay,
 } from "date-fns";
 import { Edit2, Trash2 } from "lucide-react";
+import { formatCurrency } from "../../utils/formatters";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface ClassInstance {
     id: string;
@@ -48,8 +50,10 @@ export default function WeeklyCalendar({
     onClassClick,
     onEdit,
     onDelete,
+    onBookDropIn,
     userRole,
 }: WeeklyCalendarProps) {
+    const { profile } = useAuth();
     const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
 
     // Memoize time formatting to prevent recreation
@@ -163,18 +167,16 @@ export default function WeeklyCalendar({
                                                 {classItem.is_drop_in && (
                                                     <div className="mt-2 flex items-center justify-between">
                                                         <span className="text-brand-primary font-medium">
-                                                            ${classItem.drop_in_price?.toFixed(2)} per class
+                                                        {formatCurrency(classItem.drop_in_price, profile?.studio?.currency || 'USD')} per class
                                                         </span>
                                                         <span
                                                             className={`text-sm ${
-                                                                classItem.capacity! - classItem.booked_count <=
-                                                                3
+                                                                (classItem.capacity || 0) - (classItem.booked_count || 0) <= 3
                                                                     ? "text-red-600"
                                                                     : "text-gray-600"
                                                             }`}
                                                         >
-                                                            {classItem.capacity! - classItem.booked_count}{" "}
-                                                            spots left
+                                                            {(classItem.capacity || 0) - (classItem.booked_count || 0)} spots left
                                                         </span>
                                                     </div>
                                                 )}

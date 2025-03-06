@@ -11,15 +11,18 @@ import { createSetupIntent, addStripePaymentMethod } from '../../utils/stripeUti
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
-// Initialize Stripe
-const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || '');
+// Initialize Stripe with a safe fallback for browser environments
+// Using a direct string as fallback instead of process.env
+const STRIPE_PUBLISHABLE_KEY = import.meta.env?.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_your_fallback_key';
+const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
 
 interface AddPaymentMethodModalProps {
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
 // Separate the form component to use inside Elements
-function CardForm({ onClose }: AddPaymentMethodModalProps) {
+function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
   const { addPaymentMethod, refresh } = usePaymentMethods();
   const { profile } = useAuth();
   const stripe = useStripe();
@@ -97,7 +100,12 @@ function CardForm({ onClose }: AddPaymentMethodModalProps) {
         // Refresh payment methods list
         if (refresh) await refresh();
         
-        onClose();
+        // Call onSuccess if provided, otherwise just close
+        if (onSuccess) {
+          onSuccess();
+        } else {
+          onClose();
+        }
       } else {
         // Use your existing manual method for testing/mockups
         if (type === 'card') {
@@ -125,7 +133,12 @@ function CardForm({ onClose }: AddPaymentMethodModalProps) {
           });
         }
 
-        onClose();
+        // Call onSuccess if provided, otherwise just close
+        if (onSuccess) {
+          onSuccess();
+        } else {
+          onClose();
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add payment method');
@@ -295,7 +308,7 @@ function CardForm({ onClose }: AddPaymentMethodModalProps) {
   );
 }
 
-export default function AddPaymentMethodModal({ onClose }: AddPaymentMethodModalProps) {
+export default function AddPaymentMethodModal({ onClose, onSuccess }: AddPaymentMethodModalProps) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -307,7 +320,7 @@ export default function AddPaymentMethodModal({ onClose }: AddPaymentMethodModal
         </div>
         
         <Elements stripe={stripePromise}>
-          <CardForm onClose={onClose} />
+          <CardForm onClose={onClose} onSuccess={onSuccess} />
         </Elements>
       </div>
     </div>

@@ -1,3 +1,5 @@
+// Updated usePaymentMethods.ts implementation
+
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -32,18 +34,11 @@ export function usePaymentMethods() {
 
   const fetchPaymentMethods = async () => {
     try {
-      const { data: parentData } = await supabase
-        .from('parents')
-        .select('id')
-        .eq('user_id', profile?.id)
-        .single();
-
-      if (!parentData) return;
-
+      // Direct query for payment methods by user_id instead of going through parents
       const { data, error: fetchError } = await supabase
         .from('payment_methods')
         .select('*')
-        .eq('parent_id', parentData.id)
+        .eq('user_id', profile?.id)
         .order('is_default', { ascending: false });
 
       if (fetchError) throw fetchError;
@@ -58,19 +53,14 @@ export function usePaymentMethods() {
 
   const addPaymentMethod = async (data: AddPaymentMethodData) => {
     try {
-      const { data: parentData } = await supabase
-        .from('parents')
-        .select('id')
-        .eq('user_id', profile?.id)
-        .single();
-
-      if (!parentData) throw new Error('Parent not found');
-
+      if (!profile?.id) throw new Error('User not authenticated');
+      
+      // Insert directly with user_id
       const { error: insertError } = await supabase
         .from('payment_methods')
         .insert([
           {
-            parent_id: parentData.id,
+            user_id: profile.id,
             type: data.type,
             last_four: data.last_four,
             expiry_month: data.expiry_month,
@@ -115,19 +105,13 @@ export function usePaymentMethods() {
 
   const setDefaultMethod = async (id: string) => {
     try {
-      const { data: parentData } = await supabase
-        .from('parents')
-        .select('id')
-        .eq('user_id', profile?.id)
-        .single();
-
-      if (!parentData) throw new Error('Parent not found');
+      if (!profile?.id) throw new Error('User not authenticated');
 
       // Remove default from all methods
       const { error: updateError1 } = await supabase
         .from('payment_methods')
         .update({ is_default: false })
-        .eq('parent_id', parentData.id);
+        .eq('user_id', profile.id);
 
       if (updateError1) throw updateError1;
 

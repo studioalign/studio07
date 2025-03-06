@@ -257,6 +257,35 @@ export default function Classes() {
 		}
 	};
 
+	const [parentStudents, setParentStudents] = useState<{ id: string; label: string }[]>([]);
+
+	// Add this useEffect to fetch students for parent users
+	useEffect(() => {
+	const fetchParentStudents = async () => {
+		if (profile?.role !== "parent" || !profile?.id) return;
+		
+		try {
+		const { data, error } = await supabase
+			.from("students")
+			.select("id, name")
+			.eq("parent_id", profile.id);
+			
+		if (error) throw error;
+		
+		setParentStudents(
+			(data || []).map(student => ({
+			id: student.id,
+			label: student.name
+			}))
+		);
+		} catch (err) {
+		console.error("Error fetching parent students:", err);
+		}
+	};
+	
+	fetchParentStudents();
+	}, [profile?.id, profile?.role]);
+
 	// **Utility Functions for Formatting**
 
 	const formatSchedule = (classItem: ClassInstance) => {
@@ -420,6 +449,29 @@ export default function Classes() {
 			{/* **No Classes Found Message** */}
 			{classInstances.length === 0 && !loading && (
 				<p className="text-center text-gray-500 mt-8">No classes found</p>
+			)}
+
+			{/* Book Drop-In Modal */}
+			{bookingClass && profile?.role === "parent" && (
+			<BookDropInModal
+				classInfo={{
+				id: bookingClass.id,
+				name: bookingClass.name,
+				date: bookingClass.date,
+				start_time: bookingClass.start_time,
+				end_time: bookingClass.end_time,
+				drop_in_price: bookingClass.drop_in_price || 0,
+				capacity: bookingClass.capacity || 0,
+				booked_count: bookingClass.booked_count || 0,
+				teacher_id: bookingClass.teacher ? bookingClass.teacher.id : ""
+				}}
+				students={parentStudents}
+				onClose={() => setBookingClass(null)}
+				onSuccess={() => {
+				setBookingClass(null);
+				fetchClassInstances();
+				}}
+			/>
 			)}
 		</div>
 	);
