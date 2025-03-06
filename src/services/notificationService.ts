@@ -18,6 +18,9 @@ export type NotificationType =
   | 'new_message'
   | 'new_channel_post'
   | 'new_comment'
+  | 'document_assigned'
+  | 'document_reminder'
+  | 'document_deadline_missed'
   
   // Teacher notifications
   | 'class_assigned'
