@@ -9,6 +9,7 @@ import { notificationService } from '../../services/notificationService';
 
 interface UploadDocumentModalProps {
 	onClose: () => void;
+	onSuccess?: () => void;
 }
 
 interface BulkOption {
@@ -22,6 +23,7 @@ type RecipientOption = { id: string; label: string } | BulkOption;
 
 export default function UploadDocumentModal({
 	onClose,
+	onSuccess
 }: UploadDocumentModalProps) {
 	const { profile } = useAuth();
 	const [name, setName] = useState("");
@@ -79,7 +81,7 @@ export default function UploadDocumentModal({
 		};
 
 		fetchUsers();
-	}, []);
+	}, [profile?.studio?.id]);
 
 	const handleUserSelection = (options: RecipientOption[]) => {
 		let newSelection = options.reduce<RecipientOption[]>((acc, option) => {
@@ -175,32 +177,42 @@ export default function UploadDocumentModal({
 	  
 		  if (recipientError) throw recipientError;
 	  
+		  // 4. Send notifications to recipients
+		  for (const recipient of selectedUsers) {
+			// Make sure we have a document ID before proceeding
+			if (!document?.id) {
+				console.error("Missing document ID for notifications");
+				continue;
+			}
+	  
+			try {
+				await notificationService.notifyDocumentAssigned(
+					recipient.id,
+					profile?.studio?.id || '',
+					name,
+					document.id,
+					requiresSignature,
+					description || undefined
+				);
+				console.log("Document notification sent to", recipient.id);
+			} catch (notifyError) {
+				console.error("Error sending document notification:", notifyError);
+				// Continue with other recipients even if one fails
+			}
+		  }
+	  
+		  // Call success callback if provided
+		  if (onSuccess) {
+			onSuccess();
+		  }
+	  
+		  // Close modal
 		  onClose();
 		} catch (err) {
+		  console.error("Error uploading document:", err);
 		  setError(err instanceof Error ? err.message : "Failed to upload document");
 		} finally {
 		  setIsSubmitting(false);
-		}
-		// After successfully creating document and recipients
-		for (const recipient of selectedUsers) {
-			// Send in-app notification
-			await notificationService.createNotification({
-			  user_id: recipient.id,
-			  studio_id: profile?.studio?.id || '',
-			  type: 'document_assigned',
-			  title: 'New Document Assigned',
-			  message: `A new document "${name}" has been ${requiresSignature ? 'assigned for signature' : 'shared with you'}`,
-			  priority: 'high',
-			  entity_id: document.id,
-			  entity_type: 'document',
-			  details: {
-				documentName: name,
-				requiresSignature,
-				description
-			  },
-			  requires_action: requiresSignature,
-			  email_required: true // This triggers an email
-			});
 		}
 	};
 
