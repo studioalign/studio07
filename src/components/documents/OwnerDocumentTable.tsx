@@ -30,52 +30,40 @@ export default function OwnerDocumentTable({ documents }: OwnerDocumentTableProp
 
   const sendReminder = async (documentId: string, recipientId: string) => {
     try {
-      // 1. Get recipient details
-      const { data: recipient, error: recipientError } = await supabase
+      // Fetch recipient and document details
+      const { data: recipientData, error } = await supabase
         .from('document_recipients')
         .select(`
-          id,
-          user:users(id, name, email)
+          user:users(id, name, email),
+          document:documents(id, name, requires_signature, studio_id)
         `)
         .eq('id', recipientId)
         .single();
   
-      if (recipientError) throw recipientError;
+      if (error) throw error;
   
-      // 2. Get document details
-      const { data: document, error: docError } = await supabase
-        .from('documents')
-        .select('id, name, requires_signature')
-        .eq('id', documentId)
-        .single();
+      const { user, document } = recipientData;
   
-      if (docError) throw docError;
-  
-      // 3. Update last reminder timestamp
-      const { error: updateError } = await supabase
-        .from('document_recipients')
-        .update({ last_reminder_sent: new Date().toISOString() })
-        .eq('id', recipientId);
-  
-      if (updateError) throw updateError;
-  
-      // 4. Send notification (integrate with your notification service)
-      const action = document.requires_signature ? 'sign' : 'view';
+      // Send in-app and email reminder
       await notificationService.createNotification({
-        user_id: recipient.user.id,
-        studio_id: profile?.studio?.id,
+        user_id: user.id,
+        studio_id: document.studio_id,
         type: 'document_reminder',
-        title: `Reminder: Please ${action} document`,
-        message: `You need to ${action} "${document.name}"`,
+        title: 'Document Reminder',
+        message: `Reminder: Please ${document.requires_signature ? 'sign' : 'view'} the document "${document.name}"`,
         priority: 'high',
-        entity_id: documentId,
+        entity_id: document.id,
         entity_type: 'document',
-        details: { documentName: document.name },
         requires_action: true,
         email_required: true
       });
   
-      // Success feedback
+      // Update last reminder sent timestamp
+      await supabase
+        .from('document_recipients')
+        .update({ last_reminder_sent: new Date().toISOString() })
+        .eq('id', recipientId);
+  
       alert('Reminder sent successfully');
     } catch (err) {
       console.error('Error sending reminder:', err);

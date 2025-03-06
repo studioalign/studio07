@@ -187,6 +187,26 @@ export interface ClassCancellationParams extends BaseTemplateParams {
   dashboardUrl: string;
 }
 
+export interface DocumentAssignedParams extends BaseTemplateParams {
+  documentName: string;
+  requiresSignature: boolean;
+  description?: string;
+  dashboardUrl: string;
+}
+
+export interface DocumentReminderParams extends BaseTemplateParams {
+  documentName: string;
+  requiresSignature: boolean;
+  dashboardUrl: string;
+}
+
+export interface DocumentDeadlineParams extends BaseTemplateParams {
+  documentName: string;
+  requiresSignature: boolean;
+  unprocessedCount?: number;
+  dashboardUrl: string;
+}
+
 // Template generator functions
 export function studentEnrollmentTemplate(params: StudentEnrollmentParams) {
   const content = `
@@ -405,6 +425,57 @@ export function classCancellationTemplate(params: ClassCancellationParams) {
   });
 }
 
+export function documentAssignedTemplate(params: DocumentAssignedParams) {
+  const action = params.requiresSignature ? 'sign' : 'view';
+  const content = `
+    <h2>New Document Assigned</h2>
+    <p>A new document "${params.documentName}" has been ${action}ed to you.</p>
+    ${params.description ? `<p>Description: ${params.description}</p>` : ''}
+    <a href="${params.dashboardUrl}" class="btn">Go to Document</a>
+  `;
+
+  return generateBaseTemplate({
+    recipient: params.recipient,
+    content,
+    title: 'New Document Assigned'
+  });
+}
+
+export function documentReminderTemplate(params: DocumentReminderParams) {
+  const action = params.requiresSignature ? 'sign' : 'view';
+  const content = `
+    <h2>Document Reminder</h2>
+    <p>This is a reminder to ${action} the document "${params.documentName}".</p>
+    <a href="${params.dashboardUrl}" class="btn">Go to Document</a>
+  `;
+
+  return generateBaseTemplate({
+    recipient: params.recipient,
+    content,
+    title: 'Document Reminder'
+  });
+}
+
+export function documentDeadlineTemplate(params: DocumentDeadlineParams) {
+  const action = params.requiresSignature ? 'signed' : 'viewed';
+  const content = `
+    <div class="alert">
+      <h2>Document Deadline Passed</h2>
+      ${params.unprocessedCount !== undefined 
+        ? `<p>${params.unprocessedCount} recipient(s) did not ${action} the document "${params.documentName}".</p>`
+        : `<p>The deadline for the document "${params.documentName}" has passed.</p>`
+      }
+    </div>
+    <a href="${params.dashboardUrl}" class="btn">Go to Document</a>
+  `;
+
+  return generateBaseTemplate({
+    recipient: params.recipient,
+    content,
+    title: 'Document Deadline Missed'
+  });
+}
+
 // Export all template functions and interfaces
 export const emailTemplates = {
   generateBaseTemplate,
@@ -420,7 +491,10 @@ export const emailTemplates = {
   newMessage: newMessageTemplate,
   channelActivity: channelActivityTemplate,
   paymentConfirmation: paymentConfirmationTemplate,
-  classCancellation: classCancellationTemplate
+  classCancellation: classCancellationTemplate,
+  documentAssigned: documentAssignedTemplate,
+  documentReminder: documentReminderTemplate,
+  documentDeadline: documentDeadlineTemplate
 };
 
 export default emailTemplates;

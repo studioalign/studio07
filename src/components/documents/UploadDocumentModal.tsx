@@ -4,6 +4,7 @@ import MultiSelectDropdown from "../MultiSelectDropdown";
 import { getStudioUsersByRole } from "../../utils/messagingUtils";
 import FormInput from "../FormInput";
 import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from '../../lib/supabase';
 
 interface UploadDocumentModalProps {
 	onClose: () => void;
@@ -179,7 +180,28 @@ export default function UploadDocumentModal({
 		} finally {
 		  setIsSubmitting(false);
 		}
-	  };
+		// After successfully creating document and recipients
+		for (const recipient of selectedUsers) {
+			// Send in-app notification
+			await notificationService.createNotification({
+			  user_id: recipient.id,
+			  studio_id: profile?.studio?.id || '',
+			  type: 'document_assigned',
+			  title: 'New Document Assigned',
+			  message: `A new document "${name}" has been ${requiresSignature ? 'assigned for signature' : 'shared with you'}`,
+			  priority: 'high',
+			  entity_id: document.id,
+			  entity_type: 'document',
+			  details: {
+				documentName: name,
+				requiresSignature,
+				description
+			  },
+			  requires_action: requiresSignature,
+			  email_required: true // This triggers an email
+			});
+		}
+	};
 
 	return (
 		<>

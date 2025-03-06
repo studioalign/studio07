@@ -970,6 +970,114 @@ async function notifyPaymentConfirmation(parentId: string, studioId: string, amo
   });
 }
 
+// Notify when a document is assigned
+async function notifyDocumentAssigned(
+  userId: string, 
+  studioId: string, 
+  documentName: string, 
+  documentId: string, 
+  requiresSignature: boolean,
+  description?: string
+) {
+  await createNotification({
+    user_id: userId,
+    studio_id: studioId,
+    type: 'document_assigned',
+    title: 'New Document Assigned',
+    message: `A new document "${documentName}" has been ${requiresSignature ? 'assigned for signature' : 'shared with you'}`,
+    priority: 'high',
+    entity_id: documentId,
+    entity_type: 'document',
+    details: {
+      documentName,
+      requiresSignature,
+      description
+    },
+    requires_action: requiresSignature,
+    email_required: true
+  });
+}
+
+// Send a reminder for a specific document
+async function notifyDocumentReminder(
+  userId: string, 
+  studioId: string, 
+  documentName: string, 
+  documentId: string, 
+  requiresSignature: boolean
+) {
+  await createNotification({
+    user_id: userId,
+    studio_id: studioId,
+    type: 'document_reminder',
+    title: 'Document Reminder',
+    message: `Reminder: Please ${requiresSignature ? 'sign' : 'view'} the document "${documentName}"`,
+    priority: 'high',
+    entity_id: documentId,
+    entity_type: 'document',
+    details: {
+      documentName,
+      requiresSignature
+    },
+    requires_action: true,
+    email_required: true
+  });
+}
+
+// Notify studio owners about missed document deadlines
+async function notifyDocumentDeadlineMissed(
+  ownerId: string, 
+  studioId: string, 
+  documentName: string, 
+  documentId: string, 
+  unprocessedCount: number, 
+  requiresSignature: boolean
+) {
+  await createNotification({
+    user_id: ownerId,
+    studio_id: studioId,
+    type: 'document_deadline_missed',
+    title: 'Document Deadline Passed',
+    message: `${unprocessedCount} recipient(s) did not ${requiresSignature ? 'sign' : 'view'} "${documentName}"`,
+    priority: 'high',
+    entity_id: documentId,
+    entity_type: 'document',
+    details: {
+      documentName,
+      unprocessedCount,
+      requiresSignature
+    },
+    requires_action: true,
+    email_required: true
+  });
+}
+
+// Notify individual recipients about missed document deadlines
+async function notifyIndividualDocumentDeadline(
+  userId: string, 
+  studioId: string, 
+  documentName: string, 
+  documentId: string, 
+  requiresSignature: boolean
+) {
+  await createNotification({
+    user_id: userId,
+    studio_id: studioId,
+    type: 'document_deadline_missed',
+    title: 'Document Deadline Passed',
+    message: `The deadline for "${documentName}" has passed. Please ${requiresSignature ? 'sign' : 'view'} the document immediately.`,
+    priority: 'high',
+    entity_id: documentId,
+    entity_type: 'document',
+    details: {
+      documentName,
+      requiresSignature
+    },
+    requires_action: true,
+    email_required: true
+  });
+}
+
 // Export all functions
 export {
   createNotification,
@@ -987,6 +1095,10 @@ export {
   notifyNewMessage,
   notifyNewChannelPost,
   notifyNewComment,
+  notifyDocumentAssigned,
+  notifyDocumentReminder,
+  notifyDocumentDeadlineMissed,
+  notifyIndividualDocumentDeadline,
   
   // Teacher notifications
   notifyClassAssigned,
@@ -1021,6 +1133,10 @@ export const notificationService = {
   notifyNewMessage,
   notifyNewChannelPost,
   notifyNewComment,
+  notifyDocumentAssigned,
+  notifyDocumentReminder,
+  notifyDocumentDeadlineMissed,
+  notifyIndividualDocumentDeadline,
   
   // Teacher notifications
   notifyClassAssigned,

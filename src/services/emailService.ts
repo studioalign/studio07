@@ -600,6 +600,79 @@ export class EmailService {
     return false;
     }
   }
+  
+  async sendDocumentAssignedEmail(params: {
+    recipientEmail: string;
+    recipientName: string;
+    documentName: string;
+    requiresSignature: boolean;
+    description?: string;
+    studioId: string;
+  }): Promise<boolean> {
+    const dashboardUrl = `https://app.studioalignpro.com/dashboard/documents`;
+
+    const emailHtml = emailTemplates.documentAssigned({
+      recipient: { name: params.recipientName },
+      documentName: params.documentName,
+      requiresSignature: params.requiresSignature,
+      description: params.description,
+      dashboardUrl
+    });
+
+    return this.sendEmail({
+      to: params.recipientEmail,
+      subject: 'New Document Assigned',
+      html: emailHtml
+    });
+  }
+
+  async sendDocumentReminderEmail(params: {
+    recipientEmail: string;
+    recipientName: string;
+    documentName: string;
+    requiresSignature: boolean;
+    studioId: string;
+  }): Promise<boolean> {
+    const dashboardUrl = `https://app.studioalignpro.com/dashboard/documents`;
+
+    const emailHtml = emailTemplates.documentReminder({
+      recipient: { name: params.recipientName },
+      documentName: params.documentName,
+      requiresSignature: params.requiresSignature,
+      dashboardUrl
+    });
+
+    return this.sendEmail({
+      to: params.recipientEmail,
+      subject: 'Document Reminder',
+      html: emailHtml
+    });
+  }
+
+  async sendDocumentDeadlineEmail(params: {
+    recipientEmail: string;
+    recipientName: string;
+    documentName: string;
+    requiresSignature: boolean;
+    unprocessedCount?: number;
+    studioId: string;
+  }): Promise<boolean> {
+    const dashboardUrl = `https://app.studioalignpro.com/dashboard/documents`;
+
+    const emailHtml = emailTemplates.documentDeadline({
+      recipient: { name: params.recipientName },
+      documentName: params.documentName,
+      requiresSignature: params.requiresSignature,
+      unprocessedCount: params.unprocessedCount,
+      dashboardUrl
+    });
+
+    return this.sendEmail({
+      to: params.recipientEmail,
+      subject: 'Document Deadline Missed',
+      html: emailHtml
+    });
+  }
 }
 
 // Create a singleton instance
