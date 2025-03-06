@@ -4,54 +4,43 @@ import * as emailTemplates from '../utils/emailTemplates';
 
 export class EmailService {
   private async sendEmail(params: {
-    to: string;
-    subject: string;
-    html: string;
-  }): Promise<boolean> {
-    try {
-      console.log(`Attempting to send email`, {
-        recipient: params.to,
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<boolean> {
+  try {
+    console.log(`Attempting to send email to: ${params.to}`);
+    
+    // Use full URL instead of relative path
+    const functionUrl = `${window.location.origin}/.netlify/functions/send-email`;
+    
+    const response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        to: params.to,
         subject: params.subject,
-        htmlLength: params.html.length
-      });
-      
-      // Check if we're in Stackblitz
-      const isStackblitz = window.location.hostname.includes('stackblitz') ||
-                            window.location.hostname.includes('webcontainer');
-  
-      if (isStackblitz) {
-        console.log('Running in Stackblitz - email would be sent to:', params.to);
-        console.log('Subject:', params.subject);
-        console.log('Email content length:', params.html.length);
-        return true; // Pretend it succeeded in Stackblitz
-      }
-      
-      // Use the Netlify function
-      const response = await fetch('/.netlify/functions/send-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          to: params.to,
-          subject: params.subject,
-          html: params.html
-        })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Email function error:', errorData);
-        return false;
-      }
-      
-      console.log(`Email sent successfully`);
-      return true;
-    } catch (err) {
-      console.error('Email sending error:', err);
+        html: params.html
+      })
+    });
+    
+    // Check response status AND get the response body
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('Email function returned error:', response.status, errorBody);
       return false;
     }
+    
+    const result = await response.json();
+    console.log(`Email sent successfully:`, result);
+    return true;
+  } catch (err) {
+    console.error('Email sending error:', err);
+    return false;
   }
+}
 
   // Test email configuration
   async testEmailConfiguration(email: string): Promise<boolean> {
