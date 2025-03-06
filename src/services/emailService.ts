@@ -717,3 +717,9 @@ export class EmailService {
     return result;
   }
 }
+
+// Create a singleton instance
+export const emailService = new EmailService();
+
+// IMPORTANT: Export default here
+export default emailService;
