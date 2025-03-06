@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { emailService } from './emailService';
+import emailService from '../services/emailService';
 
 // Define all notification types for type safety
 export type NotificationType = 
