@@ -162,7 +162,7 @@ export class EmailService {
       invoiceId: params.invoiceId
     });
 
-    const invoiceUrl = `https://app.studioalignpro.com/dashboard/payments/${params.invoiceId}`;
+    const invoiceUrl = `https://app.studioalignpro.com/dashboard/payments`;
 
     const emailHtml = emailTemplates.paymentOverdueTemplate({
       recipient: { name: params.recipientName },
@@ -204,7 +204,7 @@ export class EmailService {
       profit: params.profit
     });
 
-    const dashboardUrl = `https://app.studioalignpro.com/dashboard/reports/financial`;
+    const dashboardUrl = `https://app.studioalignpro.com/dashboard/payments`;
 
     const emailHtml = emailTemplates.monthlyFinancialSummaryTemplate({
       recipient: { name: params.recipientName },
@@ -244,7 +244,7 @@ export class EmailService {
       role: params.role
     });
 
-    const dashboardUrl = `https://app.studioalignpro.com/dashboard/staff`;
+    const dashboardUrl = `https://app.studioalignpro.com/dashboard/teachers`;
 
     const emailHtml = emailTemplates.staffRegistrationTemplate({
       recipient: { name: params.recipientName },
@@ -425,7 +425,7 @@ export class EmailService {
       senderName: params.senderName
     });
 
-    const conversationUrl = `https://app.studioalignpro.com/dashboard/messages/${params.conversationId}`;
+    const conversationUrl = `https://app.studioalignpro.com/dashboard/messages`;
 
     const emailHtml = emailTemplates.newMessageTemplate({
       recipient: { name: params.recipientName },
@@ -466,7 +466,7 @@ export class EmailService {
       authorName: params.authorName
     });
 
-    const activityUrl = `https://app.studioalignpro.com/dashboard/channels/${params.channelId}/posts/${params.postId}`;
+    const activityUrl = `https://app.studioalignpro.com/dashboard/channels`;
 
     const emailHtml = emailTemplates.channelActivityTemplate({
       recipient: { name: params.recipientName },
@@ -505,7 +505,7 @@ export class EmailService {
       invoiceId: params.invoiceId
     });
 
-    const invoiceUrl = `https://app.studioalignpro.com/dashboard/payments/${params.invoiceId}`;
+    const invoiceUrl = `https://app.studioalignpro.com/dashboard/payments`;
 
     const emailHtml = emailTemplates.paymentConfirmationTemplate({
       recipient: { name: params.recipientName },
