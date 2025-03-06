@@ -18,7 +18,7 @@ export function generateBaseTemplate(params: {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${params.title || 'Studio Align Pro Notification'}</title>
+      <title>${params.title || 'StudioAlign Notification'}</title>
       <style>
         body { 
           font-family: 'Inter', Arial, sans-serif; 
@@ -37,7 +37,7 @@ export function generateBaseTemplate(params: {
           border-radius: 8px;
         }
         .header { 
-          background-color: #2563eb; 
+          background-color: #131a56; 
           color: white;
           padding: 20px; 
           text-align: center;
@@ -56,7 +56,7 @@ export function generateBaseTemplate(params: {
         }
         .btn {
           display: inline-block;
-          background-color: #2563eb;
+          background-color: #131a56;
           color: white;
           padding: 12px 24px;
           text-decoration: none;
@@ -65,7 +65,7 @@ export function generateBaseTemplate(params: {
         }
         .alert {
           background-color: #FFF4E5;
-          border-left: 4px solid #FF9800;
+          border-left: 4px solid #e6a4fe;
           padding: 15px;
           margin-top: 20px;
         }
@@ -87,12 +87,12 @@ export function generateBaseTemplate(params: {
     <body>
       <div class="container">
         <div class="header">
-          <h1>Studio Align Pro</h1>
+          <h1>StudioAlign</h1>
         </div>
         <div class="content">
           <p>Hi ${params.recipient.name},</p>
           ${params.content}
-          <p style="margin-top: 20px;">Best regards,<br>Studio Align Pro Team</p>
+          <p style="margin-top: 20px;">Best regards,<br>StudioAlign Team</p>
         </div>
       </div>
     </body>
