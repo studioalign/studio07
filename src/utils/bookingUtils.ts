@@ -68,7 +68,25 @@ export async function bookDropInClass(
     
     const currency = studioData?.currency || 'USD';
     
-    // 1. Create booking record
+    // 1. Process payment with Stripe FIRST
+    const paymentResult = await processStripePayment(
+      'temp', // Temporary booking ID
+      classData.drop_in_price,
+      paymentMethodId,
+      `Drop-in class: ${classData.name}`,
+      user.id,
+      currency
+    );
+    
+    // If payment fails, immediately return with error
+    if (!paymentResult.success) {
+      return { 
+        success: false, 
+        error: paymentResult.error || 'Payment processing failed' 
+      };
+    }
+    
+    // 2. Create booking record ONLY AFTER successful payment
     const { data: booking, error: bookingError } = await supabase
       .from('drop_in_bookings')
       .insert({
@@ -78,49 +96,15 @@ export async function bookDropInClass(
         studio_id: classData.studio_id,
         payment_amount: classData.drop_in_price,
         payment_method_id: paymentMethodId,
-        payment_status: 'pending'
+        payment_status: 'completed',
+        stripe_payment_id: paymentResult.paymentId
       })
       .select()
       .single();
       
     if (bookingError) throw bookingError;
     
-    // 2. Process payment with Stripe
-    const paymentResult = await processStripePayment(
-      booking.id,
-      classData.drop_in_price,
-      paymentMethodId,
-      `Drop-in class: ${classData.name}`,
-      user.id,
-      currency
-    );
-    
-    if (!paymentResult.success) {
-      // Payment failed - update booking status
-      await supabase
-        .from('drop_in_bookings')
-        .update({ 
-          payment_status: 'failed',
-          payment_error: paymentResult.error
-        })
-        .eq('id', booking.id);
-        
-      return { 
-        success: false, 
-        error: paymentResult.error || 'Payment processing failed' 
-      };
-    }
-    
-    // 3. Update booking with payment success
-    await supabase
-      .from('drop_in_bookings')
-      .update({
-        payment_status: 'completed',
-        stripe_payment_id: paymentResult.paymentId
-      })
-      .eq('id', booking.id);
-    
-    // 4. Update class booked count
+    // 3. Update class booked count
     await supabase
       .from('classes')
       .update({
@@ -128,7 +112,7 @@ export async function bookDropInClass(
       })
       .eq('id', classId);
     
-    // 5. Add student to class_students (for attendance)
+    // 4. Add student to class_students (for attendance)
     await supabase
       .from('class_students')
       .insert({
@@ -137,7 +121,7 @@ export async function bookDropInClass(
         is_drop_in: true
       });
     
-    // 6. Send notifications to teacher and studio owner
+    // 5. Send notifications to teacher and studio owner
     try {
       await notificationService.notifyStudentAddedToClass(
         classData.studio_id,
@@ -148,7 +132,7 @@ export async function bookDropInClass(
         classId
       );
       
-      // 7. Send payment confirmation to parent
+      // 6. Send payment confirmation to parent
       await notificationService.notifyPaymentConfirmation(
         user.id,
         classData.studio_id,
@@ -157,7 +141,7 @@ export async function bookDropInClass(
         currency
       );
       
-      // 8. Check if this fills the class
+      // 7. Check if this fills the class
       if ((classData.booked_count || 0) + 1 >= classData.capacity) {
         await notificationService.notifyClassCapacityReached(
           classData.studio_id,
