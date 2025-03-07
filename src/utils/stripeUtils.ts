@@ -50,14 +50,15 @@ export async function processStripePayment(
       };
     }
 
-    // Fetch user and studio details in one query
+    // Fetch user and studio details in one query - use explicit relationship
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select(`
         id, 
         email, 
         name, 
-        studio:studios (
+        studio_id,
+        studios!users_studio_id_fkey (
           id,
           stripe_connect_id,
           stripe_connect_enabled,
@@ -80,7 +81,7 @@ export async function processStripePayment(
     }
 
     // Validate studio details
-    const studio = userData.studio;
+    const studio = userData.studios[0]; // Note the change here
     if (!studio || !studio.stripe_connect_id || !studio.stripe_connect_enabled) {
       console.error('Invalid studio setup', { studio });
       return { 
