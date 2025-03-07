@@ -17,7 +17,6 @@ exports.handler = async function(event, context) {
   // Validate environment variables
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY;
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  // Use service key instead of anon key to bypass RLS
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
   
   if (!stripeSecretKey) {
@@ -32,27 +31,15 @@ exports.handler = async function(event, context) {
     };
   }
   
-  if (!supabaseUrl || !supabaseServiceKey) {
-    console.error('SUPABASE_URL or SUPABASE_SERVICE_KEY is not set');
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ 
-        success: false, 
-        error: 'Server configuration error: Missing Supabase credentials'
-      })
-    };
-  }
-  
   try {
-    // Initialize Stripe client
+    // Initialize Stripe
     const stripe = require('stripe')(stripeSecretKey);
     
     // Initialize Supabase with SERVICE key
     const { createClient } = require('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    // Parse request body
+    // Parse request data
     let requestData;
     try {
       requestData = JSON.parse(event.body);
@@ -75,16 +62,24 @@ exports.handler = async function(event, context) {
       };
     }
     
-    console.log('Creating setup intent for user:', userId);
-    
-    // Get user's Stripe customer ID
+    // Get user details including studio info for parents
     const { data: userData, error: userError } = await supabase
       .from('users')
-      .select('stripe_customer_id, email, name')
+      .select(`
+        email,
+        name,
+        role,
+        stripe_customer_id,
+        studio:studios!users_studio_id_fkey (
+          id,
+          stripe_connect_id,
+          stripe_connect_enabled
+        )
+      `)
       .eq('id', userId)
       .single();
     
-    if (userError) {
+    if (userError || !userData) {
       console.error('Error fetching user:', userError);
       return {
         statusCode: 400,
@@ -92,93 +87,128 @@ exports.handler = async function(event, context) {
         body: JSON.stringify({ success: false, error: 'User not found' })
       };
     }
-    
-    let stripeCustomerId = userData.stripe_customer_id;
-    console.log('Found Stripe customer ID:', stripeCustomerId || 'None - will create new');
-    
-    // Create customer if doesn't exist
-    if (!stripeCustomerId) {
-      console.log('Creating new Stripe customer for:', userData.email);
-      try {
-        const customer = await stripe.customers.create({
-          email: userData.email,
-          name: userData.name,
-          metadata: {
-            supabase_id: userId
-          }
-        });
-        
-        stripeCustomerId = customer.id;
-        console.log('Created new Stripe customer:', stripeCustomerId);
-        
-        // Save Stripe customer ID back to user record
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({ stripe_customer_id: stripeCustomerId })
-          .eq('id', userId);
-          
-        if (updateError) {
-          console.error('Error updating user with Stripe customer ID:', updateError);
-          // Continue anyway, as we can still create the SetupIntent
-        }
-      } catch (stripeErr) {
-        console.error('Error creating Stripe customer:', stripeErr);
-        return {
-          statusCode: 500,
-          headers,
-          body: JSON.stringify({ 
-            success: false, 
-            error: 'Failed to create Stripe customer: ' + stripeErr.message
-          })
-        };
-      }
-    }
-    
-    // Create a SetupIntent
-    console.log('Creating SetupIntent for customer:', stripeCustomerId);
-    try {
-      const setupIntent = await stripe.setupIntents.create({
-        customer: stripeCustomerId,
-        payment_method_types: ['card'],
-      });
+
+    // For parents, we need to handle Stripe Connect
+    if (userData.role === 'parent' && userData.studio?.stripe_connect_id) {
+      console.log('Parent user detected, handling Stripe Connect setup');
       
-      console.log('SetupIntent created:', setupIntent.id);
+      // Check if customer already exists in connected account
+      let connectedCustomerId;
+      try {
+        const { data: connectedCustomer } = await supabase
+          .from('connected_customers')
+          .select('stripe_connected_customer_id')
+          .eq('parent_id', userId)
+          .eq('studio_id', userData.studio.id)
+          .single();
+          
+        if (connectedCustomer?.stripe_connected_customer_id) {
+          connectedCustomerId = connectedCustomer.stripe_connected_customer_id;
+          console.log('Found existing connected customer:', connectedCustomerId);
+        }
+      } catch (err) {
+        console.log('No existing connected customer found');
+      }
+      
+      // Create connected customer if doesn't exist
+      if (!connectedCustomerId) {
+        try {
+          const connectedCustomer = await stripe.customers.create(
+            {
+              email: userData.email,
+              name: userData.name,
+              metadata: {
+                parent_id: userId,
+                platform_customer_id: userData.stripe_customer_id
+              }
+            },
+            { stripeAccount: userData.studio.stripe_connect_id }
+          );
+          
+          connectedCustomerId = connectedCustomer.id;
+          console.log('Created new connected customer:', connectedCustomerId);
+          
+          // Save connected customer ID
+          await supabase
+            .from('connected_customers')
+            .insert({
+              parent_id: userId,
+              studio_id: userData.studio.id,
+              stripe_connected_customer_id: connectedCustomerId
+            });
+        } catch (err) {
+          console.error('Error creating connected customer:', err);
+          throw err;
+        }
+      }
+
+      // Create SetupIntent on the connected account
+      const setupIntent = await stripe.setupIntents.create(
+        {
+          customer: connectedCustomerId,
+          payment_method_types: ['card'],
+          metadata: {
+            parent_id: userId,
+            studio_id: userData.studio.id
+          }
+        },
+        { stripeAccount: userData.studio.stripe_connect_id }
+      );
       
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ 
-          success: true, 
+        body: JSON.stringify({
+          success: true,
           clientSecret: setupIntent.client_secret,
-          customerId: stripeCustomerId
-        })
-      };
-    } catch (setupErr) {
-      console.error('Error creating SetupIntent:', setupErr);
-      return {
-        statusCode: 500,
-        headers,
-        body: JSON.stringify({ 
-          success: false, 
-          error: 'Failed to create setup intent: ' + setupErr.message
+          isConnectedAccount: true,
+          connectedAccountId: userData.studio.stripe_connect_id
         })
       };
     }
-  } catch (error) {
-    // Detailed error logging
-    console.error('Function error:', {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-      code: error.code
+    
+    // For non-parent users or if no connected account, create SetupIntent on platform
+    let stripeCustomerId = userData.stripe_customer_id;
+    
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        email: userData.email,
+        name: userData.name,
+        metadata: {
+          supabase_id: userId
+        }
+      });
+      
+      stripeCustomerId = customer.id;
+      
+      await supabase
+        .from('users')
+        .update({ stripe_customer_id: stripeCustomerId })
+        .eq('id', userId);
+    }
+    
+    const setupIntent = await stripe.setupIntents.create({
+      customer: stripeCustomerId,
+      payment_method_types: ['card']
     });
     
     return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        success: true,
+        clientSecret: setupIntent.client_secret,
+        isConnectedAccount: false
+      })
+    };
+  } catch (error) {
+    console.error('Error creating setup intent:', error);
+    return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ 
-        success: false, 
-        error: 'Server error: ' + error.message
+      body: JSON.stringify({
+        success: false,
+        error: error.message || 'Failed to create setup intent'
       })
     };
   }
