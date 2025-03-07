@@ -107,27 +107,36 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         const result = await stripe.confirmCardSetup(clientSecret, setupOptions);
         
         console.log('Card setup confirmation result:', result);
-        console.log('Connected account details:', {
-          isConnectedAccount,
-          connectedAccountId
-        });
         
         if (result.error) {
           console.error('Card setup error:', result.error);
-          throw new Error(result.error.message);
+          throw result.error;
         }
         
-        if (!result.setupIntent?.payment_method) {
-          console.error('No payment method returned');
-          throw new Error('Failed to set up payment method');
+        if (!result.setupIntent) {
+          throw new Error('No setup intent returned');
         }
+        
+        // Get the payment method ID from the setup intent
+        const paymentMethodId = result.setupIntent.payment_method;
+        if (!paymentMethodId || typeof paymentMethodId !== 'string') {
+          throw new Error('No payment method ID returned');
+        }
+        
+        // Log success
+        console.log('Setup intent succeeded:', {
+          setupIntentId: result.setupIntent.id,
+          paymentMethodId: paymentMethodId,
+          isConnectedAccount,
+          connectedAccountId
+        });
         
         console.log('Adding payment method to database');
         
         // Add payment method to database
         const addResult = await addStripePaymentMethod(
           profile?.id || '',
-          result.setupIntent.payment_method as string, 
+          paymentMethodId,
           connectedAccountId
         );
         
