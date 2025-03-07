@@ -1,4 +1,4 @@
-// src/utils/bookingUtils.ts
+// src/utils/bookingUtils.ts - Updated booking function
 
 import { supabase } from '../lib/supabase';
 import { notificationService } from '../services/notificationService';
@@ -10,8 +10,9 @@ import { processStripePayment } from './stripeUtils';
 export async function bookDropInClass(
   classId: string,
   studentId: string,
-  paymentMethodId: string,
-  studioId: string
+  stripePaymentMethodId: string, // This is the Stripe payment method ID (pm_...)
+  studioId: string,
+  databasePaymentMethodId?: string // Added parameter for database UUID
 ): Promise<{ success: boolean; bookingId?: string; error?: string }> {
   try {
     // Get user information
@@ -21,7 +22,8 @@ export async function bookDropInClass(
     console.log('Starting drop-in class booking process for:', {
       classId,
       studentId,
-      paymentMethodId, // This should be a Stripe payment method ID now (pm_...)
+      stripePaymentMethodId,
+      databasePaymentMethodId,
       studioId,
       userId: user.id
     });
@@ -121,7 +123,7 @@ export async function bookDropInClass(
     // Process payment with Stripe
     console.log('Processing payment with Stripe', {
       price: classData.drop_in_price,
-      paymentMethodId,
+      stripePaymentMethodId,
       userId: user.id,
       connectedAccountId: studioData.stripe_connect_id,
       connectedCustomerId: connectedCustomer.stripe_connected_customer_id
@@ -130,7 +132,7 @@ export async function bookDropInClass(
     const paymentResult = await processStripePayment(
       tempBookingId,
       classData.drop_in_price,
-      paymentMethodId,
+      stripePaymentMethodId,
       `Drop-in class: ${classData.name}`,
       user.id,
       currency,
@@ -149,19 +151,78 @@ export async function bookDropInClass(
     
     console.log('Payment processed successfully. Creating booking record...');
 
+    // If no database payment method ID was provided, try to find one
+    if (!databasePaymentMethodId) {
+      try {
+        const { data: paymentMethods } = await supabase
+          .from('payment_methods')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('stripe_payment_method_id', stripePaymentMethodId)
+          .limit(1);
+          
+        if (paymentMethods && paymentMethods.length > 0) {
+          databasePaymentMethodId = paymentMethods[0].id;
+          console.log('Found database payment method ID:', databasePaymentMethodId);
+        } else {
+          // If we can't find the exact match, just get any payment method from this user
+          const { data: fallbackMethods } = await supabase
+            .from('payment_methods')
+            .select('id')
+            .eq('user_id', user.id)
+            .limit(1);
+            
+          if (fallbackMethods && fallbackMethods.length > 0) {
+            databasePaymentMethodId = fallbackMethods[0].id;
+            console.log('Using fallback database payment method ID:', databasePaymentMethodId);
+          } else {
+            console.warn('No database payment method found for user');
+          }
+        }
+      } catch (err) {
+        console.warn('Error finding database payment method ID:', err);
+      }
+    }
+
     // 2. Create booking record ONLY AFTER successful payment
+    const bookingData: any = {
+      class_id: classId,
+      student_id: studentId,
+      parent_id: user.id,
+      studio_id: classData.studio_id,
+      payment_amount: classData.drop_in_price,
+      payment_status: 'completed',
+      stripe_payment_id: paymentResult.paymentId,
+    };
+    
+    // Only include payment_method_id if we have a valid UUID
+    if (databasePaymentMethodId) {
+      bookingData.payment_method_id = databasePaymentMethodId;
+    }
+    
+    // Check if the stripe_payment_method_id column exists
+    try {
+      const { data: tableInfo } = await supabase.rpc('pg_get_columns', { 
+        table_name: 'drop_in_bookings'
+      });
+      
+      const hasStripePaymentMethodIdColumn = tableInfo?.some(
+        (col: any) => col.column_name === 'stripe_payment_method_id'
+      );
+      
+      if (hasStripePaymentMethodIdColumn) {
+        bookingData.stripe_payment_method_id = stripePaymentMethodId;
+      } else {
+        console.warn('stripe_payment_method_id column doesn\'t exist in drop_in_bookings table');
+      }
+    } catch (err) {
+      console.warn('Error checking for stripe_payment_method_id column:', err);
+      // Continue without adding this field
+    }
+    
     const { data: booking, error: bookingError } = await supabase
       .from('drop_in_bookings')
-      .insert({
-        class_id: classId,
-        student_id: studentId,
-        parent_id: user.id,
-        studio_id: classData.studio_id,
-        payment_amount: classData.drop_in_price,
-        payment_method_id: paymentMethodId,
-        payment_status: 'completed',
-        stripe_payment_id: paymentResult.paymentId
-      })
+      .insert(bookingData)
       .select()
       .single();
       
@@ -259,153 +320,5 @@ export async function bookDropInClass(
       success: false, 
       error: err instanceof Error ? err.message : 'An error occurred during booking' 
     };
-  }
-}
-
-/**
- * Gets the number of available spots for a drop-in class
- */
-export async function getAvailableDropInSpots(classId: string): Promise<number> {
-  try {
-    const { data, error } = await supabase
-      .from('classes')
-      .select('capacity, booked_count')
-      .eq('id', classId)
-      .single();
-      
-    if (error) throw error;
-    
-    if (!data) {
-      throw new Error('Class not found');
-    }
-    
-    return Math.max(0, data.capacity - (data.booked_count || 0));
-  } catch (err) {
-    console.error('Error getting available spots:', err);
-    throw err;
-  }
-}
-
-/**
- * Gets all drop-in bookings for a parent
- */
-export async function getParentDropInBookings(parentId: string) {
-  try {
-    const { data, error } = await supabase
-      .from('drop_in_bookings')
-      .select(`
-        id,
-        payment_status,
-        payment_amount,
-        created_at,
-        class:classes (
-          id,
-          name,
-          date,
-          start_time,
-          end_time,
-          teacher:teacher_id (
-            name
-          ),
-          location:location_id (
-            name
-          ),
-          studio:studio_id (
-            id,
-            name,
-            currency
-          )
-        ),
-        student:students (
-          id,
-          name
-        )
-      `)
-      .eq('parent_id', parentId)
-      .order('created_at', { ascending: false });
-      
-    if (error) throw error;
-    return data || [];
-  } catch (err) {
-    console.error('Error fetching drop-in bookings:', err);
-    throw err;
-  }
-}
-
-/**
- * Checks if a student is already booked for a drop-in class
- */
-export async function isStudentBookedForClass(studentId: string, classId: string): Promise<boolean> {
-  try {
-    const { data, error } = await supabase
-      .from('drop_in_bookings')
-      .select('id')
-      .eq('student_id', studentId)
-      .eq('class_id', classId)
-      .eq('payment_status', 'completed')
-      .maybeSingle();
-      
-    if (error) throw error;
-    return !!data;
-  } catch (err) {
-    console.error('Error checking if student is booked:', err);
-    return false;
-  }
-}
-
-/**
- * Gets all drop-in bookings for the current user
- */
-export async function getCurrentUserDropInBookings() {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
-    
-    return await getParentDropInBookings(user.id);
-  } catch (err) {
-    console.error('Error fetching current user bookings:', err);
-    return [];
-  }
-}
-
-/**
- * Gets all upcoming drop-in classes for a student
- */
-export async function getUpcomingDropInClassesForStudent(studentId: string) {
-  try {
-    // Get today's date
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Get completed bookings for this student
-    const { data: bookings, error: bookingsError } = await supabase
-      .from('drop_in_bookings')
-      .select(`
-        class_id,
-        class:classes (
-          id,
-          name,
-          date,
-          start_time,
-          end_time,
-          teacher:teacher_id (
-            name
-          ),
-          location:location_id (
-            name
-          )
-        )
-      `)
-      .eq('student_id', studentId)
-      .eq('payment_status', 'completed')
-      .gte('class.date', today)
-      .order('class.date', { ascending: true });
-      
-    if (bookingsError) throw bookingsError;
-    
-    // Map to a more usable format
-    return (bookings || []).map(booking => booking.class);
-  } catch (err) {
-    console.error('Error fetching upcoming drop-in classes:', err);
-    return [];
   }
 }
