@@ -40,7 +40,7 @@ export default function BookDropInModal({ classInfo, students, onClose, onSucces
   // Use default payment method if available
   useEffect(() => {
     if (paymentMethods.length > 0 && !selectedPaymentMethod) {
-        const defaultMethod = paymentMethods.find(method => method.is_default);
+      const defaultMethod = paymentMethods.find(method => method.is_default);
       if (defaultMethod) {
         setSelectedPaymentMethod(defaultMethod.id);
       } else {
@@ -59,6 +59,21 @@ export default function BookDropInModal({ classInfo, students, onClose, onSucces
     setBookingStatus('processing');
 
     try {
+      // Log important information for debugging
+      console.log('Booking parameters:', {
+        classId: classInfo.id,
+        studentId: selectedStudent.id,
+        paymentMethodId: selectedPaymentMethod,
+        studioId: profile.studio.id,
+        studioConnectEnabled: profile.studio.stripe_connect_enabled,
+        studioConnectId: profile.studio.stripe_connect_id
+      });
+
+      // Verify studio has completed Stripe Connect setup
+      if (!profile.studio.stripe_connect_id || !profile.studio.stripe_connect_enabled) {
+        throw new Error('Studio payment setup is not complete. Please contact the studio administrator.');
+      }
+
       // First verify the payment method exists in the connected account
       const { data: connectedCustomer, error: customerError } = await supabase
         .from('connected_customers')
@@ -67,10 +82,18 @@ export default function BookDropInModal({ classInfo, students, onClose, onSucces
         .eq('studio_id', profile.studio.id)
         .single();
 
-      if (customerError || !connectedCustomer?.stripe_connected_customer_id) {
-        console.error('No connected customer found:', customerError);
+      if (customerError) {
+        console.error('Error fetching connected customer:', customerError);
         throw new Error('Payment setup required. Please add a payment method first.');
       }
+
+      if (!connectedCustomer?.stripe_connected_customer_id) {
+        console.error('No connected customer ID found for user:', profile.id);
+        setShowAddPaymentMethod(true);
+        throw new Error('Payment method setup required. Please add a payment method and try again.');
+      }
+
+      console.log('Found connected customer:', connectedCustomer.stripe_connected_customer_id);
 
       // Calculate totals
       const totals = {
@@ -104,7 +127,9 @@ export default function BookDropInModal({ classInfo, students, onClose, onSucces
       const errorMessage = err instanceof Error ? err.message : 'Failed to book class';
       setError(errorMessage);
       setBookingStatus('error');
-      if (errorMessage.includes('Payment setup required')) {
+      if (errorMessage.includes('Payment setup required') || 
+          errorMessage.includes('payment method') || 
+          errorMessage.includes('payment setup')) {
         // Show add payment method modal
         setShowAddPaymentMethod(true);
       }
