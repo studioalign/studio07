@@ -21,7 +21,7 @@ export async function bookDropInClass(
     console.log('Starting drop-in class booking process for:', {
       classId,
       studentId,
-      paymentMethodId,
+      paymentMethodId, // This should be a Stripe payment method ID now (pm_...)
       studioId,
       userId: user.id
     });
@@ -115,6 +115,9 @@ export async function bookDropInClass(
 
     const currency = studioData?.currency || 'USD';
     
+    // Create a temp booking id for payment reference
+    const tempBookingId = 'temp_' + Math.random().toString(36).substring(2, 15);
+    
     // Process payment with Stripe
     console.log('Processing payment with Stripe', {
       price: classData.drop_in_price,
@@ -125,7 +128,7 @@ export async function bookDropInClass(
     });
 
     const paymentResult = await processStripePayment(
-      'temp', // Temporary booking ID
+      tempBookingId,
       classData.drop_in_price,
       paymentMethodId,
       `Drop-in class: ${classData.name}`,
@@ -187,17 +190,25 @@ export async function bookDropInClass(
     console.log('Adding student to class_students for attendance...');
     
     // 4. Add student to class_students (for attendance)
-    const { error: enrollError } = await supabase
-      .from('class_students')
-      .insert({
-        class_id: classId,
-        student_id: studentId,
-        is_drop_in: true
-      });
-    
-    if (enrollError) {
-      console.error('Error enrolling student in class:', enrollError);
-      // This is not critical - we have the booking, so continue
+    try {
+      const { error: enrollError } = await supabase
+        .from('class_students')
+        .insert({
+          class_id: classId,
+          student_id: studentId,
+          is_drop_in: true
+        });
+      
+      if (enrollError) {
+        // Check if it's a duplicate error
+        if (enrollError.code === '23505') { // Postgres unique constraint violation
+          console.log('Student already enrolled in class (duplicate key)');
+        } else {
+          console.error('Error enrolling student in class:', enrollError);
+        }
+      }
+    } catch (err) {
+      console.error('Exception in class enrollment:', err);
     }
     
     console.log('Sending notifications...');
