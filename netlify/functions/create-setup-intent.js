@@ -91,6 +91,7 @@ exports.handler = async function(event, context) {
     // For parents, we need to handle Stripe Connect
     if (userData.role === 'parent' && userData.studio?.stripe_connect_id) {
       console.log('Parent user detected, handling Stripe Connect setup');
+      console.log('Studio Connect ID:', userData.studio.stripe_connect_id);
       
       // Check if customer already exists in connected account
       let connectedCustomerId;
@@ -145,6 +146,7 @@ exports.handler = async function(event, context) {
       // Create SetupIntent on the connected account
       const setupIntent = await stripe.setupIntents.create(
         {
+          usage: 'off_session', // Add this to enable future payments
           customer: connectedCustomerId,
           payment_method_types: ['card'],
           metadata: {
@@ -169,6 +171,7 @@ exports.handler = async function(event, context) {
     
     // For non-parent users or if no connected account, create SetupIntent on platform
     let stripeCustomerId = userData.stripe_customer_id;
+    console.log('Creating setup intent for platform customer:', stripeCustomerId);
     
     if (!stripeCustomerId) {
       const customer = await stripe.customers.create({
@@ -189,8 +192,11 @@ exports.handler = async function(event, context) {
     
     const setupIntent = await stripe.setupIntents.create({
       customer: stripeCustomerId,
+      usage: 'off_session', // Add this to enable future payments
       payment_method_types: ['card']
     });
+    
+    console.log('Created setup intent:', setupIntent.id);
     
     return {
       statusCode: 200,
