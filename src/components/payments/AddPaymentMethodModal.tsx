@@ -35,6 +35,8 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [useStripeElements, setUseStripeElements] = useState(true);
+  const [isConnectedAccount, setIsConnectedAccount] = useState(false);
+  const [connectedAccountId, setConnectedAccountId] = useState<string | null>(null);
 
   // Get setup intent on component mount
   useEffect(() => {
@@ -44,6 +46,8 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
           const result = await createSetupIntent(profile.id);
           if (result.success && result.clientSecret) {
             setClientSecret(result.clientSecret);
+            setIsConnectedAccount(result.isConnectedAccount || false);
+            setConnectedAccountId(result.connectedAccountId || null);
           } else {
             setError(result.error || 'Failed to initialize payment setup');
           }
@@ -74,10 +78,18 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
           throw new Error('Card element not found');
         }
         
-        // Confirm setup with card element
-        const result = await stripe.confirmCardSetup(clientSecret, {
+        // Prepare options for confirmCardSetup
+        const confirmOptions: any = {
           payment_method: { card: cardElement }
-        });
+        };
+
+        // Add Stripe-Account header for connected accounts
+        if (isConnectedAccount && connectedAccountId) {
+          confirmOptions.stripeAccount = connectedAccountId;
+        }
+        
+        // Confirm setup with card element
+        const result = await stripe.confirmCardSetup(clientSecret, confirmOptions);
         
         if (result.error) {
           throw new Error(result.error.message);
@@ -90,7 +102,8 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         // Add payment method to database
         const addResult = await addStripePaymentMethod(
           profile?.id || '',
-          result.setupIntent.payment_method as string
+          result.setupIntent.payment_method as string,
+          isConnectedAccount ? connectedAccountId : null
         );
         
         if (!addResult.success) {
