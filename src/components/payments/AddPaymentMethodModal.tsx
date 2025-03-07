@@ -79,15 +79,16 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         }
 
         // Prepare options for confirmCardSetup
-        const confirmOptions: any = {
-          payment_method: { card: cardElement }
+        const confirmOptions = {
+          payment_method: {
+            card: cardElement,
+            billing_details: {
+              email: profile?.email,
+              name: profile?.name
+            }
+          }
         };
 
-        // Add Stripe-Account header for connected accounts
-        if (isConnectedAccount && connectedAccountId) {
-          confirmOptions.stripeAccount = connectedAccountId;
-        }
-        
         // Confirm setup with card element and connected account if needed
         const result = await stripe.confirmCardSetup(clientSecret, confirmOptions);
         
@@ -103,8 +104,7 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         const addResult = await addStripePaymentMethod(
           profile?.id || '',
           result.setupIntent.payment_method as string,
-          result.setupIntent.payment_method as string,
-          isConnectedAccount ? connectedAccountId : null
+          connectedAccountId
         );
         
         if (!addResult.success) {
