@@ -50,58 +50,47 @@ export async function processStripePayment(
       };
     }
 
-    // Fetch user and studio details with expanded logging
+    // Get studio data directly - using the same approach as BookDropInModal
     const { data: userData, error: userError } = await supabase
       .from('users')
-      .select(`
-        id, 
-        email, 
-        name, 
-        studio_id,
-        studios!users_studio_id_fkey (
-          id,
-          stripe_connect_id,
-          stripe_connect_enabled,
-          stripe_connect_onboarding_complete,
-          currency
-        )
-      `)
+      .select('studio_id')
       .eq('id', customerId)
       .single();
-    
-    if (userError || !userData) {
-      console.error('User lookup comprehensive error', { 
-        error: userError, 
-        userData: userData,
-        customerId: customerId
-      });
-      return { 
-        success: false, 
-        error: 'User not found or studio details missing'
+
+    if (userError || !userData?.studio_id) {
+      console.error('User lookup error:', userError);
+      return {
+        success: false,
+        error: 'Could not find studio information'
+      };
+    }
+
+    // Get studio data directly
+    const { data: studioData, error: studioError } = await supabase
+      .from('studios')
+      .select('currency, stripe_connect_id, stripe_connect_enabled')
+      .eq('id', userData.studio_id)
+      .single();
+
+    if (studioError || !studioData) {
+      console.error('Studio lookup error:', studioError);
+      return {
+        success: false,
+        error: 'Could not find studio payment information'
       };
     }
 
     // Enhanced Studio Details Logging
     console.log('Studio Payment Setup Debug:', {
       studioId: userData.studio_id,
-      studioDataExists: !!userData.studios?.[0],
-      stripeConnectId: userData.studios?.[0]?.stripe_connect_id,
-      stripeConnectEnabled: userData.studios?.[0]?.stripe_connect_enabled,
-      stripeConnectOnboarded: userData.studios?.[0]?.stripe_connect_onboarding_complete,
-      rawStudioData: userData.studios?.[0]
+      studioDataExists: !!studioData,
+      stripeConnectId: studioData?.stripe_connect_id,
+      stripeConnectEnabled: studioData?.stripe_connect_enabled,
+      rawStudioData: studioData
     });
 
     // Validate studio details
-    const studio = userData.studios?.[0];
-    if (!studio) {
-      console.error('No studio associated with user');
-      return { 
-        success: false, 
-        error: 'No studio found for this user'
-      };
-    }
-
-    if (!studio.stripe_connect_id) {
+    if (!studioData.stripe_connect_id) {
       console.error('Missing Stripe Connect ID');
       return { 
         success: false, 
@@ -109,11 +98,11 @@ export async function processStripePayment(
       };
     }
 
-    if (studio.stripe_connect_enabled !== true) {
-      console.error('Stripe Connect not enabled', studio.stripe_connect_enabled);
+    if (studioData.stripe_connect_enabled !== true) {
+      console.error('Stripe Connect not enabled', studioData.stripe_connect_enabled);
       return { 
         success: false, 
-        error: `Studio payment setup is incomplete: Stripe Connect not enabled (current value: ${studio.stripe_connect_enabled})`
+        error: `Studio payment setup is incomplete: Stripe Connect not enabled (current value: ${studioData.stripe_connect_enabled})`
       };
     }
 
@@ -129,8 +118,8 @@ export async function processStripePayment(
         paymentMethodId,
         description,
         customerId,
-        currency: (studio.currency || currency).toLowerCase(),
-        studioId: studio.id
+        currency: (studioData.currency || currency).toLowerCase(),
+        studioId: userData.studio_id
       }),
     });
 
@@ -146,8 +135,8 @@ export async function processStripePayment(
           paymentMethodId,
           description,
           customerId,
-          currency: (studio.currency || currency).toLowerCase(),
-          studioId: studio.id
+          currency: (studioData.currency || currency).toLowerCase(),
+          studioId: userData.studio_id
         }
       });
       return { 
