@@ -1,8 +1,9 @@
-// Updated usePaymentMethods.ts implementation
+// src/hooks/usePaymentMethods.ts
 
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { getStripePaymentMethods } from '../utils/stripeUtils';
 
 interface PaymentMethod {
   id: string;
@@ -11,7 +12,8 @@ interface PaymentMethod {
   expiry_month?: number;
   expiry_year?: number;
   is_default: boolean;
-  stripe_payment_method_id?: string;
+  stripe_payment_method_id: string; // Actual Stripe payment method ID
+  brand?: string; // Card brand (Visa, Mastercard, etc.)
 }
 
 interface AddPaymentMethodData {
@@ -34,18 +36,60 @@ export function usePaymentMethods() {
 
   const fetchPaymentMethods = async () => {
     try {
-      // Direct query for payment methods by user_id instead of going through parents
-      const { data, error: fetchError } = await supabase
+      setLoading(true);
+      setError(null);
+      
+      // First, fetch payment methods from our database
+      const { data: dbPaymentMethods, error: fetchError } = await supabase
         .from('payment_methods')
         .select('*')
         .eq('user_id', profile?.id)
         .order('is_default', { ascending: false });
 
       if (fetchError) throw fetchError;
-      setPaymentMethods(data || []);
+      
+      // Next, try to fetch real Stripe payment methods for verification/enrichment
+      try {
+        const stripePaymentMethods = await getStripePaymentMethods(profile?.id || '');
+        
+        // Sync database with Stripe - if we have Stripe data available
+        if (stripePaymentMethods && stripePaymentMethods.length > 0) {
+          // Map the Stripe data to our database format
+          const syncedMethods = dbPaymentMethods?.map(dbMethod => {
+            // Find matching Stripe payment method
+            const stripeMethod = stripePaymentMethods.find(
+              spm => spm.id === dbMethod.stripe_payment_method_id
+            );
+            
+            // If we found a match, update with real Stripe data
+            if (stripeMethod && stripeMethod.card) {
+              return {
+                ...dbMethod,
+                last_four: stripeMethod.card.last4,
+                expiry_month: stripeMethod.card.exp_month,
+                expiry_year: stripeMethod.card.exp_year,
+                brand: stripeMethod.card.brand
+              };
+            }
+            
+            // Return original if no match
+            return dbMethod;
+          });
+          
+          setPaymentMethods(syncedMethods || []);
+        } else {
+          // Just use database data if no Stripe data available
+          setPaymentMethods(dbPaymentMethods || []);
+        }
+      } catch (stripeError) {
+        console.warn('Could not fetch Stripe payment methods:', stripeError);
+        // Fall back to database data only
+        setPaymentMethods(dbPaymentMethods || []);
+      }
     } catch (err) {
       console.error('Error fetching payment methods:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch payment methods');
+      setPaymentMethods([]);
     } finally {
       setLoading(false);
     }
