@@ -124,7 +124,14 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         };
 
         // Create setup intent
-        const result = await stripe.confirmCardSetup(clientSecret, setupOptions);
+        const result = await stripe.confirmCardSetup(
+          clientSecret, 
+          setupOptions,
+          // Add this third argument for connected accounts
+          isConnectedAccount && connectedAccountId ? 
+            { stripeAccount: connectedAccountId } : 
+            undefined
+        );
         
         console.log('Card setup confirmation result:', result);
         
