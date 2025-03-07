@@ -1,6 +1,27 @@
 // src/utils/stripeUtils.ts
 
-import { supabase } from '../lib/supabase';
+/**
+ * Test Netlify function connection
+ */
+export async function testNetlifyFunctionConnection(): Promise<boolean> {
+  try {
+    console.log('Testing Netlify function connection...');
+    
+    // Try to call a simple test function
+    const response = await fetch('/.netlify/functions/test', {
+      method: 'GET'
+    });
+    
+    console.log('Test response status:', response.status);
+    const data = await response.json();
+    console.log('Test response data:', data);
+    
+    return response.ok;
+  } catch (err) {
+    console.error('Netlify function connection test failed:', err);
+    return false;
+  }
+}
 
 /**
  * Processes a payment through Stripe
@@ -24,7 +45,10 @@ export async function processStripePayment(
     });
     
     // Call our Netlify function using fetch API
-    const response = await fetch('/.netlify/functions/process-drop-in-payment', {
+    const functionUrl = `${window.location.origin}/.netlify/functions/process-drop-in-payment`;
+    console.log('Calling Netlify function at:', functionUrl);
+    
+    const response = await fetch(functionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -39,7 +63,11 @@ export async function processStripePayment(
       }),
     });
     
+    // Log the raw response for debugging
+    console.log('Raw response status:', response.status);
+    
     const data = await response.json();
+    console.log('Response data:', data);
     
     if (!response.ok) {
       console.error('Netlify function error:', response.status, data);
@@ -63,7 +91,12 @@ export async function processStripePayment(
       paymentId: data.paymentId
     };
   } catch (err) {
-    console.error('Error processing payment:', err);
+    console.error('Error processing payment (detailed):', {
+      name: err?.name,
+      message: err?.message,
+      stack: err?.stack,
+      error: err
+    });
     return {
       success: false,
       error: err instanceof Error ? err.message : 'An unexpected error occurred'
@@ -74,11 +107,12 @@ export async function processStripePayment(
 /**
  * Retrieves Stripe payment methods for a user
  */
-// getStripePaymentMethods in stripeUtils.ts
 export async function getStripePaymentMethods(userId: string): Promise<any[]> {
   try {
-    // Replace Supabase function call with direct Netlify function call
-    const response = await fetch('/.netlify/functions/get-payment-methods', {
+    const functionUrl = `${window.location.origin}/.netlify/functions/get-payment-methods`;
+    console.log('Getting payment methods from:', functionUrl);
+    
+    const response = await fetch(functionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -86,7 +120,9 @@ export async function getStripePaymentMethods(userId: string): Promise<any[]> {
       body: JSON.stringify({ userId })
     });
     
+    console.log('Payment methods response status:', response.status);
     const data = await response.json();
+    console.log('Payment methods response data:', data);
     
     if (!response.ok) {
       console.error('Error retrieving payment methods:', data.error);
@@ -100,13 +136,18 @@ export async function getStripePaymentMethods(userId: string): Promise<any[]> {
   }
 }
 
-// addStripePaymentMethod in stripeUtils.ts
+/**
+ * Adds a new payment method for a user
+ */
 export async function addStripePaymentMethod(
   userId: string, 
   paymentMethodId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch('/.netlify/functions/add-payment-method', {
+    const functionUrl = `${window.location.origin}/.netlify/functions/add-payment-method`;
+    console.log('Adding payment method using:', functionUrl);
+    
+    const response = await fetch(functionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -117,104 +158,11 @@ export async function addStripePaymentMethod(
       })
     });
     
+    console.log('Add payment method response status:', response.status);
     const data = await response.json();
     
     if (!response.ok) {
       return { success: false, error: data.error };
-    }
-    
-    return { success: !!data?.success };
-  } catch (err) {
-    console.error('Error adding payment method:', err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : 'Failed to add payment method'
-    };
-  }
-}
-
-// createSetupIntent in stripeUtils.ts
-export async function createSetupIntent(
-  userId: string
-): Promise<{ success: boolean; clientSecret?: string; error?: string }> {
-  try {
-    const response = await fetch('/.netlify/functions/create-setup-intent', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ userId })
-    });
-    
-    const data = await response.json();
-    
-    if (!response.ok) {
-      return { success: false, error: data.error };
-    }
-    
-    if (!data?.clientSecret) {
-      return { success: false, error: 'No client secret returned' };
-    }
-    
-    return {
-      success: true,
-      clientSecret: data.clientSecret
-    };
-  } catch (err) {
-    console.error('Error creating setup intent:', err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : 'Failed to create setup intent'
-    };
-  }
-}
-
-// getPaymentIntentStatus in stripeUtils.ts
-export async function getPaymentIntentStatus(
-  paymentIntentId: string
-): Promise<{ status: string; error?: string }> {
-  try {
-    const response = await fetch('/.netlify/functions/get-payment-intent', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ paymentIntentId })
-    });
-    
-    const data = await response.json();
-    
-    if (!response.ok) {
-      return { status: 'error', error: data.error };
-    }
-    
-    return { status: data?.status || 'unknown' };
-  } catch (err) {
-    console.error('Error getting payment intent status:', err);
-    return {
-      status: 'error',
-      error: err instanceof Error ? err.message : 'Failed to get payment status'
-    };
-  }
-}
-
-/**
- * Adds a new payment method for a user
- */
-export async function addStripePaymentMethod(
-  userId: string, 
-  paymentMethodId: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const { data, error } = await supabase.functions.invoke('add-payment-method', {
-      body: { 
-        userId,
-        paymentMethodId 
-      }
-    });
-    
-    if (error) {
-      return { success: false, error: error.message };
     }
     
     return { success: !!data?.success };
@@ -234,12 +182,22 @@ export async function createSetupIntent(
   userId: string
 ): Promise<{ success: boolean; clientSecret?: string; error?: string }> {
   try {
-    const { data, error } = await supabase.functions.invoke('create-setup-intent', {
-      body: { userId }
+    const functionUrl = `${window.location.origin}/.netlify/functions/create-setup-intent`;
+    console.log('Creating setup intent using:', functionUrl);
+    
+    const response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ userId })
     });
     
-    if (error) {
-      return { success: false, error: error.message };
+    console.log('Setup intent response status:', response.status);
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { success: false, error: data.error };
     }
     
     if (!data?.clientSecret) {
@@ -266,12 +224,22 @@ export async function getPaymentIntentStatus(
   paymentIntentId: string
 ): Promise<{ status: string; error?: string }> {
   try {
-    const { data, error } = await supabase.functions.invoke('get-payment-intent', {
-      body: { paymentIntentId }
+    const functionUrl = `${window.location.origin}/.netlify/functions/get-payment-intent`;
+    console.log('Getting payment intent status from:', functionUrl);
+    
+    const response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ paymentIntentId })
     });
     
-    if (error) {
-      return { status: 'error', error: error.message };
+    console.log('Payment intent status response:', response.status);
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { status: 'error', error: data.error };
     }
     
     return { status: data?.status || 'unknown' };
