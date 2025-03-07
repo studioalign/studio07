@@ -60,10 +60,31 @@ export async function bookDropInClass(
       .eq('id', classData.studio_id)
       .single();
       
-    if (studioError) throw studioError;
+    if (studioError) {
+      console.error('Studio fetch error:', studioError);
+      throw studioError;
+    }
     
-    if (!studioData || !studioData.stripe_connect_id || !studioData.stripe_connect_enabled) {
-      throw new Error('Studio payment setup is incomplete');
+    // Enhanced logging for studio payment setup
+    console.log('Studio Payment Setup Debug:', {
+      studioId: classData.studio_id,
+      studioDataExists: !!studioData,
+      stripeConnectId: studioData?.stripe_connect_id,
+      stripeConnectEnabled: studioData?.stripe_connect_enabled,
+      rawStudioData: studioData
+    });
+    
+    if (!studioData) {
+      throw new Error('Studio not found');
+    }
+    
+    if (!studioData.stripe_connect_id) {
+      throw new Error('Stripe Connect ID is missing');
+    }
+    
+    if (studioData.stripe_connect_enabled !== true) {
+      console.warn('Stripe Connect not enabled, current value:', studioData.stripe_connect_enabled);
+      throw new Error('Studio Stripe Connect is not enabled');
     }
     
     const currency = studioData?.currency || 'USD';
@@ -156,7 +177,12 @@ export async function bookDropInClass(
     
     return { success: true, bookingId: booking.id };
   } catch (err) {
-    console.error('Error booking drop-in class:', err);
+    console.error('Full Error in bookDropInClass:', {
+      errorName: err.name,
+      errorMessage: err.message,
+      errorStack: err.stack
+    });
+    
     return { 
       success: false, 
       error: err instanceof Error ? err.message : 'An error occurred during booking' 
