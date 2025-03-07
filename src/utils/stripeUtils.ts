@@ -70,7 +70,7 @@ export async function processStripePayment(
     // Get studio data directly
     const { data: studioData, error: studioError } = await supabase
       .from('studios')
-      .select('currency, stripe_connect_id, stripe_connect_enabled')
+      .select('currency, stripe_connect_id, stripe_connect_enabled, stripe_connect_onboarding_complete')
       .eq('id', userData.studio_id)
       .single();
 
@@ -88,6 +88,9 @@ export async function processStripePayment(
       studioDataExists: !!studioData,
       stripeConnectId: studioData?.stripe_connect_id,
       stripeConnectEnabled: studioData?.stripe_connect_enabled,
+      stripeConnectOnboarded: studioData?.stripe_connect_onboarding_complete,
+      connectedAccountIdParam: connectedAccountId,
+      connectedCustomerIdParam: connectedCustomerId,
       rawStudioData: studioData
     });
 
@@ -108,9 +111,37 @@ export async function processStripePayment(
       };
     }
 
-    // Proceed with payment processing
-    const stripeOptions = connectedAccountId ? { stripeAccount: connectedAccountId } : undefined;
-    const targetCustomerId = connectedCustomerId || stripeCustomerId;
+    // Always use the studio's connected account ID from the database
+    const studioConnectId = studioData.stripe_connect_id;
+
+    // Get connected customer ID if not provided
+    if (!connectedCustomerId) {
+      try {
+        const { data: connectedCustomer, error: customerError } = await supabase
+          .from('connected_customers')
+          .select('stripe_connected_customer_id')
+          .eq('parent_id', customerId)
+          .eq('studio_id', userData.studio_id)
+          .single();
+
+        if (customerError || !connectedCustomer?.stripe_connected_customer_id) {
+          console.error('Connected customer not found:', customerError);
+          return {
+            success: false,
+            error: 'Payment setup required. Please add a payment method first.'
+          };
+        }
+
+        connectedCustomerId = connectedCustomer.stripe_connected_customer_id;
+        console.log('Using connected customer ID:', connectedCustomerId);
+      } catch (err) {
+        console.error('Error getting connected customer:', err);
+        return {
+          success: false,
+          error: 'Error retrieving payment information. Please try again.'
+        };
+      }
+    }
 
     const response = await fetch(`${window.location.origin}/.netlify/functions/process-drop-in-payment`, {
       method: 'POST',
@@ -122,10 +153,11 @@ export async function processStripePayment(
         amount: Math.round(amount * 100), // Convert to cents for Stripe
         paymentMethodId,
         description,
-        customerId: targetCustomerId,
+        customerId: customerId, // Always use the user ID from Supabase
+        connectedCustomerId: connectedCustomerId, // Pass the connected customer ID
         currency: (studioData.currency || currency).toLowerCase(),
         studioId: userData.studio_id,
-        connectedAccountId: connectedAccountId
+        connectedAccountId: studioConnectId // Always use the studio's connect ID from database
       }),
     });
 
@@ -141,8 +173,10 @@ export async function processStripePayment(
           paymentMethodId,
           description,
           customerId,
+          connectedCustomerId,
           currency: (studioData.currency || currency).toLowerCase(),
-          studioId: userData.studio_id
+          studioId: userData.studio_id,
+          connectedAccountId: studioConnectId
         }
       });
       return { 
@@ -175,6 +209,7 @@ export async function processStripePayment(
     };
   }
 }
+
 /**
  * Retrieves Stripe payment methods for a user
  */
@@ -216,6 +251,12 @@ export async function addStripePaymentMethod(
   connectedAccountId: string | null = null
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    console.log('Adding payment method to user account', {
+      userId,
+      paymentMethodId,
+      connectedAccountId
+    });
+
     const functionUrl = `${window.location.origin}/.netlify/functions/add-payment-method`;
     console.log('Adding payment method using:', functionUrl);
     
@@ -235,9 +276,11 @@ export async function addStripePaymentMethod(
     const data = await response.json();
     
     if (!response.ok) {
+      console.error('Error adding payment method:', data.error);
       return { success: false, error: data.error };
     }
     
+    console.log('Payment method added successfully');
     return { success: !!data?.success };
   } catch (err) {
     console.error('Error adding payment method:', err);
@@ -276,10 +319,12 @@ export async function createSetupIntent(
     const data = await response.json();
     
     if (!response.ok) {
+      console.error('Setup intent error:', data.error);
       return { success: false, error: data.error };
     }
     
     if (!data?.clientSecret) {
+      console.error('No client secret returned');
       return { success: false, error: 'No client secret returned' };
     }
     
