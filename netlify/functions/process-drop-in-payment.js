@@ -1,17 +1,9 @@
 // netlify/functions/process-drop-in-payment.js
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { createClient } = require('@supabase/supabase-js');
-
-// Initialize Supabase client
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
 exports.handler = async function(event, context) {
   // CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS'
   };
   
@@ -24,6 +16,23 @@ exports.handler = async function(event, context) {
     };
   }
   
+  // Validate environment variables
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY;
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  
+  if (!stripeSecretKey) {
+    console.error('STRIPE_SECRET_KEY is not set');
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ 
+        success: false, 
+        error: 'Server configuration error: Missing Stripe key'
+      })
+    };
+  }
+  
   try {
     if (!event.body) {
       return {
@@ -33,7 +42,30 @@ exports.handler = async function(event, context) {
       };
     }
     
-    const { bookingId, amount, paymentMethodId, description, customerId, currency = 'usd' } = JSON.parse(event.body);
+    // Initialize Stripe
+    const stripe = require('stripe')(stripeSecretKey);
+    
+    // Initialize Supabase if needed
+    let supabase;
+    if (supabaseUrl && supabaseAnonKey) {
+      const { createClient } = require('@supabase/supabase-js');
+      supabase = createClient(supabaseUrl, supabaseAnonKey);
+    }
+    
+    // Parse request data
+    let requestData;
+    try {
+      requestData = JSON.parse(event.body);
+    } catch (parseError) {
+      console.error('Error parsing request body:', parseError);
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ success: false, error: 'Invalid JSON in request body' })
+      };
+    }
+    
+    const { bookingId, amount, paymentMethodId, description, customerId, currency = 'usd' } = requestData;
     
     if (!bookingId || !amount || !paymentMethodId || !customerId) {
       return {
@@ -46,38 +78,48 @@ exports.handler = async function(event, context) {
       };
     }
     
+    console.log('Processing payment for booking:', bookingId, 'amount:', amount);
+    
     // Check if customer exists in Stripe
     let stripeCustomerId;
     
-    // Lookup or create customer in Stripe
-    const { data: customerData } = await supabase
-      .from('users')
-      .select('email, name, stripe_customer_id')
-      .eq('id', customerId)
-      .single();
-    
-    if (customerData?.stripe_customer_id) {
-      stripeCustomerId = customerData.stripe_customer_id;
-    } else {
-      // Create a new customer
-      const customer = await stripe.customers.create({
-        email: customerData.email,
-        name: customerData.name,
-        metadata: {
-          supabase_id: customerId
-        }
-      });
-      
-      stripeCustomerId = customer.id;
-      
-      // Save Stripe customer ID back to user record
-      await supabase
+    // Use existing customer ID if available
+    if (supabase) {
+      const { data: customerData } = await supabase
         .from('users')
-        .update({ stripe_customer_id: stripeCustomerId })
-        .eq('id', customerId);
+        .select('email, name, stripe_customer_id')
+        .eq('id', customerId)
+        .single();
+      
+      if (customerData?.stripe_customer_id) {
+        stripeCustomerId = customerData.stripe_customer_id;
+        console.log('Using existing Stripe customer:', stripeCustomerId);
+      } else if (customerData) {
+        // Create a new customer
+        const customer = await stripe.customers.create({
+          email: customerData.email,
+          name: customerData.name,
+          metadata: {
+            supabase_id: customerId
+          }
+        });
+        
+        stripeCustomerId = customer.id;
+        console.log('Created new Stripe customer:', stripeCustomerId);
+        
+        // Save Stripe customer ID back to user record
+        await supabase
+          .from('users')
+          .update({ stripe_customer_id: stripeCustomerId })
+          .eq('id', customerId);
+      }
+    } else {
+      // If we don't have Supabase, just use the customer ID directly
+      stripeCustomerId = customerId;
     }
     
     // Create and confirm payment intent
+    console.log('Creating payment intent...');
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency,
@@ -91,6 +133,8 @@ exports.handler = async function(event, context) {
         type: 'drop_in_booking'
       }
     });
+    
+    console.log('Payment intent status:', paymentIntent.status);
     
     if (paymentIntent.status === 'succeeded') {
       return {
@@ -112,7 +156,13 @@ exports.handler = async function(event, context) {
       };
     }
   } catch (error) {
-    console.error('Stripe payment error:', error);
+    console.error('Stripe payment error:', {
+      name: error.name,
+      message: error.message,
+      type: error.type,
+      code: error.code,
+      stack: error.stack
+    });
     
     // Handle Stripe-specific errors
     if (error.type === 'StripeCardError') {
@@ -132,7 +182,7 @@ exports.handler = async function(event, context) {
       headers,
       body: JSON.stringify({ 
         success: false, 
-        error: 'An error occurred while processing payment'
+        error: 'An error occurred while processing payment: ' + error.message
       })
     };
   }
