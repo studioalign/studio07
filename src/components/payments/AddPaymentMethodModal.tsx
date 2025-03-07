@@ -107,6 +107,10 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         const result = await stripe.confirmCardSetup(clientSecret, setupOptions);
         
         console.log('Card setup confirmation result:', result);
+        console.log('Connected account details:', {
+          isConnectedAccount,
+          connectedAccountId
+        });
         
         if (result.error) {
           console.error('Card setup error:', result.error);
@@ -123,7 +127,7 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         // Add payment method to database
         const addResult = await addStripePaymentMethod(
           profile?.id || '',
-          result.setupIntent.payment_method as string,
+          result.setupIntent.payment_method as string, 
           connectedAccountId
         );
         
