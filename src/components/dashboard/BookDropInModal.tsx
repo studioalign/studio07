@@ -52,16 +52,36 @@ export default function BookDropInModal({ classInfo, students, onClose, onSucces
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudent || !selectedPaymentMethod || !profile?.studio?.id) return;
+    console.log('Starting drop-in class booking process');
 
     setIsSubmitting(true);
     setError(null);
     setBookingStatus('processing');
 
     try {
+      // First verify the payment method exists in the connected account
+      const { data: connectedCustomer, error: customerError } = await supabase
+        .from('connected_customers')
+        .select('stripe_connected_customer_id')
+        .eq('parent_id', profile.id)
+        .eq('studio_id', profile.studio.id)
+        .single();
+
+      if (customerError || !connectedCustomer?.stripe_connected_customer_id) {
+        console.error('No connected customer found:', customerError);
+        throw new Error('Payment setup required. Please add a payment method first.');
+      }
+
+      // Calculate totals
+      const totals = {
+        subtotal: classInfo.drop_in_price,
+      };
+
       const result = await bookDropInClass(
         classInfo.id,
         selectedStudent.id,
-        selectedPaymentMethod
+        selectedPaymentMethod,
+        profile.studio.id
       );
 
       if (!result.success) {
@@ -72,6 +92,7 @@ export default function BookDropInModal({ classInfo, students, onClose, onSucces
       }
 
       // Success!
+      console.log('Drop-in class booked successfully');
       setBookingStatus('success');
       
       // Wait briefly to show success message before closing
@@ -79,8 +100,15 @@ export default function BookDropInModal({ classInfo, students, onClose, onSucces
         onSuccess();
       }, 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to book class');
+      console.error('Error booking class:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to book class';
+      setError(errorMessage);
       setBookingStatus('error');
+      if (errorMessage.includes('Payment setup required')) {
+        // Show add payment method modal
+        setShowAddPaymentMethod(true);
+      }
+    } finally {
       setIsSubmitting(false);
     }
   };
