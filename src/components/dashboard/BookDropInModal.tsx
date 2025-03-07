@@ -1,4 +1,4 @@
-// src/components/dashboard/BookDropInModal.tsx
+// src/components/dashboard/BookDropInModal.tsx - Updated to handle both ID types
 
 import React, { useState, useEffect } from 'react';
 import { X, CreditCard, Plus, AlertCircle, CheckCircle } from 'lucide-react';
@@ -36,7 +36,15 @@ export default function BookDropInModal({ classInfo, students, onClose, onSucces
   const [error, setError] = useState<string | null>(null);
   const [bookingStatus, setBookingStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [showAddPaymentMethod, setShowAddPaymentMethod] = useState(false);
-  const [paymentMethodDetails, setPaymentMethodDetails] = useState<Record<string, string>>({});
+  
+  // Two separate mappings for payment method IDs
+  const [paymentMethodDetails, setPaymentMethodDetails] = useState<{
+    stripeIds: Record<string, string>,
+    databaseIds: Record<string, string>
+  }>({
+    stripeIds: {},
+    databaseIds: {}
+  });
 
   // Use default payment method if available
   useEffect(() => {
@@ -50,18 +58,25 @@ export default function BookDropInModal({ classInfo, students, onClose, onSucces
     }
   }, [paymentMethods, selectedPaymentMethod]);
 
-  // Create a lookup for payment method IDs
+  // Create lookup tables for payment method IDs
   useEffect(() => {
-    const methodDetails: Record<string, string> = {};
+    const stripeIds: Record<string, string> = {};
+    const databaseIds: Record<string, string> = {};
     
     paymentMethods.forEach(method => {
-      // Store the Stripe payment method ID mapped to our database ID
+      // Map database ID to Stripe ID
       if (method.stripe_payment_method_id) {
-        methodDetails[method.id] = method.stripe_payment_method_id;
+        stripeIds[method.id] = method.stripe_payment_method_id;
       }
+      
+      // Store the database ID directly 
+      databaseIds[method.id] = method.id;
     });
     
-    setPaymentMethodDetails(methodDetails);
+    setPaymentMethodDetails({
+      stripeIds,
+      databaseIds
+    });
   }, [paymentMethods]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,18 +89,20 @@ export default function BookDropInModal({ classInfo, students, onClose, onSucces
     setBookingStatus('processing');
 
     try {
-      // Get the actual Stripe payment method ID
-      const stripePaymentMethodId = paymentMethodDetails[selectedPaymentMethod];
+      // Get both IDs
+      const stripePaymentMethodId = paymentMethodDetails.stripeIds[selectedPaymentMethod];
+      const databasePaymentMethodId = paymentMethodDetails.databaseIds[selectedPaymentMethod];
       
       if (!stripePaymentMethodId) {
         throw new Error('Invalid payment method. Please select a different payment method or add a new one.');
       }
       
-      // Log important information for debugging
+      // Log both IDs for debugging
       console.log('Booking parameters:', {
         classId: classInfo.id,
         studentId: selectedStudent.id,
-        paymentMethodId: stripePaymentMethodId, // Use the Stripe ID, not the database ID
+        stripePaymentMethodId,
+        databasePaymentMethodId,
         studioId: profile.studio.id,
         studioConnectEnabled: profile.studio.stripe_connect_enabled,
         studioConnectId: profile.studio.stripe_connect_id
@@ -117,16 +134,13 @@ export default function BookDropInModal({ classInfo, students, onClose, onSucces
 
       console.log('Found connected customer:', connectedCustomer.stripe_connected_customer_id);
 
-      // Calculate totals
-      const totals = {
-        subtotal: classInfo.drop_in_price,
-      };
-
+      // Pass both IDs to the booking function
       const result = await bookDropInClass(
         classInfo.id,
         selectedStudent.id,
-        stripePaymentMethodId, // Use the Stripe ID, not the database ID
-        profile.studio.id
+        stripePaymentMethodId,
+        profile.studio.id,
+        databasePaymentMethodId
       );
 
       if (!result.success) {
