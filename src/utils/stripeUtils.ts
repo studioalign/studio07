@@ -23,23 +23,29 @@ export async function processStripePayment(
       currency
     });
     
-    // Call our Stripe edge function
-    const { data, error } = await supabase.functions.invoke('process-drop-in-payment', {
-      body: {
+    // Call our Netlify function using fetch API
+    const response = await fetch('/.netlify/functions/process-drop-in-payment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         bookingId,
         amount: Math.round(amount * 100), // Convert to cents for Stripe
         paymentMethodId,
         description,
         customerId,
         currency: currency.toLowerCase()
-      }
+      }),
     });
     
-    if (error) {
-      console.error('Supabase function error:', error);
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('Netlify function error:', response.status, data);
       return { 
         success: false, 
-        error: error.message || 'Payment processing failed'
+        error: data.error || `Payment processing failed (${response.status})`
       };
     }
     
