@@ -44,6 +44,19 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
       if (profile?.id && useStripeElements) {
         console.log('Getting setup intent for user:', profile.id);
         try {
+          // Verify studio first
+          if (!profile.studio?.id || !profile.studio?.stripe_connect_id || !profile.studio?.stripe_connect_enabled) {
+            console.error('Studio Stripe Connect not set up correctly:', {
+              studioId: profile.studio?.id,
+              connectId: profile.studio?.stripe_connect_id,
+              enabled: profile.studio?.stripe_connect_enabled
+            });
+            setError('Studio payment setup is incomplete. Please contact the studio administrator.');
+            return;
+          }
+
+          console.log('Creating setup intent with studio connected account:', profile.studio.stripe_connect_id);
+          
           const result = await createSetupIntent(profile.id);
           console.log('Setup intent result:', result);
           
@@ -51,7 +64,10 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
             setClientSecret(result.clientSecret);
             setIsConnectedAccount(result.isConnectedAccount || false);
             setConnectedAccountId(result.connectedAccountId || null);
-            console.log('Setup intent configured successfully');
+            console.log('Setup intent configured successfully', {
+              isConnectedAccount: result.isConnectedAccount,
+              connectedAccountId: result.connectedAccountId
+            });
           } else {
             console.error('Setup intent failed:', result.error);
             setError(result.error || 'Failed to initialize payment setup');
@@ -64,7 +80,7 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
     }
     
     getSetupIntent();
-  }, [profile?.id, useStripeElements]);
+  }, [profile?.id, profile?.studio?.id, profile?.studio?.stripe_connect_id, profile?.studio?.stripe_connect_enabled, useStripeElements]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,7 +91,11 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
       if (useStripeElements) {
         // Use Stripe Elements for real payment processing
         if (!stripe || !elements || !clientSecret) {
-          console.error('Payment system not ready:', { stripe: !!stripe, elements: !!elements, clientSecret: !!clientSecret });
+          console.error('Payment system not ready:', { 
+            stripe: !!stripe, 
+            elements: !!elements, 
+            clientSecret: !!clientSecret 
+          });
           throw new Error('Payment system not ready');
         }
         
@@ -131,13 +151,18 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
           connectedAccountId
         });
         
-        console.log('Adding payment method to database');
-        
         // Add payment method to database
+        console.log('Payment method created successfully, now saving to database', {
+          userId: profile?.id,
+          paymentMethodId,
+          isConnectedAccount,
+          connectedAccountId
+        });
+        
         const addResult = await addStripePaymentMethod(
           profile?.id || '',
           paymentMethodId,
-          connectedAccountId
+          isConnectedAccount ? connectedAccountId : null
         );
         
         if (!addResult.success) {
@@ -145,7 +170,7 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
           throw new Error(addResult.error || 'Failed to save payment method');
         }
         
-        console.log('Payment method added successfully');
+        console.log('Payment method saved to database successfully');
         
         // Refresh payment methods list
         if (refresh) await refresh();
@@ -191,6 +216,17 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         }
       }
     } catch (err) {
+      console.error('Payment method error details:', {
+        error: err,
+        message: err instanceof Error ? err.message : 'Unknown error',
+        type: err instanceof Error ? err.constructor.name : 'Unknown type',
+        context: {
+          stripeReady: !!stripe,
+          elementsReady: !!elements,
+          clientSecret: !!clientSecret,
+          profile: !!profile
+        }
+      });
       setError(err instanceof Error ? err.message : 'Failed to add payment method');
     } finally {
       setIsSubmitting(false);
@@ -338,7 +374,7 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         </button>
         <button
           type="submit"
-          disabled={isSubmitting || (useStripeElements && (!stripe || !elements))}
+          disabled={isSubmitting || (useStripeElements && (!stripe || !elements || !clientSecret))}
           className="px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 disabled:bg-gray-400 flex items-center"
         >
           {isSubmitting ? (
