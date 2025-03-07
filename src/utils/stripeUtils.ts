@@ -33,7 +33,9 @@ export async function processStripePayment(
   paymentMethodId: string,
   description: string,
   customerId: string,
-  currency: string = 'USD'
+  currency: string = 'USD',
+  connectedAccountId?: string,
+  connectedCustomerId?: string
 ): Promise<{ success: boolean; paymentId?: string; error?: string }> {
   try {
     // Fetch user details explicitly
@@ -107,6 +109,9 @@ export async function processStripePayment(
     }
 
     // Proceed with payment processing
+    const stripeOptions = connectedAccountId ? { stripeAccount: connectedAccountId } : undefined;
+    const targetCustomerId = connectedCustomerId || stripeCustomerId;
+
     const response = await fetch(`${window.location.origin}/.netlify/functions/process-drop-in-payment`, {
       method: 'POST',
       headers: {
@@ -117,9 +122,10 @@ export async function processStripePayment(
         amount: Math.round(amount * 100), // Convert to cents for Stripe
         paymentMethodId,
         description,
-        customerId,
+        customerId: targetCustomerId,
         currency: (studioData.currency || currency).toLowerCase(),
-        studioId: userData.studio_id
+        studioId: userData.studio_id,
+        connectedAccountId: connectedAccountId
       }),
     });
 
