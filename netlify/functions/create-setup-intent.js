@@ -147,7 +147,6 @@ exports.handler = async function(event, context) {
       const setupIntent = await stripe.setupIntents.create(
         {
           customer: connectedCustomerId,
-          payment_method_types: ['card'],
           usage: 'off_session',
           automatic_payment_methods: {
             enabled: true,
@@ -208,8 +207,11 @@ exports.handler = async function(event, context) {
     
     const setupIntent = await stripe.setupIntents.create({
       customer: stripeCustomerId,
-      usage: 'off_session', // Add this to enable future payments
-      payment_method_types: ['card']
+      usage: 'off_session',
+      automatic_payment_methods: {
+        enabled: true,
+        allow_redirects: 'never'
+      }
     });
     
     console.log('Created setup intent:', setupIntent.id);
