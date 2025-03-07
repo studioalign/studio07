@@ -206,7 +206,8 @@ export async function getStripePaymentMethods(userId: string): Promise<any[]> {
  */
 export async function addStripePaymentMethod(
   userId: string, 
-  paymentMethodId: string
+  paymentMethodId: string,
+  connectedAccountId: string | null
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const functionUrl = `${window.location.origin}/.netlify/functions/add-payment-method`;
@@ -219,7 +220,8 @@ export async function addStripePaymentMethod(
       },
       body: JSON.stringify({ 
         userId,
-        paymentMethodId 
+        paymentMethodId,
+        connectedAccountId
       })
     });
     
@@ -245,7 +247,13 @@ export async function addStripePaymentMethod(
  */
 export async function createSetupIntent(
   userId: string
-): Promise<{ success: boolean; clientSecret?: string; error?: string }> {
+): Promise<{ 
+  success: boolean; 
+  clientSecret?: string; 
+  error?: string;
+  isConnectedAccount?: boolean;
+  connectedAccountId?: string;
+}> {
   try {
     const functionUrl = `${window.location.origin}/.netlify/functions/create-setup-intent`;
     console.log('Creating setup intent using:', functionUrl);
@@ -271,7 +279,9 @@ export async function createSetupIntent(
     
     return {
       success: true,
-      clientSecret: data.clientSecret
+      clientSecret: data.clientSecret,
+      isConnectedAccount: data.isConnectedAccount,
+      connectedAccountId: data.connectedAccountId
     };
   } catch (err) {
     console.error('Error creating setup intent:', err);
