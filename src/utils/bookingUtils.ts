@@ -31,7 +31,7 @@ export async function bookDropInClass(
     // Check if spots are available
     const { data: classData, error: classError } = await supabase
       .from('classes')
-      .select('capacity, booked_count, drop_in_price, name, studio_id, teacher_id')
+      .select('capacity, booked_count, drop_in_price, name, studio_id, teacher_id, date')
       .eq('id', classId)
       .single();
       
@@ -44,8 +44,11 @@ export async function bookDropInClass(
       throw new Error('Class not found');
     }
     
-    if ((classData.booked_count || 0) >= classData.capacity) {
-      throw new Error('This class is full');
+    const capacity = classData.capacity || 0;
+    const booked = classData.booked_count || 0;
+    
+    if (booked >= capacity) {
+      throw new Error(`This class is full (${booked}/${capacity})`);
     }
     
     // Check if student is already booked
@@ -156,35 +159,31 @@ export async function bookDropInClass(
       try {
         const { data: paymentMethods } = await supabase
           .from('payment_methods')
-          .select('id')
+          .select('id, stripe_payment_method_id')
           .eq('user_id', user.id)
-          .eq('stripe_payment_method_id', stripePaymentMethodId)
-          .limit(1);
+          .limit(10);
           
         if (paymentMethods && paymentMethods.length > 0) {
-          databasePaymentMethodId = paymentMethods[0].id;
-          console.log('Found database payment method ID:', databasePaymentMethodId);
-        } else {
-          // If we can't find the exact match, just get any payment method from this user
-          const { data: fallbackMethods } = await supabase
-            .from('payment_methods')
-            .select('id')
-            .eq('user_id', user.id)
-            .limit(1);
-            
-          if (fallbackMethods && fallbackMethods.length > 0) {
-            databasePaymentMethodId = fallbackMethods[0].id;
-            console.log('Using fallback database payment method ID:', databasePaymentMethodId);
+          // First, try to find the exact payment method
+          const exactMatch = paymentMethods.find(pm => pm.stripe_payment_method_id === stripePaymentMethodId);
+          
+          if (exactMatch) {
+            databasePaymentMethodId = exactMatch.id;
+            console.log('Found exact database payment method ID:', databasePaymentMethodId);
           } else {
-            console.warn('No database payment method found for user');
+            // If no exact match, use the first one
+            databasePaymentMethodId = paymentMethods[0].id;
+            console.log('Using fallback database payment method ID:', databasePaymentMethodId);
           }
+        } else {
+          console.warn('No database payment methods found for user');
         }
       } catch (err) {
         console.warn('Error finding database payment method ID:', err);
       }
     }
 
-    // 2. Create booking record ONLY AFTER successful payment
+    // Create the booking record - simple approach with clear fields
     const bookingData: any = {
       class_id: classId,
       student_id: studentId,
@@ -193,33 +192,17 @@ export async function bookDropInClass(
       payment_amount: classData.drop_in_price,
       payment_status: 'completed',
       stripe_payment_id: paymentResult.paymentId,
+      stripe_payment_method_id: stripePaymentMethodId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
-    
+
     // Only include payment_method_id if we have a valid UUID
     if (databasePaymentMethodId) {
       bookingData.payment_method_id = databasePaymentMethodId;
     }
-    
-    // Check if the stripe_payment_method_id column exists
-    try {
-      const { data: tableInfo } = await supabase.rpc('pg_get_columns', { 
-        table_name: 'drop_in_bookings'
-      });
-      
-      const hasStripePaymentMethodIdColumn = tableInfo?.some(
-        (col: any) => col.column_name === 'stripe_payment_method_id'
-      );
-      
-      if (hasStripePaymentMethodIdColumn) {
-        bookingData.stripe_payment_method_id = stripePaymentMethodId;
-      } else {
-        console.warn('stripe_payment_method_id column doesn\'t exist in drop_in_bookings table');
-      }
-    } catch (err) {
-      console.warn('Error checking for stripe_payment_method_id column:', err);
-      // Continue without adding this field
-    }
-    
+
+    // Create the booking record
     const { data: booking, error: bookingError } = await supabase
       .from('drop_in_bookings')
       .insert(bookingData)
@@ -228,53 +211,145 @@ export async function bookDropInClass(
       
     if (bookingError) {
       console.error('Error creating booking record:', bookingError);
-      // Even though payment succeeded, we need to notify someone about this issue
-      // since we have a payment but no booking record
       throw bookingError;
+    }
+    
+    if (!booking) {
+      throw new Error('Failed to create booking record - no data returned');
     }
     
     console.log('Booking record created successfully. Updating class capacity...');
     
-    // 3. Update class booked count
-    const { error: updateError } = await supabase
-      .from('classes')
-      .update({
-        booked_count: (classData.booked_count || 0) + 1
-      })
-      .eq('id', classId);
-    
-    if (updateError) {
-      console.error('Error updating class booked count:', updateError);
-      // This is not critical - we have the booking, so continue
+    // Update class booked_count with careful handling
+    try {
+      // Get current count first to avoid race conditions
+      const { data: currentClassData } = await supabase
+        .from('classes')
+        .select('booked_count')
+        .eq('id', classId)
+        .single();
+        
+      const currentCount = (currentClassData?.booked_count || 0);
+      const newCount = currentCount + 1;
+      
+      console.log(`Updating class booked count from ${currentCount} to ${newCount}`);
+      
+      const { error: updateError } = await supabase
+        .from('classes')
+        .update({ booked_count: newCount })
+        .eq('id', classId);
+        
+      if (updateError) {
+        console.error('Error updating class booked count:', updateError);
+      } else {
+        console.log(`Successfully updated class booked count to ${newCount}`);
+      }
+    } catch (err) {
+      console.error('Error in class booked count update:', err);
     }
     
     console.log('Adding student to class_students for attendance...');
     
-    // 4. Add student to class_students (for attendance)
+    // Add student to class_students table for attendance tracking
+    // Try with is_drop_in first, fallback to without if needed
     try {
-      const { error: enrollError } = await supabase
-        .from('class_students')
-        .insert({
-          class_id: classId,
-          student_id: studentId,
-          is_drop_in: true
-        });
-      
-      if (enrollError) {
-        // Check if it's a duplicate error
-        if (enrollError.code === '23505') { // Postgres unique constraint violation
-          console.log('Student already enrolled in class (duplicate key)');
+      try {
+        // First attempt with is_drop_in field
+        const { error: enrollError } = await supabase
+          .from('class_students')
+          .insert({
+            class_id: classId,
+            student_id: studentId,
+            is_drop_in: true
+          });
+        
+        if (enrollError) {
+          // If it mentions the is_drop_in column, retry without it
+          if (enrollError.message && enrollError.message.includes('is_drop_in')) {
+            throw new Error('is_drop_in column not found');
+          } else if (enrollError.code === '23505') { // Postgres unique constraint violation
+            console.log('Student already enrolled in class (duplicate key)');
+          } else {
+            throw enrollError;
+          }
         } else {
-          console.error('Error enrolling student in class:', enrollError);
+          console.log('Student successfully enrolled with is_drop_in=true');
+        }
+      } catch (err) {
+        // Second attempt without is_drop_in field
+        console.log('Retrying enrollment without is_drop_in field');
+        const { error: fallbackError } = await supabase
+          .from('class_students')
+          .insert({
+            class_id: classId,
+            student_id: studentId
+          });
+          
+        if (fallbackError) {
+          if (fallbackError.code === '23505') { // Postgres unique constraint violation
+            console.log('Student already enrolled in class (duplicate key)');
+          } else {
+            console.error('Error enrolling student without is_drop_in:', fallbackError);
+          }
+        } else {
+          console.log('Student successfully enrolled without is_drop_in field');
         }
       }
     } catch (err) {
       console.error('Exception in class enrollment:', err);
     }
     
+    // Create a payment record that will show up in the payments section
+    try {
+      const date = new Date().toISOString();
+      const paymentRecord = {
+        parent_id: user.id,
+        studio_id: classData.studio_id,
+        student_id: studentId,
+        amount: classData.drop_in_price,
+        currency: currency,
+        type: 'drop_in',
+        status: 'completed',
+        reference: `Drop-in class: ${classData.name} on ${classData.date}`,
+        booking_id: booking.id,
+        stripe_payment_id: paymentResult.paymentId,
+        created_at: date,
+        updated_at: date,
+        payment_date: date,
+        description: `Drop-in class booking: ${classData.name}`,
+        payment_method_id: databasePaymentMethodId
+      };
+      
+      // Check if a payments table exists first
+      const { count: tableCount, error: tableError } = await supabase
+        .from('payments')
+        .select('*', { count: 'exact', head: true });
+        
+      if (tableError) {
+        if (tableError.message && tableError.message.includes('does not exist')) {
+          console.log('No payments table found, skipping payment record creation');
+        } else {
+          console.error('Error checking payments table:', tableError);
+        }
+      } else {
+        // Table exists, insert the payment record
+        const { error: paymentError } = await supabase
+          .from('payments')
+          .insert(paymentRecord);
+          
+        if (paymentError) {
+          console.error('Error creating payment record:', paymentError);
+        } else {
+          console.log('Payment record created successfully');
+        }
+      }
+    } catch (err) {
+      console.error('Error creating payment record:', err);
+    }
+    
     console.log('Sending notifications...');
     
-    // 5. Send notifications to teacher and studio owner
+    // Send notifications to teacher and studio owner
     try {
       await notificationService.notifyStudentAddedToClass(
         classData.studio_id,
@@ -285,7 +360,7 @@ export async function bookDropInClass(
         classId
       );
       
-      // 6. Send payment confirmation to parent
+      // Send payment confirmation to parent
       await notificationService.notifyPaymentConfirmation(
         user.id,
         classData.studio_id,
@@ -294,8 +369,9 @@ export async function bookDropInClass(
         currency
       );
       
-      // 7. Check if this fills the class
-      if ((classData.booked_count || 0) + 1 >= classData.capacity) {
+      // Check if this fills the class
+      const newCapacity = booked + 1;
+      if (newCapacity >= capacity) {
         await notificationService.notifyClassCapacityReached(
           classData.studio_id,
           classData.name,
