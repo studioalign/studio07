@@ -1,4 +1,5 @@
 // src/utils/stripeUtils.ts
+import { supabase } from '../lib/supabase';
 
 /**
  * Test Netlify function connection
