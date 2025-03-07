@@ -10,13 +10,9 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
 // Initialize Stripe with a safe fallback for browser environments
-// Using a direct string as fallback instead of process.env
 const STRIPE_PUBLISHABLE_KEY = import.meta.env?.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_your_fallback_key';
 
-// IMPORTANT: For connected accounts, initialize with Stripe Connect support
-const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY, {
-  stripeAccount: undefined // We'll set this dynamically
-});
+// IMPORTANT: Don't initialize Stripe here! We need the connected account ID first
 
 interface AddPaymentMethodModalProps {
   onClose: () => void;
@@ -113,58 +109,35 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
           connectedAccountId
         });
         
-        // DIRECT APPROACH: Use Stripe.js with connected account
-        let setupResult;
+        // Basic setup for the card payment
+        const setupOptions = {
+          payment_method: {
+            card: cardElement,
+            billing_details: {
+              email: profile?.email || '',
+              name: profile?.name || ''
+            }
+          }
+        };
         
-        if (isConnectedAccount && connectedAccountId) {
-          // When using a connected account, we must use a different approach
-          // The client_secret from the connected account is already properly scoped
-          setupResult = await stripe.confirmCardSetup(clientSecret, {
-            payment_method: {
-              card: cardElement,
-              billing_details: {
-                email: profile?.email || '',
-                name: profile?.name || ''
-              }
-            }
-          });
-        } else {
-          // Regular platform account
-          setupResult = await stripe.confirmCardSetup(clientSecret, {
-            payment_method: {
-              card: cardElement,
-              billing_details: {
-                email: profile?.email || '',
-                name: profile?.name || ''
-              }
-            }
-          });
+        const result = await stripe.confirmCardSetup(clientSecret, setupOptions);
+        
+        console.log('Card setup confirmation result:', result);
+        
+        if (result.error) {
+          console.error('Card setup error:', result.error);
+          throw result.error;
         }
         
-        console.log('Card setup confirmation result:', setupResult);
-        
-        if (setupResult.error) {
-          console.error('Card setup error:', setupResult.error);
-          throw setupResult.error;
-        }
-        
-        if (!setupResult.setupIntent) {
+        if (!result.setupIntent) {
           throw new Error('No setup intent returned');
         }
         
         // Get the payment method ID from the setup intent
-        const paymentMethodId = setupResult.setupIntent.payment_method;
+        const paymentMethodId = result.setupIntent.payment_method;
         if (!paymentMethodId || typeof paymentMethodId !== 'string') {
           throw new Error('No payment method ID returned');
         }
-        
-        // Log success
-        console.log('Setup intent succeeded:', {
-          setupIntentId: setupResult.setupIntent.id,
-          paymentMethodId: paymentMethodId,
-          isConnectedAccount,
-          connectedAccountId
-        });
         
         // Add payment method to database
         console.log('Payment method created successfully, now saving to database', {
@@ -409,38 +382,45 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
   );
 }
 
-// Create a wrapper component to pass in the connected account ID
-function ElementsWithConnectedAccount({ 
-  children,
-  connectedAccountId 
-}: {
-  children: React.ReactNode,
-  connectedAccountId: string | null
-}) {
-  // Create a dynamically configured Stripe instance with the connected account
-  const stripeWithAccount = React.useMemo(() => {
-    return loadStripe(STRIPE_PUBLISHABLE_KEY, {
-      stripeAccount: connectedAccountId || undefined
-    });
-  }, [connectedAccountId]);
-
-  return (
-    <Elements stripe={stripeWithAccount}>
-      {children}
-    </Elements>
-  );
-}
-
 export default function AddPaymentMethodModal({ onClose, onSuccess }: AddPaymentMethodModalProps) {
-  const [connectedAccountId, setConnectedAccountId] = useState<string | null>(null);
+  const [stripeInstance, setStripeInstance] = useState<any>(null);
   const { profile } = useAuth();
-
-  // Get the connected account ID when component mounts
+  
+  // Initialize Stripe.js with the connected account when component mounts
   useEffect(() => {
-    if (profile?.studio?.stripe_connect_id) {
-      setConnectedAccountId(profile.studio.stripe_connect_id);
+    async function initializeStripe() {
+      if (profile?.studio?.stripe_connect_id) {
+        // Initialize Stripe with the connected account ID
+        const newStripeInstance = await loadStripe(STRIPE_PUBLISHABLE_KEY, {
+          stripeAccount: profile.studio.stripe_connect_id
+        });
+        console.log('Initialized Stripe with connected account:', profile.studio.stripe_connect_id);
+        setStripeInstance(newStripeInstance);
+      }
     }
+    
+    initializeStripe();
   }, [profile?.studio?.stripe_connect_id]);
+
+  // Don't render Elements until we have the stripe instance
+  if (!stripeInstance) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold text-brand-primary">Add Payment Method</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          <div className="p-4 text-center">
+            <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p>Initializing payment system...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -452,9 +432,9 @@ export default function AddPaymentMethodModal({ onClose, onSuccess }: AddPayment
           </button>
         </div>
         
-        <ElementsWithConnectedAccount connectedAccountId={connectedAccountId}>
+        <Elements stripe={stripeInstance}>
           <CardForm onClose={onClose} onSuccess={onSuccess} />
-        </ElementsWithConnectedAccount>
+        </Elements>
       </div>
     </div>
   );
