@@ -10,7 +10,8 @@ import { processStripePayment } from './stripeUtils';
 export async function bookDropInClass(
   classId: string,
   studentId: string,
-  paymentMethodId: string
+  paymentMethodId: string,
+  studioId: string
 ): Promise<{ success: boolean; bookingId?: string; error?: string }> {
   try {
     // Get user information
@@ -53,50 +54,55 @@ export async function bookDropInClass(
       throw new Error('You can only book classes for your own students');
     }
     
-    // Get studio data directly - using the same approach as BookDropInModal
+    // Get studio data directly
     const { data: studioData, error: studioError } = await supabase
       .from('studios')
-      .select('currency, stripe_connect_id, stripe_connect_enabled')
-      .eq('id', classData.studio_id)
+      .select('currency, stripe_connect_id, stripe_connect_enabled, stripe_connect_onboarding_complete')
+      .eq('id', studioId)
       .single();
-      
-    if (studioError) {
-      console.error('Studio fetch error:', studioError);
-      throw studioError;
-    }
-    
-    // Enhanced logging for studio payment setup
-    console.log('Studio Payment Setup Debug:', {
-      studioId: classData.studio_id,
-      studioDataExists: !!studioData,
-      stripeConnectId: studioData?.stripe_connect_id,
-      stripeConnectEnabled: studioData?.stripe_connect_enabled,
-      rawStudioData: studioData
-    });
-    
-    if (!studioData) {
+
+    if (studioError || !studioData) {
       throw new Error('Studio not found');
     }
-    
-    if (!studioData.stripe_connect_id) {
-      throw new Error('Stripe Connect ID is missing');
+
+    // Validate studio details
+    if (!studioData.stripe_connect_id || !studioData.stripe_connect_enabled || !studioData.stripe_connect_onboarding_complete) {
+      console.error('Studio Stripe Connect not fully configured:', {
+        connectId: studioData.stripe_connect_id,
+        enabled: studioData.stripe_connect_enabled,
+        onboarding: studioData.stripe_connect_onboarding_complete
+      });
+      return { 
+        success: false, 
+        error: 'Studio payment setup is not complete. Please contact the studio.'
+      };
     }
-    
-    if (studioData.stripe_connect_enabled !== true) {
-      console.warn('Stripe Connect not enabled, current value:', studioData.stripe_connect_enabled);
-      throw new Error('Studio Stripe Connect is not enabled');
+
+    // Get connected customer ID
+    const { data: connectedCustomer, error: customerError } = await supabase
+      .from('connected_customers')
+      .select('stripe_connected_customer_id')
+      .eq('parent_id', user.id)
+      .eq('studio_id', studioId)
+      .single();
+
+    if (customerError || !connectedCustomer?.stripe_connected_customer_id) {
+      console.error('No connected customer found:', customerError);
+      throw new Error('Payment setup required. Please add a payment method first.');
     }
-    
+
     const currency = studioData?.currency || 'USD';
     
-    // 1. Process payment with Stripe FIRST
+    // Process payment with Stripe
     const paymentResult = await processStripePayment(
       'temp', // Temporary booking ID
       classData.drop_in_price,
       paymentMethodId,
       `Drop-in class: ${classData.name}`,
       user.id,
-      currency
+      currency,
+      studioData.stripe_connect_id,
+      connectedCustomer.stripe_connected_customer_id
     );
     
     // If payment fails, immediately return with error
