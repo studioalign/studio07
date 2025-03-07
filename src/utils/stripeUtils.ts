@@ -35,20 +35,61 @@ export async function processStripePayment(
   currency: string = 'USD'
 ): Promise<{ success: boolean; paymentId?: string; error?: string }> {
   try {
-    console.log('Processing payment:', {
-      bookingId,
-      amount,
-      paymentMethodId,
-      description,
-      customerId,
-      currency
-    });
+    // Fetch user details explicitly
+    const { data: { user } } = await supabase.auth.getUser();
     
-    // Call our Netlify function using fetch API
-    const functionUrl = `${window.location.origin}/.netlify/functions/process-drop-in-payment`;
-    console.log('Calling Netlify function at:', functionUrl);
+    if (!user || user.id !== customerId) {
+      console.error('User authentication mismatch', {
+        currentUserId: user?.id,
+        providedUserId: customerId
+      });
+      return { 
+        success: false, 
+        error: 'Authentication failed. Please log in again.'
+      };
+    }
+
+    // Fetch user and studio details in one query
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select(`
+        id, 
+        email, 
+        name, 
+        studio:studios (
+          id,
+          stripe_connect_id,
+          stripe_connect_enabled,
+          stripe_connect_onboarding_complete,
+          currency
+        )
+      `)
+      .eq('id', customerId)
+      .single();
     
-    const response = await fetch(functionUrl, {
+    if (userError || !userData) {
+      console.error('User lookup error', { 
+        error: userError, 
+        userData 
+      });
+      return { 
+        success: false, 
+        error: 'User not found or studio details missing'
+      };
+    }
+
+    // Validate studio details
+    const studio = userData.studio;
+    if (!studio || !studio.stripe_connect_id || !studio.stripe_connect_enabled) {
+      console.error('Invalid studio setup', { studio });
+      return { 
+        success: false, 
+        error: 'Studio payment setup is incomplete'
+      };
+    }
+
+    // Proceed with payment processing
+    const response = await fetch(`${window.location.origin}/.netlify/functions/process-drop-in-payment`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -59,15 +100,12 @@ export async function processStripePayment(
         paymentMethodId,
         description,
         customerId,
-        currency: currency.toLowerCase()
+        currency: (studio.currency || currency).toLowerCase(),
+        studioId: studio.id
       }),
     });
-    
-    // Log the raw response for debugging
-    console.log('Raw response status:', response.status);
-    
+
     const data = await response.json();
-    console.log('Response data:', data);
     
     if (!response.ok) {
       console.error('Netlify function error:', response.status, data);
@@ -85,18 +123,12 @@ export async function processStripePayment(
       };
     }
     
-    console.log('Payment processed successfully:', data);
     return {
       success: true,
       paymentId: data.paymentId
     };
   } catch (err) {
-    console.error('Error processing payment (detailed):', {
-      name: err?.name,
-      message: err?.message,
-      stack: err?.stack,
-      error: err
-    });
+    console.error('Error processing payment (detailed):', err);
     return {
       success: false,
       error: err instanceof Error ? err.message : 'An unexpected error occurred'
