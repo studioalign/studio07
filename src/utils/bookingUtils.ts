@@ -102,6 +102,7 @@ export async function bookDropInClass(
       user.id,
       currency,
       studioData.stripe_connect_id,
+      studioData.stripe_connect_id,
       connectedCustomer.stripe_connected_customer_id
     );
     
