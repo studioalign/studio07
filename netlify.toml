@@ -6,10 +6,8 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  timeout = 30  # Increased timeout from default 10s to 30s
-  
-  # Explicitly include these directories when deploying functions
-  included_files = ["node_modules/stripe/**", "node_modules/@supabase/**"]
+  # Function execution timeout (in seconds)
+  function_timeout_seconds = 30
 
 [[redirects]]
   from = "/*"
