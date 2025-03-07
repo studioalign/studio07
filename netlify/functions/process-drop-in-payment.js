@@ -84,27 +84,9 @@ exports.handler = async function(event, context) {
     }
     
     console.log('Processing payment for booking:', bookingId, 'amount:', amount);
-    
-    // Get the Stripe payment method ID from our database
-    const { data: paymentMethodData, error: paymentMethodError } = await supabase
-      .from('payment_methods')
-      .select('stripe_payment_method_id')
-      .eq('id', paymentMethodId)
-      .single();
-    
-    if (paymentMethodError || !paymentMethodData?.stripe_payment_method_id) {
-      console.error('Error fetching payment method:', paymentMethodError);
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ 
-          success: false, 
-          error: 'Invalid payment method' 
-        })
-      };
-    }
-    
-    const stripePaymentMethodId = paymentMethodData.stripe_payment_method_id;
+
+    // We'll use the payment method ID directly since it's now created on the connected account
+    const stripePaymentMethodId = paymentMethodId;
     
     // Fetch studio and user details
     const { data: userData, error: userError } = await supabase
