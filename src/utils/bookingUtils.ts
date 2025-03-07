@@ -34,6 +34,12 @@ export async function bookDropInClass(
       throw new Error('This class is full');
     }
     
+    // Check if student is already booked
+    const isAlreadyBooked = await isStudentBookedForClass(studentId, classId);
+    if (isAlreadyBooked) {
+      throw new Error('Student is already booked for this class');
+    }
+    
     // Get student's parent id and name to ensure it matches current user
     const { data: studentData, error: studentError } = await supabase
       .from('students')
@@ -50,11 +56,15 @@ export async function bookDropInClass(
     // Get studio currency for payment
     const { data: studioData, error: studioError } = await supabase
       .from('studios')
-      .select('currency')
+      .select('currency, stripe_connect_id, stripe_connect_enabled')
       .eq('id', classData.studio_id)
       .single();
       
     if (studioError) throw studioError;
+    
+    if (!studioData || !studioData.stripe_connect_id || !studioData.stripe_connect_enabled) {
+      throw new Error('Studio payment setup is incomplete');
+    }
     
     const currency = studioData?.currency || 'USD';
     
@@ -65,6 +75,7 @@ export async function bookDropInClass(
         class_id: classId,
         student_id: studentId,
         parent_id: user.id,
+        studio_id: classData.studio_id,
         payment_amount: classData.drop_in_price,
         payment_method_id: paymentMethodId,
         payment_status: 'pending'
@@ -88,7 +99,10 @@ export async function bookDropInClass(
       // Payment failed - update booking status
       await supabase
         .from('drop_in_bookings')
-        .update({ payment_status: 'failed' })
+        .update({ 
+          payment_status: 'failed',
+          payment_error: paymentResult.error
+        })
         .eq('id', booking.id);
         
       return { 
