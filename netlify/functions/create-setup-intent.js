@@ -152,7 +152,7 @@ exports.handler = async function(event, context) {
           metadata: {
             parent_id: userId,
             studio_id: userData.studio.id
-          }
+          },
         },
         {
           stripeAccount: userData.studio.stripe_connect_id
