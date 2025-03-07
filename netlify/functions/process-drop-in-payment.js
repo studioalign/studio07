@@ -68,27 +68,40 @@ exports.handler = async function(event, context) {
       paymentMethodId, 
       description, 
       customerId, 
+      connectedCustomerId,
       currency = 'usd', 
-      studioId 
+      studioId,
+      connectedAccountId
     } = requestData;
     
-    if (!bookingId || !amount || !paymentMethodId || !customerId || !studioId) {
+    if (!bookingId || !amount || !paymentMethodId || !customerId || !studioId || !connectedAccountId || !connectedCustomerId) {
+      console.error('Missing required fields in payment request:', {
+        bookingId: !!bookingId,
+        amount: !!amount,
+        paymentMethodId: !!paymentMethodId,
+        customerId: !!customerId,
+        connectedCustomerId: !!connectedCustomerId,
+        studioId: !!studioId,
+        connectedAccountId: !!connectedAccountId
+      });
       return {
         statusCode: 400,
         headers,
         body: JSON.stringify({ 
           success: false, 
-          error: 'Missing required fields' 
+          error: 'Missing required payment fields. Make sure your studio has completed Stripe Connect setup.' 
         })
       };
     }
     
     console.log('Processing payment for booking:', bookingId, 'amount:', amount);
+    console.log('Using connected account ID:', connectedAccountId);
+    console.log('Using connected customer ID:', connectedCustomerId);
 
-    // We'll use the payment method ID directly since it's now created on the connected account
+    // We'll use the payment method ID directly since it's created on the connected account
     const stripePaymentMethodId = paymentMethodId;
     
-    // Fetch studio and user details
+    // Fetch studio and user details for verification
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select(`
@@ -103,7 +116,6 @@ exports.handler = async function(event, context) {
         )
       `)
       .eq('id', customerId)
-      .eq('studio_id', studioId)
       .single();
     
     if (userError || !userData) {
@@ -118,7 +130,7 @@ exports.handler = async function(event, context) {
       };
     }
     
-    // Validate Stripe Connect setup
+    // Validate Stripe Connect setup matches provided ID
     const studio = userData.studio;
     if (!studio || !studio.stripe_connect_id || !studio.stripe_connect_enabled) {
       console.error('Studio Stripe Connect not fully set up', {
@@ -135,32 +147,28 @@ exports.handler = async function(event, context) {
       };
     }
     
-    // Ensure Stripe customer exists
-    let stripeCustomerId = userData.stripe_customer_id;
-    if (!stripeCustomerId) {
-      const customer = await stripe.customers.create({
-        email: userData.email,
-        name: userData.name,
-        metadata: {
-          supabase_id: customerId
-        }
+    // Verify the connected account ID matches what's in the database
+    if (studio.stripe_connect_id !== connectedAccountId) {
+      console.error('Connected account ID mismatch', {
+        providedId: connectedAccountId,
+        databaseId: studio.stripe_connect_id
       });
-      
-      stripeCustomerId = customer.id;
-      
-      // Save Stripe customer ID back to user record
-      await supabase
-        .from('users')
-        .update({ stripe_customer_id: stripeCustomerId })
-        .eq('id', customerId);
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ 
+          success: false, 
+          error: 'Invalid Connected Account ID' 
+        })
+      };
     }
     
     // Create and confirm payment intent with Connected Account
-    console.log('Creating payment intent with Connected Account:', studio.stripe_connect_id);
+    console.log('Creating payment intent with Connected Account:', connectedAccountId);
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency,
-      customer: stripeCustomerId,
+      customer: connectedCustomerId, // Use the connected customer ID
       payment_method: stripePaymentMethodId,
       off_session: true,
       confirm: true,
@@ -169,10 +177,11 @@ exports.handler = async function(event, context) {
       metadata: {
         booking_id: bookingId,
         studio_id: studioId,
+        parent_id: customerId,
         type: 'drop_in_booking'
       }
     }, {
-      stripeAccount: studio.stripe_connect_id // Process payment on behalf of the studio
+      stripeAccount: connectedAccountId // Process payment on behalf of the studio
     });
     
     console.log('Payment intent status:', paymentIntent.status);
@@ -184,6 +193,20 @@ exports.handler = async function(event, context) {
         body: JSON.stringify({ 
           success: true, 
           paymentId: paymentIntent.id
+        })
+      };
+    } else if (paymentIntent.status === 'requires_action') {
+      // The payment requires further actions from the customer (e.g., 3D Secure)
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ 
+          success: false, 
+          error: 'This payment requires additional authentication. Please use a different payment method.',
+          status: paymentIntent.status,
+          requiresAction: true,
+          paymentIntentId: paymentIntent.id,
+          clientSecret: paymentIntent.client_secret
         })
       };
     } else {
