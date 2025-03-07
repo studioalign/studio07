@@ -1,8 +1,13 @@
 {
-    "name": "netlify-functions",
-    "version": "1.0.0",
-    "description": "Netlify Functions for Studio Align",
-    "dependencies": {
-      "@sendgrid/mail": "^7.7.0"
-    }
+  "name": "netlify-functions",
+  "version": "1.0.0",
+  "description": "Netlify Functions for Studio Align",
+  "dependencies": {
+    "@sendgrid/mail": "^7.7.0",
+    "@supabase/supabase-js": "^2.33.1",
+    "stripe": "^12.5.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
+}
