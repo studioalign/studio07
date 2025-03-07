@@ -213,7 +213,7 @@ export async function getStripePaymentMethods(userId: string): Promise<any[]> {
 export async function addStripePaymentMethod(
   userId: string, 
   paymentMethodId: string,
-  connectedAccountId: string | null
+  connectedAccountId: string | null = null
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const functionUrl = `${window.location.origin}/.netlify/functions/add-payment-method`;
