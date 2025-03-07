@@ -45,7 +45,7 @@ exports.handler = async function(event, context) {
     // Initialize Stripe
     const stripe = require('stripe')(stripeSecretKey);
     
-    // Initialize Supabase 
+    // Initialize Supabase with SERVICE key
     const { createClient } = require('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
@@ -62,9 +62,17 @@ exports.handler = async function(event, context) {
       };
     }
     
-    const { bookingId, amount, paymentMethodId, description, customerId, currency = 'usd' } = requestData;
+    const { 
+      bookingId, 
+      amount, 
+      paymentMethodId, 
+      description, 
+      customerId, 
+      currency = 'usd', 
+      studioId 
+    } = requestData;
     
-    if (!bookingId || !amount || !paymentMethodId || !customerId) {
+    if (!bookingId || !amount || !paymentMethodId || !customerId || !studioId) {
       return {
         statusCode: 400,
         headers,
@@ -77,7 +85,7 @@ exports.handler = async function(event, context) {
     
     console.log('Processing payment for booking:', bookingId, 'amount:', amount);
     
-    // Fetch user and studio details
+    // Fetch studio and user details
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select(`
@@ -92,10 +100,11 @@ exports.handler = async function(event, context) {
         )
       `)
       .eq('id', customerId)
+      .eq('studio_id', studioId)
       .single();
     
     if (userError || !userData) {
-      console.error('User not found or error fetching user:', userError);
+      console.error('User or studio verification failed:', userError);
       return {
         statusCode: 400,
         headers,
@@ -108,11 +117,10 @@ exports.handler = async function(event, context) {
     
     // Validate Stripe Connect setup
     const studio = userData.studio;
-    if (!studio || !studio.stripe_connect_id || !studio.stripe_connect_enabled || !studio.stripe_connect_onboarding_complete) {
+    if (!studio || !studio.stripe_connect_id || !studio.stripe_connect_enabled) {
       console.error('Studio Stripe Connect not fully set up', {
         connectId: studio?.stripe_connect_id,
-        enabled: studio?.stripe_connect_enabled,
-        onboardingComplete: studio?.stripe_connect_onboarding_complete
+        enabled: studio?.stripe_connect_enabled
       });
       return {
         statusCode: 400,
@@ -157,7 +165,7 @@ exports.handler = async function(event, context) {
       transfer_group: bookingId,
       metadata: {
         booking_id: bookingId,
-        studio_id: studio.id,
+        studio_id: studioId,
         type: 'drop_in_booking'
       },
       application_fee_amount: Math.round(amount * 0.1), // 10% platform fee example
@@ -192,7 +200,7 @@ exports.handler = async function(event, context) {
       message: error.message,
       type: error.type,
       code: error.code,
-      raw: error.raw, // Provides more Stripe-specific error details
+      raw: error.raw,
       stack: error.stack
     });
     
