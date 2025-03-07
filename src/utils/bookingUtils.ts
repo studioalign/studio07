@@ -187,6 +187,10 @@ export async function bookDropInClass(
       success: false, 
       error: err instanceof Error ? err.message : 'An error occurred during booking' 
     };
+  } catch (error) {
+      console.error('Error fetching studio details:', error);
+      throw error;
+    }
   }
 }
 
