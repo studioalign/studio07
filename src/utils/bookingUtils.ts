@@ -53,7 +53,7 @@ export async function bookDropInClass(
       throw new Error('You can only book classes for your own students');
     }
     
-    // Get studio currency for payment
+    // Get studio data directly - using the same approach as BookDropInModal
     const { data: studioData, error: studioError } = await supabase
       .from('studios')
       .select('currency, stripe_connect_id, stripe_connect_enabled')
