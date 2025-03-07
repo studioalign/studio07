@@ -86,6 +86,10 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         }
 
         console.log('Confirming card setup with client secret');
+        console.log('Connected account details:', {
+          isConnectedAccount,
+          connectedAccountId
+        });
         
         // Prepare options for confirmCardSetup
         const confirmOptions = {
@@ -95,11 +99,18 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
               email: profile?.email,
               name: profile?.name
             }
-          }
+          },
+          ...(isConnectedAccount && connectedAccountId ? {
+            expand: ['payment_method']
+          } : {})
         };
 
         // Confirm setup with card element and connected account if needed
-        const result = await stripe.confirmCardSetup(clientSecret, confirmOptions);
+        const result = await stripe.confirmCardSetup(
+          clientSecret,
+          confirmOptions,
+          isConnectedAccount && connectedAccountId ? { stripeAccount: connectedAccountId } : undefined
+        );
         
         console.log('Card setup confirmation result:', result);
         
