@@ -77,10 +77,10 @@ exports.handler = async function(event, context) {
     
     console.log('Adding payment method for user:', userId);
     
-    // Get user's Stripe customer ID
+    // Get user's details including role
     const { data: userData, error: userError } = await supabase
       .from('users')
-      .select('stripe_customer_id, email, name')
+      .select('stripe_customer_id, email, name, role')
       .eq('id', userId)
       .single();
     
@@ -151,7 +151,7 @@ exports.handler = async function(event, context) {
       const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
       console.log('Payment method retrieved:', paymentMethod.id);
       
-      // Save to Supabase payment_methods table directly with user_id
+      // Save to Supabase payment_methods table
       if (paymentMethod.type === 'card') {
         // Check if this is first payment method
         const { data: existingMethods, error: countError } = await supabase
@@ -166,18 +166,25 @@ exports.handler = async function(event, context) {
         const isDefault = !existingMethods || existingMethods.length === 0;
         console.log('Is default payment method:', isDefault);
         
-        // Insert into payment_methods table
+        // Insert into payment_methods table with parent_id for parent users
+        const paymentMethodData = {
+          user_id: userId,
+          type: 'card',
+          last_four: paymentMethod.card.last4,
+          expiry_month: paymentMethod.card.exp_month,
+          expiry_year: paymentMethod.card.exp_year,
+          is_default: isDefault,
+          stripe_payment_method_id: paymentMethodId,
+        };
+
+        // Add parent_id if user is a parent
+        if (userData.role === 'parent') {
+          paymentMethodData.parent_id = userId;
+        }
+
         const { error: insertError } = await supabase
           .from('payment_methods')
-          .insert({
-            user_id: userId,
-            type: 'card',
-            last_four: paymentMethod.card.last4,
-            expiry_month: paymentMethod.card.exp_month,
-            expiry_year: paymentMethod.card.exp_year,
-            is_default: isDefault,
-            stripe_payment_method_id: paymentMethodId,
-          });
+          .insert([paymentMethodData]);
           
         if (insertError) {
           console.error('Error saving payment method to database:', insertError);
