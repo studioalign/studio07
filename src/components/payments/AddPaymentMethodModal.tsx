@@ -42,13 +42,18 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
   useEffect(() => {
     async function getSetupIntent() {
       if (profile?.id && useStripeElements) {
+        console.log('Getting setup intent for user:', profile.id);
         try {
           const result = await createSetupIntent(profile.id);
+          console.log('Setup intent result:', result);
+          
           if (result.success && result.clientSecret) {
             setClientSecret(result.clientSecret);
             setIsConnectedAccount(result.isConnectedAccount || false);
             setConnectedAccountId(result.connectedAccountId || null);
+            console.log('Setup intent configured successfully');
           } else {
+            console.error('Setup intent failed:', result.error);
             setError(result.error || 'Failed to initialize payment setup');
           }
         } catch (err) {
@@ -70,14 +75,18 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
       if (useStripeElements) {
         // Use Stripe Elements for real payment processing
         if (!stripe || !elements || !clientSecret) {
+          console.error('Payment system not ready:', { stripe: !!stripe, elements: !!elements, clientSecret: !!clientSecret });
           throw new Error('Payment system not ready');
         }
         
         const cardElement = elements.getElement(CardElement);
         if (!cardElement) {
+          console.error('Card element not found');
           throw new Error('Card element not found');
         }
 
+        console.log('Confirming card setup with client secret');
+        
         // Prepare options for confirmCardSetup
         const confirmOptions = {
           payment_method: {
@@ -92,13 +101,19 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         // Confirm setup with card element and connected account if needed
         const result = await stripe.confirmCardSetup(clientSecret, confirmOptions);
         
+        console.log('Card setup confirmation result:', result);
+        
         if (result.error) {
+          console.error('Card setup error:', result.error);
           throw new Error(result.error.message);
         }
         
         if (!result.setupIntent?.payment_method) {
+          console.error('No payment method returned');
           throw new Error('Failed to set up payment method');
         }
+        
+        console.log('Adding payment method to database');
         
         // Add payment method to database
         const addResult = await addStripePaymentMethod(
@@ -108,8 +123,11 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         );
         
         if (!addResult.success) {
+          console.error('Failed to save payment method:', addResult.error);
           throw new Error(addResult.error || 'Failed to save payment method');
         }
+        
+        console.log('Payment method added successfully');
         
         // Refresh payment methods list
         if (refresh) await refresh();
