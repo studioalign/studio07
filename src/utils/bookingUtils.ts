@@ -18,6 +18,14 @@ export async function bookDropInClass(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
     
+    console.log('Starting drop-in class booking process for:', {
+      classId,
+      studentId,
+      paymentMethodId,
+      studioId,
+      userId: user.id
+    });
+    
     // Check if spots are available
     const { data: classData, error: classError } = await supabase
       .from('classes')
@@ -25,7 +33,10 @@ export async function bookDropInClass(
       .eq('id', classId)
       .single();
       
-    if (classError) throw classError;
+    if (classError) {
+      console.error('Error fetching class data:', classError);
+      throw classError;
+    }
     
     if (!classData) {
       throw new Error('Class not found');
@@ -48,7 +59,10 @@ export async function bookDropInClass(
       .eq('id', studentId)
       .single();
       
-    if (studentError) throw studentError;
+    if (studentError) {
+      console.error('Error fetching student data:', studentError);
+      throw studentError;
+    }
     
     if (!studentData || studentData.parent_id !== user.id) {
       throw new Error('You can only book classes for your own students');
@@ -62,6 +76,7 @@ export async function bookDropInClass(
       .single();
 
     if (studioError || !studioData) {
+      console.error('Error fetching studio data:', studioError);
       throw new Error('Studio not found');
     }
 
@@ -86,14 +101,29 @@ export async function bookDropInClass(
       .eq('studio_id', studioId)
       .single();
 
-    if (customerError || !connectedCustomer?.stripe_connected_customer_id) {
-      console.error('No connected customer found:', customerError);
+    if (customerError) {
+      console.error('Error fetching connected customer:', customerError);
       throw new Error('Payment setup required. Please add a payment method first.');
     }
+
+    if (!connectedCustomer?.stripe_connected_customer_id) {
+      console.error('No connected customer found for user:', user.id);
+      throw new Error('Payment setup required. Please add a payment method first.');
+    }
+
+    console.log('Found connected customer:', connectedCustomer.stripe_connected_customer_id);
 
     const currency = studioData?.currency || 'USD';
     
     // Process payment with Stripe
+    console.log('Processing payment with Stripe', {
+      price: classData.drop_in_price,
+      paymentMethodId,
+      userId: user.id,
+      connectedAccountId: studioData.stripe_connect_id,
+      connectedCustomerId: connectedCustomer.stripe_connected_customer_id
+    });
+
     const paymentResult = await processStripePayment(
       'temp', // Temporary booking ID
       classData.drop_in_price,
@@ -101,19 +131,21 @@ export async function bookDropInClass(
       `Drop-in class: ${classData.name}`,
       user.id,
       currency,
-      studioData.stripe_connect_id,
-      studioData.stripe_connect_id,
-      connectedCustomer.stripe_connected_customer_id
+      studioData.stripe_connect_id, // Connected account ID
+      connectedCustomer.stripe_connected_customer_id // Connected customer ID
     );
     
     // If payment fails, immediately return with error
     if (!paymentResult.success) {
+      console.error('Payment processing failed:', paymentResult.error);
       return { 
         success: false, 
         error: paymentResult.error || 'Payment processing failed' 
       };
     }
     
+    console.log('Payment processed successfully. Creating booking record...');
+
     // 2. Create booking record ONLY AFTER successful payment
     const { data: booking, error: bookingError } = await supabase
       .from('drop_in_bookings')
@@ -130,24 +162,45 @@ export async function bookDropInClass(
       .select()
       .single();
       
-    if (bookingError) throw bookingError;
+    if (bookingError) {
+      console.error('Error creating booking record:', bookingError);
+      // Even though payment succeeded, we need to notify someone about this issue
+      // since we have a payment but no booking record
+      throw bookingError;
+    }
+    
+    console.log('Booking record created successfully. Updating class capacity...');
     
     // 3. Update class booked count
-    await supabase
+    const { error: updateError } = await supabase
       .from('classes')
       .update({
         booked_count: (classData.booked_count || 0) + 1
       })
       .eq('id', classId);
     
+    if (updateError) {
+      console.error('Error updating class booked count:', updateError);
+      // This is not critical - we have the booking, so continue
+    }
+    
+    console.log('Adding student to class_students for attendance...');
+    
     // 4. Add student to class_students (for attendance)
-    await supabase
+    const { error: enrollError } = await supabase
       .from('class_students')
       .insert({
         class_id: classId,
         student_id: studentId,
         is_drop_in: true
       });
+    
+    if (enrollError) {
+      console.error('Error enrolling student in class:', enrollError);
+      // This is not critical - we have the booking, so continue
+    }
+    
+    console.log('Sending notifications...');
     
     // 5. Send notifications to teacher and studio owner
     try {
@@ -182,6 +235,7 @@ export async function bookDropInClass(
       console.error('Error sending notifications:', notifyError);
     }
     
+    console.log('Drop-in class booking completed successfully!');
     return { success: true, bookingId: booking.id };
   } catch (err) {
     console.error('Full Error in bookDropInClass:', {
