@@ -1,4 +1,3 @@
-// netlify/functions/process-drop-in-payment.js
 exports.handler = async function(event, context) {
   // CORS headers
   const headers = {
@@ -46,12 +45,9 @@ exports.handler = async function(event, context) {
     // Initialize Stripe
     const stripe = require('stripe')(stripeSecretKey);
     
-    // Initialize Supabase if needed
-    let supabase;
-    if (supabaseUrl && supabaseServiceKey) {
-      const { createClient } = require('@supabase/supabase-js');
-      supabase = createClient(supabaseUrl, supabaseServiceKey);
-    }
+    // Initialize Supabase 
+    const { createClient } = require('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     // Parse request data
     let requestData;
@@ -81,46 +77,75 @@ exports.handler = async function(event, context) {
     
     console.log('Processing payment for booking:', bookingId, 'amount:', amount);
     
-    // Check if customer exists in Stripe
-    let stripeCustomerId;
+    // Fetch user and studio details
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select(`
+        email, 
+        name, 
+        stripe_customer_id,
+        studio:studios (
+          id,
+          stripe_connect_id,
+          stripe_connect_enabled,
+          stripe_connect_onboarding_complete
+        )
+      `)
+      .eq('id', customerId)
+      .single();
     
-    // Use existing customer ID if available
-    if (supabase) {
-      const { data: customerData } = await supabase
-        .from('users')
-        .select('email, name, stripe_customer_id')
-        .eq('id', customerId)
-        .single();
-      
-      if (customerData?.stripe_customer_id) {
-        stripeCustomerId = customerData.stripe_customer_id;
-        console.log('Using existing Stripe customer:', stripeCustomerId);
-      } else if (customerData) {
-        // Create a new customer
-        const customer = await stripe.customers.create({
-          email: customerData.email,
-          name: customerData.name,
-          metadata: {
-            supabase_id: customerId
-          }
-        });
-        
-        stripeCustomerId = customer.id;
-        console.log('Created new Stripe customer:', stripeCustomerId);
-        
-        // Save Stripe customer ID back to user record
-        await supabase
-          .from('users')
-          .update({ stripe_customer_id: stripeCustomerId })
-          .eq('id', customerId);
-      }
-    } else {
-      // If we don't have Supabase, just use the customer ID directly
-      stripeCustomerId = customerId;
+    if (userError || !userData) {
+      console.error('User not found or error fetching user:', userError);
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ 
+          success: false, 
+          error: 'User not found or studio details missing' 
+        })
+      };
     }
     
-    // Create and confirm payment intent
-    console.log('Creating payment intent...');
+    // Validate Stripe Connect setup
+    const studio = userData.studio;
+    if (!studio || !studio.stripe_connect_id || !studio.stripe_connect_enabled || !studio.stripe_connect_onboarding_complete) {
+      console.error('Studio Stripe Connect not fully set up', {
+        connectId: studio?.stripe_connect_id,
+        enabled: studio?.stripe_connect_enabled,
+        onboardingComplete: studio?.stripe_connect_onboarding_complete
+      });
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ 
+          success: false, 
+          error: 'Studio Stripe Connect account is not fully configured' 
+        })
+      };
+    }
+    
+    // Ensure Stripe customer exists
+    let stripeCustomerId = userData.stripe_customer_id;
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        email: userData.email,
+        name: userData.name,
+        metadata: {
+          supabase_id: customerId
+        }
+      });
+      
+      stripeCustomerId = customer.id;
+      
+      // Save Stripe customer ID back to user record
+      await supabase
+        .from('users')
+        .update({ stripe_customer_id: stripeCustomerId })
+        .eq('id', customerId);
+    }
+    
+    // Create and confirm payment intent with Connected Account
+    console.log('Creating payment intent with Connected Account:', studio.stripe_connect_id);
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency,
@@ -129,10 +154,15 @@ exports.handler = async function(event, context) {
       off_session: true,
       confirm: true,
       description,
+      transfer_group: bookingId,
       metadata: {
         booking_id: bookingId,
+        studio_id: studio.id,
         type: 'drop_in_booking'
-      }
+      },
+      application_fee_amount: Math.round(amount * 0.1), // 10% platform fee example
+    }, {
+      stripeAccount: studio.stripe_connect_id // Process payment on behalf of the studio
     });
     
     console.log('Payment intent status:', paymentIntent.status);
@@ -157,15 +187,27 @@ exports.handler = async function(event, context) {
       };
     }
   } catch (error) {
-    console.error('Stripe payment error:', {
+    console.error('Comprehensive Stripe payment error:', {
       name: error.name,
       message: error.message,
       type: error.type,
       code: error.code,
+      raw: error.raw, // Provides more Stripe-specific error details
       stack: error.stack
     });
     
-    // Handle Stripe-specific errors
+    // More specific error handling
+    if (error.type === 'StripeAuthenticationError') {
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ 
+          success: false, 
+          error: 'Stripe Connect authentication failed. Please check studio Stripe account setup.'
+        })
+      };
+    }
+    
     if (error.type === 'StripeCardError') {
       return {
         statusCode: 400,
