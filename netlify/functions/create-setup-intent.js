@@ -146,16 +146,21 @@ exports.handler = async function(event, context) {
       // Create SetupIntent on the connected account
       const setupIntent = await stripe.setupIntents.create(
         {
-          usage: 'off_session', // Add this to enable future payments
-          customer: connectedCustomerId,
           payment_method_types: ['card'],
+          customer: connectedCustomerId,
+          usage: 'off_session',
           metadata: {
             parent_id: userId,
             studio_id: userData.studio.id
           }
         },
-        { stripeAccount: userData.studio.stripe_connect_id }
+        {
+          stripeAccount: userData.studio.stripe_connect_id,
+          apiVersion: '2025-01-27.acacia'
+        }
       );
+      
+      console.log('Created setup intent on connected account:', setupIntent.id);
       
       return {
         statusCode: 200,
