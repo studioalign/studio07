@@ -77,10 +77,20 @@ exports.handler = async function(event, context) {
     
     console.log('Adding payment method for user:', userId);
     
-    // Get user's details including role
+    // Get user's details including role and studio info
     const { data: userData, error: userError } = await supabase
       .from('users')
-      .select('stripe_customer_id, email, name, role')
+      .select(`
+        stripe_customer_id, 
+        email, 
+        name, 
+        role,
+        studio:studios!users_studio_id_fkey (
+          id,
+          stripe_connect_id,
+          stripe_connect_enabled
+        )
+      `)
       .eq('id', userId)
       .single();
     
@@ -94,6 +104,62 @@ exports.handler = async function(event, context) {
     }
     
     let stripeCustomerId = userData.stripe_customer_id;
+    let connectedCustomerId;
+    
+    // For parents, we need to handle Stripe Connect
+    if (userData.role === 'parent' && userData.studio?.stripe_connect_id) {
+      console.log('Parent user detected, handling Stripe Connect setup');
+      
+      // Check if customer already exists in connected account
+      try {
+        const { data: connectedCustomer } = await supabase
+          .from('connected_customers')
+          .select('stripe_connected_customer_id')
+          .eq('parent_id', userId)
+          .eq('studio_id', userData.studio.id)
+          .single();
+          
+        if (connectedCustomer?.stripe_connected_customer_id) {
+          connectedCustomerId = connectedCustomer.stripe_connected_customer_id;
+          console.log('Found existing connected customer:', connectedCustomerId);
+        }
+      } catch (err) {
+        console.log('No existing connected customer found');
+      }
+      
+      // Create connected customer if doesn't exist
+      if (!connectedCustomerId) {
+        try {
+          const connectedCustomer = await stripe.customers.create(
+            {
+              email: userData.email,
+              name: userData.name,
+              metadata: {
+                parent_id: userId,
+                platform_customer_id: stripeCustomerId
+              }
+            },
+            { stripeAccount: userData.studio.stripe_connect_id }
+          );
+          
+          connectedCustomerId = connectedCustomer.id;
+          console.log('Created new connected customer:', connectedCustomerId);
+          
+          // Save connected customer ID
+          await supabase
+            .from('connected_customers')
+            .insert({
+              parent_id: userId,
+              studio_id: userData.studio.id,
+              stripe_connected_customer_id: connectedCustomerId
+            });
+        } catch (err) {
+          console.error('Error creating connected customer:', err);
+          throw err;
+        }
+      }
+    }
+    
     console.log('Found Stripe customer ID:', stripeCustomerId || 'None - will create new');
     
     // Create customer if doesn't exist
@@ -136,19 +202,35 @@ exports.handler = async function(event, context) {
     // Attach payment method to customer
     console.log('Attaching payment method to customer:', paymentMethodId);
     try {
-      await stripe.paymentMethods.attach(paymentMethodId, {
-        customer: stripeCustomerId,
-      });
+      // For parents, attach to both platform and connected account
+      if (userData.role === 'parent' && userData.studio?.stripe_connect_id) {
+        // First attach to connected account
+        const connectedPaymentMethod = await stripe.paymentMethods.attach(
+          paymentMethodId,
+          { customer: connectedCustomerId },
+          { stripeAccount: userData.studio.stripe_connect_id }
+        );
+        
+        // Set as default for connected account
+        await stripe.customers.update(
+          connectedCustomerId,
+          {
+            invoice_settings: {
+              default_payment_method: paymentMethodId,
+            },
+          },
+          { stripeAccount: userData.studio.stripe_connect_id }
+        );
+        
+        console.log('Payment method attached to connected account');
+      }
       
-      // Set as default payment method
-      await stripe.customers.update(stripeCustomerId, {
-        invoice_settings: {
-          default_payment_method: paymentMethodId,
-        },
-      });
+      // Get payment method details from connected account
+      const paymentMethod = await stripe.paymentMethods.retrieve(
+        paymentMethodId,
+        userData.role === 'parent' ? { stripeAccount: userData.studio.stripe_connect_id } : undefined
+      );
       
-      // Get payment method details
-      const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
       console.log('Payment method retrieved:', paymentMethod.id);
       
       // Save to Supabase payment_methods table
