@@ -65,7 +65,7 @@ exports.handler = async function(event, context) {
       };
     }
     
-    const { userId, paymentMethodId } = requestData;
+    const { userId, paymentMethodId, connectedAccountId } = requestData;
     
     if (!userId || !paymentMethodId) {
       return {
@@ -139,7 +139,7 @@ exports.handler = async function(event, context) {
                 platform_customer_id: stripeCustomerId
               }
             },
-            { stripeAccount: userData.studio.stripe_connect_id }
+          { stripeAccount: userData.studio.stripe_connect_id }
           );
           
           connectedCustomerId = connectedCustomer.id;
