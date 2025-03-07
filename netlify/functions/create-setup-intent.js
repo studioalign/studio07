@@ -147,7 +147,8 @@ exports.handler = async function(event, context) {
       const setupIntent = await stripe.setupIntents.create(
         {
           customer: connectedCustomerId,
-          usage: 'off_session',
+          payment_method_types: ['card'],
+          usage: 'on_session',
           automatic_payment_methods: {
             enabled: true,
             allow_redirects: 'never'
@@ -164,13 +165,12 @@ exports.handler = async function(event, context) {
       
       console.log('Created setup intent on connected account:', setupIntent.id);
       
-      // Verify setup intent was created
-      const verifiedSetupIntent = await stripe.setupIntents.retrieve(
-        setupIntent.id,
-        { stripeAccount: userData.studio.stripe_connect_id }
-      );
-      
-      console.log('Verified setup intent exists:', verifiedSetupIntent.id);
+      // Log the setup intent details
+      console.log('Setup intent details:', {
+        id: setupIntent.id,
+        clientSecret: setupIntent.client_secret,
+        status: setupIntent.status
+      });
       
       return {
         statusCode: 200,
@@ -207,7 +207,8 @@ exports.handler = async function(event, context) {
     
     const setupIntent = await stripe.setupIntents.create({
       customer: stripeCustomerId,
-      usage: 'off_session',
+      payment_method_types: ['card'],
+      usage: 'on_session',
       automatic_payment_methods: {
         enabled: true,
         allow_redirects: 'never'
@@ -215,6 +216,11 @@ exports.handler = async function(event, context) {
     });
     
     console.log('Created setup intent:', setupIntent.id);
+    console.log('Setup intent details:', {
+      id: setupIntent.id,
+      clientSecret: setupIntent.client_secret,
+      status: setupIntent.status
+    });
     
     return {
       statusCode: 200,
