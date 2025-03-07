@@ -17,7 +17,8 @@ exports.handler = async function(event, context) {
   // Validate environment variables
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY;
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  // Use service key instead of anon key to bypass RLS
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
   
   if (!stripeSecretKey) {
     console.error('STRIPE_SECRET_KEY is not set');
@@ -31,8 +32,8 @@ exports.handler = async function(event, context) {
     };
   }
   
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('SUPABASE_URL or SUPABASE_ANON_KEY is not set');
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error('SUPABASE_URL or SUPABASE_SERVICE_KEY is not set');
     return {
       statusCode: 500,
       headers,
@@ -47,9 +48,9 @@ exports.handler = async function(event, context) {
     // Initialize Stripe client
     const stripe = require('stripe')(stripeSecretKey);
     
-    // Initialize Supabase with anon key
+    // Initialize Supabase with SERVICE key
     const { createClient } = require('@supabase/supabase-js');
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     // Parse request body
     let requestData;
