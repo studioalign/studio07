@@ -38,6 +38,15 @@ export async function processStripePayment(
   connectedCustomerId?: string
 ): Promise<{ success: boolean; paymentId?: string; error?: string }> {
   try {
+    // Verify the payment method ID format - it should start with 'pm_'
+    if (!paymentMethodId.startsWith('pm_')) {
+      console.error('Invalid payment method ID format:', paymentMethodId);
+      return { 
+        success: false, 
+        error: 'Invalid payment method ID format. Please use a valid Stripe payment method.'
+      };
+    }
+
     // Fetch user details explicitly
     const { data: { user } } = await supabase.auth.getUser();
     
@@ -143,7 +152,10 @@ export async function processStripePayment(
       }
     }
 
-    const response = await fetch(`${window.location.origin}/.netlify/functions/process-drop-in-payment`, {
+    const functionUrl = `${window.location.origin}/.netlify/functions/process-drop-in-payment`;
+    console.log('Calling payment processing function at:', functionUrl);
+    
+    const response = await fetch(functionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
