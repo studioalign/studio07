@@ -34,9 +34,9 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [useStripeElements, setUseStripeElements] = useState(true);
   const [isConnectedAccount, setIsConnectedAccount] = useState(false);
   const [connectedAccountId, setConnectedAccountId] = useState<string | null>(null);
+  const [useStripeElements, setUseStripeElements] = useState(true);
 
   // Get setup intent on component mount
   useEffect(() => {
@@ -77,7 +77,7 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         if (!cardElement) {
           throw new Error('Card element not found');
         }
-        
+
         // Prepare options for confirmCardSetup
         const confirmOptions: any = {
           payment_method: { card: cardElement }
@@ -88,7 +88,7 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
           confirmOptions.stripeAccount = connectedAccountId;
         }
         
-        // Confirm setup with card element
+        // Confirm setup with card element and connected account if needed
         const result = await stripe.confirmCardSetup(clientSecret, confirmOptions);
         
         if (result.error) {
@@ -102,6 +102,7 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
         // Add payment method to database
         const addResult = await addStripePaymentMethod(
           profile?.id || '',
+          result.setupIntent.payment_method as string,
           result.setupIntent.payment_method as string,
           isConnectedAccount ? connectedAccountId : null
         );
