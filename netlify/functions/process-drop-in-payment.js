@@ -92,7 +92,7 @@ exports.handler = async function(event, context) {
         email, 
         name, 
         stripe_customer_id,
-        studio:studios (
+        studio:studios!users_studio_id_fkey (
           id,
           stripe_connect_id,
           stripe_connect_enabled,
@@ -167,8 +167,7 @@ exports.handler = async function(event, context) {
         booking_id: bookingId,
         studio_id: studioId,
         type: 'drop_in_booking'
-      },
-      application_fee_amount: Math.round(amount * 0.1), // 10% platform fee example
+      }
     }, {
       stripeAccount: studio.stripe_connect_id // Process payment on behalf of the studio
     });
