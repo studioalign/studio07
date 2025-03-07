@@ -322,3 +322,151 @@ export async function bookDropInClass(
     };
   }
 }
+
+/**
+ * Gets the number of available spots for a drop-in class
+ */
+export async function getAvailableDropInSpots(classId: string): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from('classes')
+      .select('capacity, booked_count')
+      .eq('id', classId)
+      .single();
+      
+    if (error) throw error;
+    
+    if (!data) {
+      throw new Error('Class not found');
+    }
+    
+    return Math.max(0, data.capacity - (data.booked_count || 0));
+  } catch (err) {
+    console.error('Error getting available spots:', err);
+    throw err;
+  }
+}
+
+/**
+ * Gets all drop-in bookings for a parent
+ */
+export async function getParentDropInBookings(parentId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('drop_in_bookings')
+      .select(`
+        id,
+        payment_status,
+        payment_amount,
+        created_at,
+        class:classes (
+          id,
+          name,
+          date,
+          start_time,
+          end_time,
+          teacher:teacher_id (
+            name
+          ),
+          location:location_id (
+            name
+          ),
+          studio:studio_id (
+            id,
+            name,
+            currency
+          )
+        ),
+        student:students (
+          id,
+          name
+        )
+      `)
+      .eq('parent_id', parentId)
+      .order('created_at', { ascending: false });
+      
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching drop-in bookings:', err);
+    throw err;
+  }
+}
+
+/**
+ * Checks if a student is already booked for a drop-in class
+ */
+export async function isStudentBookedForClass(studentId: string, classId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('drop_in_bookings')
+      .select('id')
+      .eq('student_id', studentId)
+      .eq('class_id', classId)
+      .eq('payment_status', 'completed')
+      .maybeSingle();
+      
+    if (error) throw error;
+    return !!data;
+  } catch (err) {
+    console.error('Error checking if student is booked:', err);
+    return false;
+  }
+}
+
+/**
+ * Gets all drop-in bookings for the current user
+ */
+export async function getCurrentUserDropInBookings() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+    
+    return await getParentDropInBookings(user.id);
+  } catch (err) {
+    console.error('Error fetching current user bookings:', err);
+    return [];
+  }
+}
+
+/**
+ * Gets all upcoming drop-in classes for a student
+ */
+export async function getUpcomingDropInClassesForStudent(studentId: string) {
+  try {
+    // Get today's date
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Get completed bookings for this student
+    const { data: bookings, error: bookingsError } = await supabase
+      .from('drop_in_bookings')
+      .select(`
+        class_id,
+        class:classes (
+          id,
+          name,
+          date,
+          start_time,
+          end_time,
+          teacher:teacher_id (
+            name
+          ),
+          location:location_id (
+            name
+          )
+        )
+      `)
+      .eq('student_id', studentId)
+      .eq('payment_status', 'completed')
+      .gte('class.date', today)
+      .order('class.date', { ascending: true });
+      
+    if (bookingsError) throw bookingsError;
+    
+    // Map to a more usable format
+    return (bookings || []).map(booking => booking.class);
+  } catch (err) {
+    console.error('Error fetching upcoming drop-in classes:', err);
+    return [];
+  }
+}
