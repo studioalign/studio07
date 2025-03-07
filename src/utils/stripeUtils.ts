@@ -50,7 +50,7 @@ export async function processStripePayment(
       };
     }
 
-    // Fetch user and studio details in one query - use explicit relationship
+    // Fetch user and studio details with expanded logging
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select(`
@@ -70,9 +70,10 @@ export async function processStripePayment(
       .single();
     
     if (userError || !userData) {
-      console.error('User lookup error', { 
+      console.error('User lookup comprehensive error', { 
         error: userError, 
-        userData 
+        userData: userData,
+        customerId: customerId
       });
       return { 
         success: false, 
@@ -80,13 +81,39 @@ export async function processStripePayment(
       };
     }
 
+    // Enhanced Studio Details Logging
+    console.log('Studio Payment Setup Debug:', {
+      studioId: userData.studio_id,
+      studioDataExists: !!userData.studios?.[0],
+      stripeConnectId: userData.studios?.[0]?.stripe_connect_id,
+      stripeConnectEnabled: userData.studios?.[0]?.stripe_connect_enabled,
+      stripeConnectOnboarded: userData.studios?.[0]?.stripe_connect_onboarding_complete,
+      rawStudioData: userData.studios?.[0]
+    });
+
     // Validate studio details
-    const studio = userData.studios[0]; // Note the change here
-    if (!studio || !studio.stripe_connect_id || !studio.stripe_connect_enabled) {
-      console.error('Invalid studio setup', { studio });
+    const studio = userData.studios?.[0];
+    if (!studio) {
+      console.error('No studio associated with user');
       return { 
         success: false, 
-        error: 'Studio payment setup is incomplete'
+        error: 'No studio found for this user'
+      };
+    }
+
+    if (!studio.stripe_connect_id) {
+      console.error('Missing Stripe Connect ID');
+      return { 
+        success: false, 
+        error: 'Studio payment setup is incomplete: Missing Stripe Connect ID'
+      };
+    }
+
+    if (studio.stripe_connect_enabled !== true) {
+      console.error('Stripe Connect not enabled', studio.stripe_connect_enabled);
+      return { 
+        success: false, 
+        error: `Studio payment setup is incomplete: Stripe Connect not enabled (current value: ${studio.stripe_connect_enabled})`
       };
     }
 
@@ -110,7 +137,19 @@ export async function processStripePayment(
     const data = await response.json();
     
     if (!response.ok) {
-      console.error('Netlify function error:', response.status, data);
+      console.error('Netlify function error:', {
+        status: response.status, 
+        data: data,
+        requestBody: {
+          bookingId,
+          amount: Math.round(amount * 100),
+          paymentMethodId,
+          description,
+          customerId,
+          currency: (studio.currency || currency).toLowerCase(),
+          studioId: studio.id
+        }
+      });
       return { 
         success: false, 
         error: data.error || `Payment processing failed (${response.status})`
@@ -130,14 +169,17 @@ export async function processStripePayment(
       paymentId: data.paymentId
     };
   } catch (err) {
-    console.error('Error processing payment (detailed):', err);
+    console.error('Error processing payment (detailed):', {
+      errorName: err.name,
+      errorMessage: err.message,
+      errorStack: err.stack
+    });
     return {
       success: false,
       error: err instanceof Error ? err.message : 'An unexpected error occurred'
     };
   }
 }
-
 /**
  * Retrieves Stripe payment methods for a user
  */
