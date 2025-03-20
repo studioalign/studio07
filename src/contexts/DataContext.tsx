@@ -6,6 +6,7 @@ interface Teacher {
 	id: string;
 	name: string;
 	email: string;
+	role?: string; // Add role field to distinguish owners from teachers
 	created_at: string;
 }
 
@@ -48,7 +49,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
 		try {
 			if (profile?.role === "owner") {
-				// Fetch teachers for the studio
+				// Fetch teachers for the studio - UPDATED to include owners
 				const { data: teachersData, error: teachersError } = await supabase
 					.from("users")
 					.select(
@@ -59,7 +60,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 				`
 					)
 					.eq("studio_id", profile.studio?.id + "")
-					.eq("role", "teacher");
+					.in("role", ["teacher", "owner"]); // Include both teachers and owners
 
 				if (teachersError) throw teachersError;
 				setTeachers(teachersData);
@@ -75,11 +76,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
 				setLocations(locationsData || []);
 				// TODO: Fetch students once the table is available
 			} else if (profile?.role === "teacher" || profile?.role === "parent") {
-				// Fetch teachers for the studio
+				// Fetch teachers for the studio - UPDATED to include owners
 				const { data: teachersData, error: teachersError } = await supabase
 					.from("users")
-					.select("*")
-					.eq("studio_id", profile.studio?.id + "");
+					.select("id, name, email, role, created_at") // Explicitly select role
+					.eq("studio_id", profile.studio?.id + "")
+					.in("role", ["teacher", "owner"]); // Include both teachers and owners
 
 				if (teachersError) throw teachersError;
 				setTeachers(teachersData || []);
@@ -117,12 +119,4 @@ export function DataProvider({ children }: { children: ReactNode }) {
 			{children}
 		</DataContext.Provider>
 	);
-}
-
-export function useData() {
-	const context = useContext(DataContext);
-	if (!context) {
-		throw new Error("useData must be used within a DataProvider");
-	}
-	return context;
 }
