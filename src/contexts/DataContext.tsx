@@ -120,3 +120,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
 		</DataContext.Provider>
 	);
 }
+
+// Add this hook export to fix the missing useData issue
+export function useData() {
+  const context = useContext(DataContext);
+  if (!context) {
+    throw new Error('useData must be used within a DataProvider');
+  }
+  return context;
+}
