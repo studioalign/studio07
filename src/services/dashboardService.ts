@@ -174,12 +174,12 @@ async function fetchOwnerClassData(studioId: string) {
 }
 
 async function fetchOwnerTeacherData(studioId: string) {
-  // Get current teachers
+  // Get current teachers, including owners who can teach
   const { data: currentTeachers, error: currentError } = await supabase
     .from('users')
     .select('id')
     .eq('studio_id', studioId)
-    .eq('role', 'teacher');
+    .in('role', ['teacher', 'owner']);
   
   if (currentError) throw currentError;
   
@@ -190,7 +190,7 @@ async function fetchOwnerTeacherData(studioId: string) {
     .from('users')
     .select('id')
     .eq('studio_id', studioId)
-    .eq('role', 'teacher')
+    .in('role', ['teacher', 'owner'])
     .lt('created_at', prevMonthDate);
   
   if (prevError) throw prevError;
