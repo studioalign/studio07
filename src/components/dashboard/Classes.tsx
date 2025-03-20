@@ -68,36 +68,37 @@ export default function Classes() {
 			setQueryInProgress(true);
 
 			const { data, error } = await supabase
-				.from("classes")
-				.select(
-					`
-					id,
-					name,
-					status,
-					date,
-					end_date,
-					start_time,
-					end_time,
-					is_recurring,
-					parent_class_id,
-					notes,
-					is_drop_in,
-					capacity,
-					drop_in_price,
-					studio:studios (
-						id,
-						name
-					),
-					teacher:users (
-						id,
-						name
-					),
-					location:locations (
-						id,
-						name
-					)
-				`
-				)
+			    .from("classes")
+			    .select(
+			        `
+			        id,
+			        name,
+			        status,
+			        date,
+			        end_date,
+			        start_time,
+			        end_time,
+			        is_recurring,
+			        parent_class_id,
+			        notes,
+			        is_drop_in,
+			        capacity,
+			        drop_in_price,
+			        booked_count,
+			        studio:studios (
+			            id,
+			            name
+			        ),
+			        teacher:users (
+			            id,
+			            name
+			        ),
+			        location:locations (
+			            id,
+			            name
+			        )
+			    `
+			    )
 				.eq("studio_id", profile?.studio?.id || "")
 				.order("date", { ascending: true });
 
