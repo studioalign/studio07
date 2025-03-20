@@ -46,13 +46,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 					.single();
 
 				if (error) {
-					console.error("Error loading profile:", error);
+					console.error('Error loading profile:', error);
 					if (mounted) setProfile(null);
 				} else if (mounted) {
 					setProfile(data);
 				}
 			} catch (err) {
-				console.error("Unexpected error loading profile:", err);
+				console.error('Unexpected error loading profile:', err);
 				if (mounted) setProfile(null);
 			}
 		};
@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 					setLoading(false);
 				}
 			} catch (error) {
-				console.error("Error during session initialization:", error);
+				console.error('Error during session initialization:', error);
 				if (mounted) setLoading(false);
 			}
 		};
@@ -91,18 +91,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			}
 		);
 
-		const handleVisibilityChange = () => {
-			if (document.visibilityState === "visible") {
-				initializeSession();
-			}
-		};
-
-		document.addEventListener("visibilitychange", handleVisibilityChange);
+		// Remove the visibility change event listener - this was causing frequent refreshes
+		// const handleVisibilityChange = () => {
+		// 	if (document.visibilityState === "visible") {
+		// 		initializeSession();
+		// 	}
+		// };
+		// document.addEventListener("visibilitychange", handleVisibilityChange);
 
 		return () => {
 			mounted = false;
 			authSubscription.data.subscription?.unsubscribe?.(); // Ensure compatibility
-			document.removeEventListener("visibilitychange", handleVisibilityChange);
+			// document.removeEventListener("visibilitychange", handleVisibilityChange);
 		};
 	}, []);
 
