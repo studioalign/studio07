@@ -1,3 +1,4 @@
+// src/contexts/MessagingContext.tsx
 import React, {
 	createContext,
 	useContext,
@@ -209,7 +210,7 @@ import React, {
 		if (currentConversationIdRef.current === conversationId) {
 		  console.log("Setting", data?.length || 0, "messages");
 		  
-		  // Store processed message IDs
+		  // Store processed message IDs to avoid duplicates from real-time events
 		  data?.forEach(msg => processedMessageIdsRef.current.add(msg.id));
 		  
 		  setMessages(data || []);
@@ -242,12 +243,28 @@ import React, {
 	  }
 	}, [profile?.id]);
   
-	// Send message function
+	// Send message function with optimistic updates
 	const sendMessage = useCallback(async (content: string) => {
 	  if (!activeConversation || !profile?.id) return;
   
 	  try {
 		console.log("Sending message to conversation", activeConversation);
+		
+		// Create optimistic message
+		const optimisticId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+		const optimisticMessage: Message = {
+		  id: optimisticId,
+		  content,
+		  sender_id: profile.id,
+		  created_at: new Date().toISOString(),
+		  edited_at: null,
+		  is_deleted: false
+		};
+		
+		// Add optimistic message to UI immediately
+		setMessages(prev => [...prev, optimisticMessage]);
+		
+		// Send to server
 		const { data: newMessage, error: sendError } = await supabase
 		  .from("messages")
 		  .insert([
@@ -260,7 +277,11 @@ import React, {
 		  .select()
 		  .single();
   
-		if (sendError) throw sendError;
+		if (sendError) {
+		  // Remove optimistic message on error
+		  setMessages(prev => prev.filter(m => m.id !== optimisticId));
+		  throw sendError;
+		}
   
 		// Update conversation's last message
 		const { error: updateError } = await supabase
@@ -275,21 +296,15 @@ import React, {
 		  console.error("Error updating conversation:", updateError);
 		}
   
-		// Optimistically add message to local state (this helps with reliable real-time)
-		if (newMessage && newMessage.id) {
-		  // Check if we've already processed this message to avoid duplicates
-		  if (!processedMessageIdsRef.current.has(newMessage.id)) {
-			processedMessageIdsRef.current.add(newMessage.id);
-			
-			setMessages(prev => [...prev, {
-			  id: newMessage.id,
-			  content: newMessage.content,
-			  sender_id: profile.id,
-			  created_at: newMessage.created_at || new Date().toISOString(),
-			  edited_at: null,
-			  is_deleted: false
-			}]);
-		  }
+		// If we got back a real message, replace the optimistic one
+		if (newMessage) {
+		  // Add to processed set to avoid duplicates from the subscription
+		  processedMessageIdsRef.current.add(newMessage.id);
+		  
+		  // Replace optimistic message with real one
+		  setMessages(prev => prev.map(msg => 
+			msg.id === optimisticId ? newMessage : msg
+		  ));
 		}
 	  } catch (err) {
 		console.error("Error sending message:", err);
@@ -383,7 +398,9 @@ import React, {
 			fetchConversations();
 		  }
 		)
-		.subscribe();
+		.subscribe((status, err) => {
+          console.log("Conversation subscription status:", status, err ? err.message : 'OK');
+        });
 	  
 	  conversationChannelRef.current = channel;
 	  
@@ -413,7 +430,7 @@ import React, {
 	  
 	  console.log("Setting up messages subscription for conversation", activeConversation);
 	  
-	  // Create new subscription for messages
+	  // Create new subscription for messages with better debugging
 	  const channel = supabase
 		.channel(`messages-${activeConversation}`)
 		.on(
@@ -460,8 +477,8 @@ import React, {
 			}
 		  }
 		)
-		.subscribe((status) => {
-		  console.log("Messages subscription status:", status);
+		.subscribe((status, err) => {
+		  console.log("Messages subscription status:", status, err ? `Error: ${err.message}` : 'OK');
 		});
 	  
 	  messagesChannelRef.current = channel;
