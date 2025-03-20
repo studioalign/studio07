@@ -26,6 +26,7 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0); // Store unread count separately
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
@@ -45,6 +46,10 @@ export function useNotifications() {
       if (error) throw error;
       
       setNotifications(data || []);
+      
+      // Update unread count
+      const unreadNotifications = (data || []).filter(n => !n.read);
+      setUnreadCount(unreadNotifications.length);
     } catch (err) {
       console.error('Error fetching notifications:', err);
       setError('Failed to load notifications');
@@ -65,6 +70,9 @@ export function useNotifications() {
         )
       );
       
+      // Also update the unread count
+      setUnreadCount(prev => Math.max(0, prev - 1));
+      
       // Then update in database
       const { error } = await supabase
         .from('notifications')
@@ -84,10 +92,16 @@ export function useNotifications() {
     if (!user?.id || notifications.length === 0) return;
     
     try {
+      // Count how many unread notifications we have before we update
+      const unreadBefore = notifications.filter(n => !n.read).length;
+      
       // Optimistically update UI first
       setNotifications(prev =>
         prev.map(notification => ({ ...notification, read: true }))
       );
+      
+      // Update unread count to zero
+      setUnreadCount(0);
       
       // Then update in database
       const { error } = await supabase
@@ -107,10 +121,19 @@ export function useNotifications() {
   // Dismiss notification
   const dismissNotification = async (id: string) => {
     try {
+      // Check if the notification is unread before dismissing
+      const notificationToDismiss = notifications.find(n => n.id === id);
+      const wasUnread = notificationToDismiss && !notificationToDismiss.read;
+      
       // Optimistically update UI first
       setNotifications(prev =>
         prev.filter(notification => notification.id !== id)
       );
+      
+      // If we're dismissing an unread notification, update the count
+      if (wasUnread) {
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
       
       // Then update in database
       const { error } = await supabase
@@ -133,6 +156,9 @@ export function useNotifications() {
     try {
       // Optimistically update UI first
       setNotifications([]);
+      
+      // Reset unread count to zero
+      setUnreadCount(0);
       
       // Then update in database
       const { error } = await supabase
@@ -171,7 +197,13 @@ export function useNotifications() {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          setNotifications(prev => [payload.new as Notification, ...prev]);
+          const newNotification = payload.new as Notification;
+          setNotifications(prev => [newNotification, ...prev]);
+          
+          // Update unread count for new notifications
+          if (!newNotification.read) {
+            setUnreadCount(prev => prev + 1);
+          }
         }
       )
       .on(
@@ -185,13 +217,29 @@ export function useNotifications() {
         (payload) => {
           // Update the notification in our local state if it's updated externally
           const updated = payload.new as Notification;
+          const previous = payload.old as Notification;
+          
           if (updated.dismissed) {
             // If dismissed, remove from the list
             setNotifications(prev => 
               prev.filter(n => n.id !== updated.id)
             );
+            
+            // If it was unread before being dismissed, decrement the count
+            if (!previous.read) {
+              setUnreadCount(prev => Math.max(0, prev - 1));
+            }
           } else {
-            // Otherwise update the notification
+            // Handle read status changes
+            if (!previous.read && updated.read) {
+              // If it was marked as read, decrement the count
+              setUnreadCount(prev => Math.max(0, prev - 1));
+            } else if (previous.read && !updated.read) {
+              // If it was marked as unread, increment the count
+              setUnreadCount(prev => prev + 1);
+            }
+            
+            // Update the notification
             setNotifications(prev => 
               prev.map(n => n.id === updated.id ? updated : n)
             );
@@ -214,6 +262,6 @@ export function useNotifications() {
     dismissNotification,
     dismissAll,
     fetchNotifications,
-    unreadCount: notifications.filter(n => !n.read).length,
+    unreadCount, // This will now update in real-time
   };
 }
