@@ -202,17 +202,32 @@ async function fetchOwnerTeacherData(studioId: string) {
 }
 
 async function fetchOwnerActivityData(studioId: string) {
-  // Get recent notifications
-  const { data, error } = await supabase
-    .from('notifications')
-    .select('*')
-    .eq('studio_id', studioId)
-    .order('created_at', { ascending: false })
-    .limit(5);
-  
-  if (error) throw error;
-  
-  return data || [];
+  try {
+    // First, get all owner user IDs for this studio
+    const { data: owners, error: ownerError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('studio_id', studioId)
+      .eq('role', 'owner');
+    
+    if (ownerError) throw ownerError;
+    
+    const ownerIds = owners.map(owner => owner.id);
+    
+    // Get recent notifications only for these owner IDs
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .in('user_id', ownerIds)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching activity data:', err);
+    return [];
+  }
 }
 
 // ======================= TEACHER DASHBOARD DATA =======================
