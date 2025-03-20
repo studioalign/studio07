@@ -123,7 +123,7 @@ export async function getOrCreateClassSession(classId: string, date: string) {
     // Since all instances are in the classes table, we'll just return the existing or new class
     const { data: existingClass, error: fetchError } = await supabase
       .from('classes')
-      .select('id')
+      .select('id, teacher_id, teacher:users(role)')
       .eq('id', classId)
       .eq('date', date)
       .single();
