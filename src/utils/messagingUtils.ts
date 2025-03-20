@@ -1,28 +1,47 @@
 import { supabase } from "../lib/supabase";
 
 export async function getStudioUsersByRole(
-	role: "owner" | "teacher" | "parent",
-	studioId: string
+  role: "owner" | "teacher" | "parent",
+  studioId: string
 ) {
-	try {
-		const { data, error } = await supabase
-			.from("users")
-			.select(
-				`id, name, role, email,
-				studio:studios!users_studio_id_fkey(
-				id, name, address, phone, email
-				)
-			`
-			)
-			.eq("role", role)
-			.eq("studio_id", studioId);
+  try {
+    // Special case for teachers to include owners
+    if (role === "teacher") {
+      const { data, error } = await supabase
+        .from("users")
+        .select(
+          `id, name, role, email,
+          studio:studios!users_studio_id_fkey(
+          id, name, address, phone, email
+          )
+        `
+        )
+        .in("role", ["teacher", "owner"])
+        .eq("studio_id", studioId);
 
-		if (error) throw error;
-		return data || [];
-	} catch (err) {
-		console.error(`Error fetching ${role}s:`, err);
-		return [];
-	}
+      if (error) throw error;
+      return data || [];
+    } else {
+      // Original behavior for other roles
+      const { data, error } = await supabase
+        .from("users")
+        .select(
+          `id, name, role, email,
+          studio:studios!users_studio_id_fkey(
+          id, name, address, phone, email
+          )
+        `
+        )
+        .eq("role", role)
+        .eq("studio_id", studioId);
+
+      if (error) throw error;
+      return data || [];
+    }
+  } catch (err) {
+    console.error(`Error fetching ${role}s:`, err);
+    return [];
+  }
 }
 
 export async function getConversationParticipants(conversationId: string) {
