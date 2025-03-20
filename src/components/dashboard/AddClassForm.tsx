@@ -297,15 +297,18 @@ export default function AddClassForm({
 			/>
 
 			<SearchableDropdown
-				id="teacher"
-				label="Select Teacher"
-				required
-				value={selectedTeacher}
-				onChange={setSelectedTeacher}
-				options={teachers.map((teacher) => ({
-					id: teacher.id,
-					label: teacher.name,
-				}))}
+			  id="teacher"
+			  label="Select Teacher"
+			  required
+			  value={selectedTeacher}
+			  onChange={setSelectedTeacher}
+			  options={teachers.map((teacher) => ({
+			    id: teacher.id,
+			    // Show role indicator for owners
+			    label: teacher.role === 'owner' 
+			      ? `${teacher.name} (Owner)` 
+			      : teacher.name,
+			  }))}
 			/>
 
 			<SearchableDropdown
