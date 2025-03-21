@@ -258,18 +258,6 @@ export async function createComment(postId: string, content: string) {
       throw new Error('User not authenticated');
     }
 
-    // Verify post exists
-    const { data: postCheck, error: postCheckError } = await supabase
-      .from('channel_posts')
-      .select('id')
-      .eq('id', postId)
-      .single();
-
-    if (postCheckError) {
-      console.error('Post verification error:', postCheckError);
-      throw new Error(`Cannot find post with ID ${postId}: ${postCheckError.message}`);
-    }
-
     // Prepare comment data
     const commentData = {
       post_id: postId,
@@ -296,27 +284,14 @@ export async function createComment(postId: string, content: string) {
       .single();
 
     if (error) {
-      console.error('Supabase insert error:', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint
-      });
+      console.error('Supabase insert error:', error);
       throw error;
     }
 
     console.log('Comment created successfully:', data);
     return data;
   } catch (err) {
-    console.error('Comprehensive error in createComment:', {
-      errorType: typeof err,
-      errorConstructor: err?.constructor?.name,
-      errorObject: err,
-      errorMessage: err instanceof Error ? err.message : 'Unknown error',
-      errorStack: err instanceof Error ? err.stack : 'No stack trace'
-    });
-    
-    // Rethrow the original error
+    console.error('Error in createComment:', err);
     throw err;
   }
 }
