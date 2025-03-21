@@ -413,82 +413,100 @@ import React, {
 	}, [profile?.id, fetchConversations]);
   
 	// Set up message subscription when active conversation changes
+	// Add this to the useEffect that sets up the message subscription
 	useEffect(() => {
-	  if (!activeConversation || !profile?.id) return;
-  
-	  // Reset message tracking when conversation changes
-	  processedMessageIdsRef.current = new Set();
-	  
-	  // Fetch initial messages when conversation changes
-	  fetchMessages(activeConversation);
-	  
-	  // Clean up existing messages subscription
-	  if (messagesChannelRef.current) {
-		supabase.removeChannel(messagesChannelRef.current);
-		messagesChannelRef.current = null;
-	  }
-	  
-	  console.log("Setting up messages subscription for conversation", activeConversation);
-	  
-	  // Create new subscription for messages with better debugging
-	  const channel = supabase
-		.channel(`messages-${activeConversation}`)
-		.on(
-		  "postgres_changes",
-		  {
-			event: "INSERT",
-			schema: "public",
-			table: "messages",
-			filter: `conversation_id=eq.${activeConversation}`,
-		  },
-		  (payload) => {
-			console.log("New message received from subscription:", payload.new);
-			
-			// Extract the new message
-			const newMessage = payload.new as Message;
-			
-			// Check if we've already processed this message
-			if (!processedMessageIdsRef.current.has(newMessage.id)) {
-			  processedMessageIdsRef.current.add(newMessage.id);
-			  
-			  // Add the new message to state
-			  setMessages(prev => [...prev, newMessage]);
-			  
-			  // If it's not from the current user, mark as read
-			  if (newMessage.sender_id !== profile.id) {
-				console.log("Marking message as read");
-				// Call RPC to mark messages as read (without waiting)
-				supabase.rpc("mark_messages_as_read", {
-				  p_conversation_id: activeConversation,
-				  p_user_id: profile.id,
-				}).then(() => {
-				  // Update local state
-				  setConversations(prev => 
-					prev.map(conv => 
-					  conv.id === activeConversation 
-						? { ...conv, unread_count: 0 } 
-						: conv
-					)
-				  );
-				});
-			  }
-			} else {
-			  console.log("Message already processed, skipping:", newMessage.id);
-			}
-		  }
-		)
-		.subscribe((status, err) => {
-		  console.log("Messages subscription status:", status, err ? `Error: ${err.message}` : 'OK');
-		});
-	  
-	  messagesChannelRef.current = channel;
-	  
-	  return () => {
-		if (messagesChannelRef.current) {
-		  supabase.removeChannel(messagesChannelRef.current);
-		  messagesChannelRef.current = null;
-		}
-	  };
+	    if (!activeConversation || !profile?.id) return;
+	
+	    // Reset message tracking when conversation changes
+	    processedMessageIdsRef.current = new Set();
+	    
+	    // Fetch initial messages when conversation changes
+	    fetchMessages(activeConversation);
+	    
+	    // Clean up existing messages subscription
+	    if (messagesChannelRef.current) {
+	        supabase.removeChannel(messagesChannelRef.current);
+	        messagesChannelRef.current = null;
+	    }
+	    
+	    console.log("Setting up messages subscription for conversation", activeConversation);
+	    
+	    // Create new subscription for messages with better duplicate prevention
+	    const channel = supabase
+	        .channel(`messages-${activeConversation}`)
+	        .on(
+	            "postgres_changes",
+	            {
+	                event: "INSERT",
+	                schema: "public",
+	                table: "messages",
+	                filter: `conversation_id=eq.${activeConversation}`,
+	            },
+	            (payload) => {
+	                console.log("New message received from subscription:", payload.new);
+	                
+	                // Extract the new message
+	                const newMessage = payload.new as Message;
+	                
+	                // Check if we've already processed this message
+	                if (processedMessageIdsRef.current.has(newMessage.id)) {
+	                    console.log("Message already processed, skipping:", newMessage.id);
+	                    return;
+	                }
+	                
+	                // Check if this is an optimistic message that's already in our state
+	                // by comparing content, sender, and making sure timestamps are close
+	                const isMessageDuplicate = messages.some(msg => 
+	                    msg.content === newMessage.content && 
+	                    msg.sender_id === newMessage.sender_id &&
+	                    // Check if messages were created within 5 seconds of each other
+	                    Math.abs(new Date(msg.created_at).getTime() - 
+	                             new Date(newMessage.created_at).getTime()) < 5000
+	                );
+	                
+	                if (isMessageDuplicate) {
+	                    console.log("Message appears to be a duplicate of an existing message, skipping");
+	                    return;
+	                }
+	                
+	                // Add to processed set
+	                processedMessageIdsRef.current.add(newMessage.id);
+	                
+	                // Add the new message to state
+	                setMessages(prev => [...prev, newMessage]);
+	                
+	                // If it's not from the current user, mark as read
+	                if (newMessage.sender_id !== profile.id) {
+	                    console.log("Marking message as read");
+	                    // Call RPC to mark messages as read (without waiting)
+	                    supabase.rpc("mark_messages_as_read", {
+	                        p_conversation_id: activeConversation,
+	                        p_user_id: profile.id,
+	                    }).then(() => {
+	                        // Update local state
+	                        setConversations(prev => 
+	                            prev.map(conv => 
+	                                conv.id === activeConversation 
+	                                    ? { ...conv, unread_count: 0 } 
+	                                    : conv
+	                            )
+	                        );
+	                    });
+	                }
+	            }
+	        )
+	        .subscribe((status, err) => {
+	            console.log("Messages subscription status:", status, err ? `Error: ${err.message}` : 'OK');
+	        });
+	    
+	    messagesChannelRef.current = channel;
+	    
+	    return () => {
+	        if (messagesChannelRef.current) {
+	            supabase.removeChannel(messagesChannelRef.current);
+	            messagesChannelRef.current = null;
+	        }
+	    };
 	}, [activeConversation, profile?.id, fetchMessages]);
   
 	// Cleanup on unmount
