@@ -45,7 +45,8 @@ interface WeeklyCalendarProps {
     userRole: string | null;
 }
 
-export default React.memo(WeeklyCalendar);
+// Define the component function
+function WeeklyCalendar({
     classes,
     onClassClick,
     onEdit,
@@ -245,3 +246,6 @@ export default React.memo(WeeklyCalendar);
         </div>
     );
 }
+
+// Export as memoized component
+export default React.memo(WeeklyCalendar);
