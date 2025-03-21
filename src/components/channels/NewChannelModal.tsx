@@ -51,53 +51,73 @@ export default function NewChannelModal({ onClose }: NewChannelModalProps) {
 	}, []);
 
 	const handleSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (selectedMembers.length === 0) return;
-
-		setIsSubmitting(true);
-		setError(null);
-
-		try {
-			// Create the channel
-			const { data: channel, error: insertError } = await supabase
-				.from("class_channels")
-				.insert({
-					name,
-					description: description || null,
-					created_by: profile?.id + "",
-				})
-				.select("*")
-				.single();
-
-			if (insertError) throw insertError;
-
-			// Add all selected members to the channel
-			const memberInserts = selectedMembers.map((member) => ({
-				channel_id: channel.id,
-				user_id: member.id,
-				role: "member",
-			}));
-
-			// Add the creator as an admin
-			memberInserts.push({
-				channel_id: channel.id,
-				user_id: profile?.id + "",
-				role: "admin",
-			});
-
-			const { error: membersError } = await supabase
-				.from("channel_members")
-				.insert(memberInserts);
-
-			if (membersError) throw membersError;
-
-			onClose();
-		} catch (err) {
-			console.error("Error creating channel:", err);
-			setError(err instanceof Error ? err.message : "Failed to create channel");
-		} finally {
-			setIsSubmitting(false);
-		}
+	  e.preventDefault();
+	  if (selectedMembers.length === 0 || !name.trim()) {
+	    setError("Channel name and at least one member are required");
+	    return;
+	  }
+	
+	  setIsSubmitting(true);
+	  setError(null);
+	
+	  try {
+	    // First ensure we have a profile ID
+	    if (!profile?.id) {
+	      throw new Error("You must be logged in to create a channel");
+	    }
+	
+	    console.log("Creating channel with data:", {
+	      name,
+	      description,
+	      created_by: profile.id,
+	      studio_id: profile.studio?.id
+	    });
+	
+	    // Create the channel with explicit studio_id
+	    const { data: channel, error: insertError } = await supabase
+	      .from("class_channels")
+	      .insert({
+	        name: name.trim(),
+	        description: description || null,
+	        created_by: profile.id,
+	        studio_id: profile.studio?.id // Add studio_id explicitly
+	      })
+	      .select("*")
+	      .single();
+	
+	    if (insertError) throw insertError;
+	
+	    console.log("Channel created:", channel);
+	
+	    // Add all selected members to the channel
+	    const memberInserts = selectedMembers.map((member) => ({
+	      channel_id: channel.id,
+	      user_id: member.id,
+	      role: "member"
+	    }));
+	
+	    // Add the creator as an admin
+	    memberInserts.push({
+	      channel_id: channel.id,
+	      user_id: profile.id,
+	      role: "admin"
+	    });
+	
+	    console.log("Adding members:", memberInserts);
+	
+	    const { error: membersError } = await supabase
+	      .from("channel_members")
+	      .insert(memberInserts);
+	
+	    if (membersError) throw membersError;
+	
+	    onClose();
+	  } catch (err) {
+	    console.error("Error creating channel:", err);
+	    setError(err instanceof Error ? err.message : "Failed to create channel");
+	  } finally {
+	    setIsSubmitting(false);
+	  }
 	};
 
 	return (
