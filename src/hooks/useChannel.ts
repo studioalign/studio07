@@ -90,126 +90,111 @@ export function useChannel(channelId: string) {
 	}, []);
 
 	const fetchChannelData = useCallback(async () => {
-		if (!channelId || !profile?.id) return;
-
-		console.log("Fetching channel data for channel:", channelId);
-		
-		// Set loading and clear previous error
-		setState(prev => ({
-			...prev,
-			loading: { channel: true, posts: true },
-			error: null,
-		}));
-
-		try {
-			// Fetch channel details
-			const { data: channelData, error: channelError } = await supabase
-				.from("class_channels")
-				.select(
-					`
-					id,
-					name,
-					description,
-					class_id,
-					members:channel_members (
-						user_id,
-						role
-					)
-				`
-				)
-				.eq("id", channelId)
-				.single();
-
-			if (channelError) throw channelError;
-
-			// Fetch posts with related data
-			const { data: postsData, error: postsError } = await supabase
-				.from("channel_posts")
-				.select(
-					`
-					id,
-					content,
-					author: users(
-						id,
-						name
-					),
-					created_at,
-					edited_at,
-					media:post_media (
-						id,
-						url,
-						type,
-						filename
-					),
-					reactions:post_reactions (
-						user_id
-					),
-					comments:post_comments (
-						id,
-						content,
-						author: users(
-							id,
-							name
-						),
-						created_at,
-						edited_at
-					)
-				`
-				)
-				.eq("channel_id", channelId)
-				.order("created_at", { ascending: false });
-
-			if (postsError) throw postsError;
-
-			// Store processed post IDs
-			if (postsData) {
-				postsData.forEach(post => {
-					processedPostIdsRef.current.add(post.id);
-					
-					// Also track comments
-					if (post.comments) {
-						post.comments.forEach(comment => {
-							processedCommentIdsRef.current.add(comment.id);
-						});
-					}
-					
-					// And reactions
-					if (post.reactions) {
-						if (!processedReactionIdsRef.current.has(post.id)) {
-							processedReactionIdsRef.current.set(post.id, new Set());
-						}
-						post.reactions.forEach(reaction => {
-							processedReactionIdsRef.current.get(post.id)?.add(reaction.user_id);
-						});
-					}
-				});
-			}
-
-			console.log("Channel data loaded with", postsData?.length || 0, "posts");
-
-			setState(prev => ({
-				...prev,
-				channel: channelData,
-				posts: postsData || [],
-				loading: {
-					channel: false,
-					posts: false,
-				},
-				error: null,
-			}));
-		} catch (err) {
-			console.error("Error fetching channel data:", err);
-			setState(prev => ({
-				...prev,
-				error: err instanceof Error ? err.message : "Failed to fetch channel data",
-				loading: {
-					channel: false,
-					posts: false,
-				},
-				channel: null,
-				posts: [],
-			}));
-		}
+	  if (!channelId || !profile?.id) {
+	    console.log("Missing channelId or profile.id, cannot fetch data");
+	    return;
+	  }
+	
+	  console.log("Fetching channel data for channel:", channelId, "user:", profile?.id);
+	  
+	  // Set loading and clear previous error
+	  setState(prev => ({
+	    ...prev,
+	    loading: { channel: true, posts: true },
+	    error: null,
+	  }));
+	
+	  try {
+	    // Fetch channel details with detailed error handling
+	    const { data: channelData, error: channelError } = await supabase
+	      .from("class_channels")
+	      .select(`
+	        id,
+	        name,
+	        description,
+	        class_id,
+	        members:channel_members (
+	          user_id,
+	          role
+	        )
+	      `)
+	      .eq("id", channelId)
+	      .single();
+	
+	    if (channelError) {
+	      console.error("Channel fetch error:", channelError);
+	      throw channelError;
+	    }
+	
+	    if (!channelData) {
+	      throw new Error("Channel not found");
+	    }
+	
+	    console.log("Channel data loaded:", channelData);
+	
+	    // Separate query for posts to avoid potential join issues
+	    const { data: postsData, error: postsError } = await supabase
+	      .from("channel_posts")
+	      .select(`
+	        id,
+	        content,
+	        author:author_id (
+	          id,
+	          name
+	        ),
+	        created_at,
+	        edited_at,
+	        media:post_media (
+	          id,
+	          url,
+	          type,
+	          filename
+	        ),
+	        reactions:post_reactions (
+	          user_id
+	        ),
+	        comments:post_comments (
+	          id,
+	          content,
+	          author:author_id (
+	            id,
+	            name
+	          ),
+	          created_at,
+	          edited_at
+	        )
+	      `)
+	      .eq("channel_id", channelId)
+	      .order("created_at", { ascending: false });
+	
+	    if (postsError) {
+	      console.error("Posts fetch error:", postsError);
+	      throw postsError;
+	    }
+	
+	    console.log("Channel posts loaded:", postsData?.length || 0);
+	
+	    // Update state with channel and posts data
+	    setState({
+	      channel: channelData,
+	      posts: postsData || [],
+	      loading: {
+	        channel: false,
+	        posts: false,
+	      },
+	      error: null,
+	    });
+	  } catch (err) {
+	    console.error("Error fetching channel data:", err);
+	    setState(prev => ({
+	      ...prev,
+	      error: err instanceof Error ? err.message : "Failed to fetch channel data",
+	      loading: {
+	        channel: false,
+	        posts: false,
+	      },
+	    }));
+	  }
 	}, [channelId, profile?.id]);
 
 	// Set up real-time subscriptions
