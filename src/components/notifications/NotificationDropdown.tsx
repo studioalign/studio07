@@ -6,17 +6,13 @@ import { formatDistanceToNow } from 'date-fns';
 import { useNotifications, Notification } from '../../hooks/useNotifications';
 
 export default function NotificationDropdown({ onClose }: { onClose: () => void }) {
-  const { notifications, markAsRead, markAllAsRead, isLoading, unreadCount } = useNotifications();
+  const { notifications, markAsRead, markAllAsRead, isLoading, unreadCount, updateUnreadCount } = useNotifications();
   
   // This will immediately update the badge count when component mounts
   useEffect(() => {
-    // Trigger a re-fetch when the dropdown is opened
-    // This ensures we have the latest notification state
-    // But don't need to load if we already have notifications and none are unread
-    if (!(notifications.length > 0 && unreadCount === 0)) {
-      // fetchNotifications(); - Only uncomment if we need a force-refresh here
-    }
-  }, []);
+    // Immediately update the unread count
+    updateUnreadCount();
+  }, [updateUnreadCount]);
 
   const getIcon = (notification: Notification) => {
     const type = notification.type.split('_')[0]; // Get the first part of the type
