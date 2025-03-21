@@ -98,6 +98,28 @@ export function useNotifications() {
     }
   };
 
+    const updateUnreadCount = useCallback(async () => {
+    if (!user?.id) return;
+    
+    try {
+      // Count unread notifications directly from current state
+      const unreadNotifications = notifications.filter(n => !n.read);
+      setUnreadCount(unreadNotifications.length);
+      
+      // Optionally fetch from server to ensure accuracy
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('read', false)
+        .eq('dismissed', false);
+      
+      setUnreadCount(count || 0);
+    } catch (err) {
+      console.error('Error updating unread count:', err);
+    }
+  }, [user?.id, notifications]);
+  
   // Mark all notifications as read
   const markAllAsRead = async () => {
     if (!user?.id || notifications.length === 0) return;
@@ -311,5 +333,6 @@ export function useNotifications() {
     dismissAll,
     fetchNotifications,
     unreadCount,
+    updateUnreadCount
   };
 }
