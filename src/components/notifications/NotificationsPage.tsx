@@ -98,6 +98,10 @@ export default function NotificationsPage() {
     window.scrollTo(0, 0);
   };
 
+  useEffect(() => {
+  updateUnreadCount();
+}, [updateUnreadCount]);
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
