@@ -45,6 +45,8 @@ interface WeeklyCalendarProps {
     userRole: string | null;
 }
 
+export default React.memo(WeeklyCalendar);
+
 export default function WeeklyCalendar({
     classes,
     onClassClick,
