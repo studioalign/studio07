@@ -64,72 +64,86 @@ export default function Classes() {
 	const { timezone } = useLocalization();
 
 	const fetchClassInstances = useCallback(async () => {
-		try {
-			setQueryInProgress(true);
-
-			const { data, error } = await supabase
-			    .from("classes")
-			    .select(
-			        `
-			        id,
-			        name,
-			        status,
-			        date,
-			        end_date,
-			        start_time,
-			        end_time,
-			        is_recurring,
-			        parent_class_id,
-			        notes,
-			        is_drop_in,
-			        capacity,
-			        drop_in_price,
-			        booked_count,
-			        studio:studios (
-			            id,
-			            name
-			        ),
-			        teacher:users (
-			            id,
-			            name
-			        ),
-			        location:locations (
-			            id,
-			            name
-			        )
-			    `
-			    )
-				.eq("studio_id", profile?.studio?.id || "")
-				.order("date", { ascending: true });
-
-			if (error) throw error;
-
-			// For parent users, fetch enrolled students for each class
-			if (profile?.role === "parent") {
-				const instancesWithEnrollments = await Promise.all(
-					data.map(async (instance) => {
-						const students = await getEnrolledStudents(
-							instance.id,
-							profile?.id
-						);
-						return {
-							...instance,
-							enrolledStudents: students.map((s) => s.name),
-						};
-					})
-				);
-				setClassInstances(instancesWithEnrollments);
-			} else {
-				setClassInstances(data);
-			}
-		} catch (err) {
-			console.error("Error fetching class_instances:", err);
-			setError(err instanceof Error ? err.message : "Failed to fetch classes");
-		} finally {
-			setQueryInProgress(false);
-			setLoading(false);
-		}
-	}, []);
+	    // Prevent multiple simultaneous queries
+	    if (queryInProgress) return;
+	    
+	    try {
+	        setQueryInProgress(true);
+	
+	        const { data, error } = await supabase
+	            .from("classes")
+	            .select(
+	                `
+	                id,
+	                name,
+	                status,
+	                date,
+	                end_date,
+	                start_time,
+	                end_time,
+	                is_recurring,
+	                parent_class_id,
+	                notes,
+	                is_drop_in,
+	                capacity,
+	                drop_in_price,
+	                booked_count,
+	                studio:studios (
+	                    id,
+	                    name
+	                ),
+	                teacher:users (
+	                    id,
+	                    name
+	                ),
+	                location:locations (
+	                    id,
+	                    name
+	                )
+	            `
+	            )
+	            .eq("studio_id", profile?.studio?.id || "")
+	            .order("date", { ascending: true });
+	
+	        if (error) throw error;
+	
+	        // For parent users, fetch enrolled students for each class
+	        if (profile?.role === "parent") {
+	            const instancesWithEnrollments = await Promise.all(
+	                data.map(async (instance) => {
+	                    const students = await getEnrolledStudents(
+	                        instance.id,
+	                        profile?.id
+	                    );
+	                    return {
+	                        ...instance,
+	                        enrolledStudents: students.map((s) => s.name),
+	                    };
+	                })
+	            );
+	            setClassInstances(instancesWithEnrollments);
+	        } else {
+	            setClassInstances(data);
+	        }
+	    } catch (err) {
+	        console.error("Error fetching class_instances:", err);
+	        setError(err instanceof Error ? err.message : "Failed to fetch classes");
+	    } finally {
+	        setQueryInProgress(false);
+	        setLoading(false);
+	    }
+	}, [profile?.studio?.id, profile?.role, profile?.id]);
+	
+	// Also update the useEffect that uses fetchClassInstances
+	useEffect(() => {
+	    // Only fetch data when component mounts or relevant profile data changes
+	    fetchClassInstances();
+	    
+	    // Return cleanup function to cancel any pending operations
+	    return () => {
+	        // If you had any subscriptions or timeouts, cancel them here
+	    };
+	}, [fetchClassInstances]); // Include fetchClassInstances as a dependency
 
 	useEffect(() => {
 		fetchClassInstances();
