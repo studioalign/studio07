@@ -243,7 +243,7 @@ import React, {
 	  }
 	}, [profile?.id]);
   
-	// Send message function with optimistic updates
+	// In the sendMessage function in MessagingContext.tsx
 	const sendMessage = useCallback(async (content: string) => {
 	    if (!activeConversation || !profile?.id) return;
 	
@@ -252,7 +252,7 @@ import React, {
 	        
 	        // Create optimistic message with distinctive ID format
 	        const optimisticId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-	        const optimisticMessage: Message = {
+	        const optimisticMessage = {
 	            id: optimisticId,
 	            content,
 	            sender_id: profile.id,
@@ -283,25 +283,11 @@ import React, {
 	            throw sendError;
 	        }
 	
-	        // Update conversation's last message
-	        const { error: updateError } = await supabase
-	            .from("conversations")
-	            .update({
-	                last_message: content,
-	                last_message_at: new Date().toISOString(),
-	            })
-	            .eq("id", activeConversation);
-	
-	        if (updateError) {
-	            console.error("Error updating conversation:", updateError);
-	        }
-	
-	        // If we got back a real message, replace the optimistic one and mark as processed
+	        // If we got back a real message, add it to processed set to avoid duplicates from subscription
 	        if (newMessage) {
-	            // Add to processed set to avoid duplicates from the subscription
 	            processedMessageIdsRef.current.add(newMessage.id);
 	            
-	            // Replace optimistic message with real one
+	            // Replace the optimistic message with the real one
 	            setMessages(prev => prev.map(msg => 
 	                msg.id === optimisticId ? newMessage : msg
 	            ));
