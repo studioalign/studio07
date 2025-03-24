@@ -186,47 +186,47 @@ export const DashboardProvider: React.FC<DashboardProviderProps> = ({ children }
 
   // Function to fetch dashboard data based on user role
   const fetchDashboardData = async () => {
-  if (!profile || !profile.studio?.id) {
-    setIsLoading(false);
-    return;
-  }
-
-  // Check if we're already loading - prevent duplicate requests
-  if (isLoading) return;
-
-  setIsLoading(true);
-  setError(null);
-
-  try {
-    let dashboardData;
-
-    if (profile.role === 'owner') {
-      dashboardData = await fetchOwnerDashboardData(profile.studio.id);
-    } else if (profile.role === 'teacher') {
-      dashboardData = await fetchTeacherDashboardData(profile.id);
-    } else if (profile.role === 'parent') {
-      dashboardData = await fetchParentDashboardData(profile.id);
-    } else {
-      throw new Error('Invalid user role');
+    if (!profile || !profile.studio?.id) {
+      setIsLoading(false);
+      return;
     }
 
-    setData(dashboardData);
-  } catch (err) {
-    console.error('Error fetching dashboard data:', err);
-    setError(err instanceof Error ? err.message : 'Failed to fetch dashboard data');
-  } finally {
-    setIsLoading(false);
-  }
-};
+    // Remove the loading check that was causing the deadlock
+    // if (isLoading) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      console.log('Fetching dashboard data for role:', profile.role);
+      let dashboardData;
+
+      if (profile.role === 'owner') {
+        dashboardData = await fetchOwnerDashboardData(profile.studio.id);
+      } else if (profile.role === 'teacher') {
+        dashboardData = await fetchTeacherDashboardData(profile.id);
+      } else if (profile.role === 'parent') {
+        dashboardData = await fetchParentDashboardData(profile.id);
+      } else {
+        throw new Error('Invalid user role');
+      }
+
+      console.log('Dashboard data fetched successfully');
+      setData(dashboardData);
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   useEffect(() => {
     if (profile) {
-      // Only fetch if we don't have data yet or if there was an error previously
-      if (!data && !isLoading) {
-        fetchDashboardData();
-      }
+      // Simplified condition to fetch data when profile is available
+      fetchDashboardData();
     }
-  }, [profile, data, isLoading]);
+  }, [profile]); // Only depend on profile changes
 
   // Function to manually refresh the data
   const refreshData = async () => {
