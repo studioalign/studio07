@@ -4,12 +4,15 @@ import { useAuth } from "../contexts/AuthContext";
 import { createPost } from "../utils/channelUtils";
 
 interface Channel {
-	id: string;
-	name: string;
-	description: string | null;
-	class_id: string;
-	created_at: string;
-	updated_at: string;
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+  members?: {
+    user_id: string;
+    role: string;
+  }[];
 }
 
 interface Comment {
@@ -107,19 +110,20 @@ export function useChannel(channelId: string) {
 	  try {
 	    // Fetch channel details with detailed error handling
 	    const { data: channelData, error: channelError } = await supabase
-	      .from("class_channels")
-	      .select(`
-	        id,
-	        name,
-	        description,
-	        class_id,
-	        members:channel_members (
-	          user_id,
-	          role
-	        )
-	      `)
-	      .eq("id", channelId)
-	      .single();
+		  .from("class_channels")
+		  .select(`
+		    id,
+		    name,
+		    description,
+		    created_at,
+		    updated_at,
+		    members:channel_members (
+		      user_id,
+		      role
+		    )
+		  `)
+		  .eq("id", channelId)
+		  .single();
 	
 	    if (channelError) {
 	      console.error("Channel fetch error:", channelError);
