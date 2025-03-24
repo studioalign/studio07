@@ -178,7 +178,7 @@ const DashboardRoutes = React.memo(() => {
 			</Route>
 		</Routes>
 	);
-};
+});
 
 const App = () => {
   return (
