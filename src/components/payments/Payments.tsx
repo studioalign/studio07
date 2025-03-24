@@ -300,31 +300,11 @@ export default function Payments() {
 										</div>
 									</div>
 									<div className="text-right">
-										{payment.original_amount &&
-										payment.original_amount > payment.amount ? (
-											<>
-												<p className="text-sm text-gray-500 line-through">
-													{formatCurrency(payment.original_amount, currency)}
-												</p>
-												<p className="font-medium">
-													{formatCurrency(payment.amount, currency)}
-													{payment.discount_amount && (
-														<span className="text-xs text-green-600 ml-1">
-															(
-															{formatCurrency(
-																payment.discount_amount,
-																currency
-															)}{" "}
-															off)
-														</span>
-													)}
-												</p>
-											</>
-										) : (
-											<p className="font-medium">
-												{formatCurrency(payment.amount, currency)}
-											</p>
-										)}
+										{/* FIX: Don't show discount information in the payment view since 
+                                     the amount already reflects the discount from the invoice */}
+										<p className="font-medium">
+											{formatCurrency(payment.amount, currency)}
+										</p>
 										<p
 											className={`text-sm ${
 												payment.status === "completed"
