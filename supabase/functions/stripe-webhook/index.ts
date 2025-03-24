@@ -227,30 +227,30 @@ serve(async (req) => {
 					console.log("No existing payment found, creating new payment record");
 
 					// Create payment record
+					// Replace the existing payment record insertion code with:
 					const { error: paymentError } = await supabaseClient
 					  .from("payments")
 					  .insert([
 					    {
 					      invoice_id: invoice.id,
-					      amount: invoice.total, // Use the pre-discounted total directly
+					      amount: invoice.total, // Use pre-discounted total
 					      original_amount: invoice.total,
 					      discount_amount: invoice.discount_value > 0 
 					        ? (invoice.discount_type === 'percentage' 
 					            ? invoice.total * (invoice.discount_value / 100)
 					            : invoice.discount_value)
 					        : null,
-								payment_method: "card",
-								transaction_id: session.id,
-								status: "completed",
-								payment_date: new Date().toISOString(),
-								stripe_payment_intent_id: session.payment_intent,
-								stripe_invoice_id: stripeInvoiceId, // Reference to the actual Stripe invoice
-								is_recurring: invoice.is_recurring || false,
-								recurring_interval: invoice.is_recurring
-									? invoice.recurring_interval
-									: null,
-							},
-						]);
+					      transaction_id: stripeInvoice.id,
+					      status: "failed",
+					      payment_date: new Date().toISOString(),
+					      stripe_payment_intent_id: stripeInvoice.payment_intent,
+					      stripe_invoice_id: stripeInvoice.id,
+					      is_recurring: invoice.is_recurring || false,
+					      recurring_interval: invoice.is_recurring
+					        ? invoice.recurring_interval
+					        : "",
+					    },
+					  ]);
 
 					if (paymentError) {
 						console.error("Error creating payment record:", paymentError);
@@ -377,30 +377,29 @@ serve(async (req) => {
 
 				// Create payment record
 				const { error: paymentError } = await supabaseClient
-					.from("payments")
-					.insert([
-						{
-							invoice_id: invoice.id,
-							amount: finalAmount,
-							original_amount: invoice.total,
-							discount_amount:
-								invoice.discount_value > 0
-									? invoice.discount_type === "percentage"
-										? invoice.total * (invoice.discount_value / 100)
-										: invoice.discount_value
-									: null,
-							payment_method: "card",
-							transaction_id: stripeInvoice.payment_intent || stripeInvoice.id,
-							status: "completed",
-							payment_date: new Date().toISOString(),
-							stripe_payment_intent_id: stripeInvoice.payment_intent,
-							stripe_invoice_id: stripeInvoice.id,
-							is_recurring: invoice.is_recurring || false,
-							recurring_interval: invoice.is_recurring
-								? invoice.recurring_interval
-								: null,
-						},
-					]);
+				  .from("payments")
+				  .insert([
+				    {
+				      invoice_id: invoice.id,
+				      amount: invoice.total, // Use pre-discounted total
+				      original_amount: invoice.total,
+				      discount_amount: invoice.discount_value > 0 
+				        ? (invoice.discount_type === 'percentage' 
+				            ? invoice.total * (invoice.discount_value / 100)
+				            : invoice.discount_value)
+				        : null,
+				      payment_method: "card",
+				      transaction_id: session.id,
+				      status: "completed",
+				      payment_date: new Date().toISOString(),
+				      stripe_payment_intent_id: session.payment_intent,
+				      stripe_invoice_id: stripeInvoiceId,
+				      is_recurring: invoice.is_recurring || false,
+				      recurring_interval: invoice.is_recurring
+				        ? invoice.recurring_interval
+				        : null,
+				    },
+				  ]);
 
 				console.log(
 					"Payment record created:",
@@ -450,30 +449,30 @@ serve(async (req) => {
 				}
 
 				// Update invoice status if needed
+				// Replace the existing payment record insertion code with:
 				const { error: paymentError } = await supabaseClient
-					.from("payments")
-					.insert([
-						{
-							invoice_id: invoice.id,
-							amount: finalAmount,
-							original_amount: invoice.total,
-							discount_amount:
-								invoice.discount_value > 0
-									? invoice.discount_type === "percentage"
-										? invoice.total * (invoice.discount_value / 100)
-										: invoice.discount_value
-									: null,
-							transaction_id: stripeInvoice.id,
-							status: "failed",
-							payment_date: new Date().toISOString(),
-							stripe_payment_intent_id: stripeInvoice.payment_intent,
-							stripe_invoice_id: stripeInvoice.id,
-							is_recurring: invoice.is_recurring || false,
-							recurring_interval: invoice.is_recurring
-								? invoice.recurring_interval
-								: "",
-						},
-					]);
+				  .from("payments")
+				  .insert([
+				    {
+				      invoice_id: invoice.id,
+				      amount: invoice.total, // Use pre-discounted total
+				      original_amount: invoice.total,
+				      discount_amount: invoice.discount_value > 0 
+				        ? (invoice.discount_type === 'percentage' 
+				            ? invoice.total * (invoice.discount_value / 100)
+				            : invoice.discount_value)
+				        : null,
+				      transaction_id: stripeInvoice.id,
+				      status: "failed",
+				      payment_date: new Date().toISOString(),
+				      stripe_payment_intent_id: stripeInvoice.payment_intent,
+				      stripe_invoice_id: stripeInvoice.id,
+				      is_recurring: invoice.is_recurring || false,
+				      recurring_interval: invoice.is_recurring
+				        ? invoice.recurring_interval
+				        : "",
+				    },
+				  ]);
 
 				if (paymentError) {
 					throw paymentError;
@@ -519,30 +518,30 @@ serve(async (req) => {
 				}
 
 				// Update invoice status if needed
+				// Replace the existing payment record insertion code with:
 				const { error: paymentError } = await supabaseClient
-					.from("payments")
-					.insert([
-						{
-							invoice_id: invoice.id,
-							amount: finalAmount,
-							original_amount: invoice.total,
-							discount_amount:
-								invoice.discount_value > 0
-									? invoice.discount_type === "percentage"
-										? invoice.total * (invoice.discount_value / 100)
-										: invoice.discount_value
-									: null,
-							transaction_id: invoiceId,
-							status: "failed",
-							payment_date: new Date().toISOString(),
-							stripe_payment_intent_id: paymentIntent.id,
-							stripe_invoice_id: invoiceId,
-							is_recurring: invoice.is_recurring || false,
-							recurring_interval: invoice.is_recurring
-								? invoice.recurring_interval
-								: "",
-						},
-					]);
+				  .from("payments")
+				  .insert([
+				    {
+				      invoice_id: invoice.id,
+				      amount: invoice.total, // Use pre-discounted total
+				      original_amount: invoice.total,
+				      discount_amount: invoice.discount_value > 0 
+				        ? (invoice.discount_type === 'percentage' 
+				            ? invoice.total * (invoice.discount_value / 100)
+				            : invoice.discount_value)
+				        : null,
+				      transaction_id: stripeInvoice.id,
+				      status: "failed",
+				      payment_date: new Date().toISOString(),
+				      stripe_payment_intent_id: stripeInvoice.payment_intent,
+				      stripe_invoice_id: stripeInvoice.id,
+				      is_recurring: invoice.is_recurring || false,
+				      recurring_interval: invoice.is_recurring
+				        ? invoice.recurring_interval
+				        : "",
+				    },
+				  ]);
 
 				if (paymentError) {
 					throw paymentError;
