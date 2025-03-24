@@ -238,11 +238,6 @@ serve(async (req) => {
 					      invoice_id: invoice.id,
 					      amount: finalAmount, // Use pre-discounted total
 					      original_amount: invoice.total,
-					      discount_amount: invoice.discount_value > 0 
-					        ? (invoice.discount_type === 'percentage' 
-					            ? invoice.total * (invoice.discount_value / 100)
-					            : invoice.discount_value)
-					        : null,
 					      transaction_id: stripeInvoice.id,
 					      status: "failed",
 					      payment_date: new Date().toISOString(),
@@ -386,11 +381,6 @@ serve(async (req) => {
 				      invoice_id: invoice.id,
 				      amount: finalAmount, // Use pre-discounted total
 				      original_amount: invoice.total,
-				      discount_amount: invoice.discount_value > 0 
-				        ? (invoice.discount_type === 'percentage' 
-				            ? invoice.total * (invoice.discount_value / 100)
-				            : invoice.discount_value)
-				        : null,
 				      payment_method: "card",
 				      transaction_id: session.id,
 				      status: "completed",
@@ -460,11 +450,6 @@ serve(async (req) => {
 				      invoice_id: invoice.id,
 				      amount: finalAmount, // Use pre-discounted total
 				      original_amount: invoice.total,
-				      discount_amount: invoice.discount_value > 0 
-				        ? (invoice.discount_type === 'percentage' 
-				            ? invoice.total * (invoice.discount_value / 100)
-				            : invoice.discount_value)
-				        : null,
 				      transaction_id: stripeInvoice.id,
 				      status: "failed",
 				      payment_date: new Date().toISOString(),
@@ -529,11 +514,6 @@ serve(async (req) => {
 				      invoice_id: invoice.id,
 				      amount: finalAmount, // Use pre-discounted total
 				      original_amount: invoice.total,
-				      discount_amount: invoice.discount_value > 0 
-				        ? (invoice.discount_type === 'percentage' 
-				            ? invoice.total * (invoice.discount_value / 100)
-				            : invoice.discount_value)
-				        : null,
 				      transaction_id: stripeInvoice.id,
 				      status: "failed",
 				      payment_date: new Date().toISOString(),
