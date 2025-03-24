@@ -29,81 +29,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	// console.log(profile);
 
 	useEffect(() => {
-		let mounted = true;
-
-		const loadProfile = async (userId: string) => {
-			try {
-				const { data, error } = await supabase
-					.from("users")
-					.select(
-						`id, name, role, email, photo_url,
-						studio:studios!users_studio_id_fkey(
-							id, name, address, phone, email, country, currency, timezone, stripe_connect_id, stripe_connect_enabled, stripe_connect_onboarding_complete, bank_account_name, bank_account_last4
-						)
-					`
-					)
-					.eq("id", userId)
-					.single();
-
-				if (error) {
-					console.error('Error loading profile:', error);
-					if (mounted) setProfile(null);
-				} else if (mounted) {
-					setProfile(data);
-				}
-			} catch (err) {
-				console.error('Unexpected error loading profile:', err);
-				if (mounted) setProfile(null);
-			}
-		};
-
-		const initializeSession = async () => {
-			try {
-				const {
-					data: { session },
-				} = await supabase.auth.getSession();
-				const currentUser = session?.user || null;
-
-				if (mounted) {
-					setUser(currentUser);
-					if (currentUser) {
-						await loadProfile(currentUser.id);
-					}
-					setLoading(false);
-				}
-			} catch (error) {
-				console.error('Error during session initialization:', error);
-				if (mounted) setLoading(false);
-			}
-		};
-
-		initializeSession();
-
-		const authSubscription = supabase.auth.onAuthStateChange(
-			(event, session) => {
-				const currentUser = session?.user || null;
-				setUser(currentUser);
-				if (currentUser) {
-					loadProfile(currentUser.id);
-				} else {
-					setProfile(null);
-				}
-			}
-		);
-
-		// Remove the visibility change event listener - this was causing frequent refreshes
-		// const handleVisibilityChange = () => {
-		// 	if (document.visibilityState === "visible") {
-		// 		initializeSession();
-		// 	}
-		// };
-		// document.addEventListener("visibilitychange", handleVisibilityChange);
-
-		return () => {
-			mounted = false;
-			authSubscription.data.subscription?.unsubscribe?.(); // Ensure compatibility
-			// document.removeEventListener("visibilitychange", handleVisibilityChange);
-		};
+	  let mounted = true;
+	
+	  const loadProfile = async (userId: string) => {
+	    try {
+	      const { data, error } = await supabase
+	        .from("users")
+	        .select(
+	          `id, name, role, email, photo_url,
+	          studio:studios!users_studio_id_fkey(
+	            id, name, address, phone, email, country, currency, timezone, stripe_connect_id, stripe_connect_enabled, stripe_connect_onboarding_complete, bank_account_name, bank_account_last4
+	          )
+	        `
+	        )
+	        .eq("id", userId)
+	        .single();
+	
+	      if (error) {
+	        console.error('Error loading profile:', error);
+	        if (mounted) setProfile(null);
+	      } else if (mounted) {
+	        setProfile(data);
+	      }
+	    } catch (err) {
+	      console.error('Unexpected error loading profile:', err);
+	      if (mounted) setProfile(null);
+	    }
+	  };
+	
+	  const initializeSession = async () => {
+	    try {
+	      const {
+	        data: { session },
+	      } = await supabase.auth.getSession();
+	      const currentUser = session?.user || null;
+	
+	      if (mounted) {
+	        setUser(currentUser);
+	        if (currentUser) {
+	          await loadProfile(currentUser.id);
+	        }
+	        setLoading(false);
+	      }
+	    } catch (error) {
+	      console.error('Error during session initialization:', error);
+	      if (mounted) setLoading(false);
+	    }
+	  };
+	
+	  initializeSession();
+	
+	  const authSubscription = supabase.auth.onAuthStateChange(
+	    (event, session) => {
+	      const currentUser = session?.user || null;
+	      setUser(currentUser);
+	      if (currentUser) {
+	        loadProfile(currentUser.id);
+	      } else {
+	        setProfile(null);
+	      }
+	    }
+	  );
+	
+	  return () => {
+	    mounted = false;
+	    authSubscription.data.subscription?.unsubscribe?.();
+	  };
 	}, []);
 
 	const signIn = async (email: string, password: string) => {
