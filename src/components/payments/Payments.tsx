@@ -164,26 +164,45 @@ export default function Payments() {
 	                discountValue: p.invoice?.discount_value
 	            }))
 	        });
-			const outstandingBalance =
-				pendingData?.reduce((sum, i) => sum + i.total, 0) || 0;
-			const overdueAmount =
-				overdueData?.reduce((sum, i) => sum + i.total, 0) || 0;
-
-			setStats({
-				totalRevenue,
-				outstandingBalance,
-				outstandingCount: pendingData?.length || 0,
-				overdueAmount,
-				overdueCount: overdueData?.length || 0,
-			});
-		} catch (err) {
-			console.error("Error fetching stats:", err);
-			setError(
-				err instanceof Error ? err.message : "Failed to fetch statistics"
-			);
-		} finally {
-			setLoading(false);
-		}
+	
+	        // Get outstanding invoices (sent but not paid) for this studio
+	        const { data: pendingData, error: pendingError } = await supabase
+	            .from("invoices")
+	            .select("total")
+	            .eq("status", "pending")
+	            .eq("studio_id", studioId);
+	
+	        if (pendingError) throw pendingError;
+	
+	        // Get overdue invoices for this studio
+	        const { data: overdueData, error: overdueError } = await supabase
+	            .from("invoices")
+	            .select("total")
+	            .eq("status", "overdue")
+	            .eq("studio_id", studioId);
+	
+	        if (overdueError) throw overdueError;
+	
+	        const outstandingBalance =
+	            pendingData?.reduce((sum, i) => sum + i.total, 0) || 0;
+	        const overdueAmount =
+	            overdueData?.reduce((sum, i) => sum + i.total, 0) || 0;
+	
+	        setStats({
+	            totalRevenue,
+	            outstandingBalance,
+	            outstandingCount: pendingData?.length || 0,
+	            overdueAmount,
+	            overdueCount: overdueData?.length || 0,
+	        });
+	    } catch (err) {
+	        console.error("Error fetching stats:", err);
+	        setError(
+	            err instanceof Error ? err.message : "Failed to fetch statistics"
+	        );
+	    } finally {
+	        setLoading(false);
+	    }
 	};
 
 	if (loading) {
