@@ -149,20 +149,10 @@ export default function PaymentHistory({
 									</div>
 								</div>
 								<div className="text-right">
-									{payment.original_amount &&
-										payment.original_amount > payment.amount && (
-											<p className="text-sm text-gray-500 line-through mb-1">
-												{formatCurrency(payment.original_amount, currency)}
-											</p>
-										)}
+									{/* FIX: Don't show discount information in payment history, as 
+                                  the payment amount already reflects the discount applied at invoice level */}
 									<p className="font-medium">
 										{formatCurrency(payment.amount, currency)}
-										{payment.discount_amount && (
-											<span className="text-xs text-green-600 ml-1">
-												({formatCurrency(payment.discount_amount, currency)}{" "}
-												off)
-											</span>
-										)}
 									</p>
 									<p
 										className={`text-sm ${
@@ -204,7 +194,7 @@ export default function PaymentHistory({
 												</div>
 												<div className="text-right">
 													<p className="font-medium text-red-600">
-														-{formatCurrency(refund.amount)}
+														-{formatCurrency(refund.amount, currency)}
 													</p>
 													<p className="text-gray-500">
 														{refund.status.charAt(0).toUpperCase() +
