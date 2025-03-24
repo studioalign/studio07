@@ -377,17 +377,17 @@ serve(async (req) => {
 
 			// Save payment record
 			const { error: paymentError } = await supabaseClient
-				.from("payments")
-				.insert({
-					invoice_id: invoiceId,
-					amount: paidInvoice.amount_paid / 100,
-					original_amount: paidInvoice.total / 100,
-					payment_method: "card",
-					status: "completed",
-					transaction_id: paidInvoice.payment_intent as string,
-					payment_date: new Date().toISOString(),
-					destination_account_id: studioConnectAccountId,
-				});
+			    .from("payments")
+			    .insert({
+			        invoice_id: invoiceId,
+			        amount: paidInvoice.amount_paid / 100,
+			        original_amount: paidInvoice.amount_paid / 100, // Corrected: use paid amount
+			        payment_method: "card",
+			        status: "completed",
+			        transaction_id: paidInvoice.payment_intent as string,
+			        payment_date: new Date().toISOString(),
+			        destination_account_id: studioConnectAccountId,
+			    });
 
 			if (paymentError) {
 				console.error("Error saving payment record:", paymentError);
