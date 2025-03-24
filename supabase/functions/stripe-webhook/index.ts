@@ -197,6 +197,9 @@ serve(async (req) => {
 				    discountAmount = invoice.discount_value;
 				    finalAmount = invoice.total - discountAmount;
 				  }
+				
+				  // ENSURE finalAmount is rounded to 2 decimal places
+				  finalAmount = Number(finalAmount.toFixed(2));
 				}
 
 				// Check if a payment record already exists for this invoice to prevent duplicates
@@ -233,7 +236,7 @@ serve(async (req) => {
 					  .insert([
 					    {
 					      invoice_id: invoice.id,
-					      amount: invoice.total, // Use pre-discounted total
+					      amount: finalAmount, // Use pre-discounted total
 					      original_amount: invoice.total,
 					      discount_amount: invoice.discount_value > 0 
 					        ? (invoice.discount_type === 'percentage' 
@@ -381,7 +384,7 @@ serve(async (req) => {
 				  .insert([
 				    {
 				      invoice_id: invoice.id,
-				      amount: invoice.total, // Use pre-discounted total
+				      amount: finalAmount, // Use pre-discounted total
 				      original_amount: invoice.total,
 				      discount_amount: invoice.discount_value > 0 
 				        ? (invoice.discount_type === 'percentage' 
@@ -455,7 +458,7 @@ serve(async (req) => {
 				  .insert([
 				    {
 				      invoice_id: invoice.id,
-				      amount: invoice.total, // Use pre-discounted total
+				      amount: finalAmount, // Use pre-discounted total
 				      original_amount: invoice.total,
 				      discount_amount: invoice.discount_value > 0 
 				        ? (invoice.discount_type === 'percentage' 
@@ -524,7 +527,7 @@ serve(async (req) => {
 				  .insert([
 				    {
 				      invoice_id: invoice.id,
-				      amount: invoice.total, // Use pre-discounted total
+				      amount: finalAmount, // Use pre-discounted total
 				      original_amount: invoice.total,
 				      discount_amount: invoice.discount_value > 0 
 				        ? (invoice.discount_type === 'percentage' 
