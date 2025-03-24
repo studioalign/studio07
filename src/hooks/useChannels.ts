@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -15,55 +15,99 @@ export function useChannels() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const { profile } = useAuth();
+	const subscriptionRef = useRef<{ subscription: any } | null>(null);
 
+	// Use a callback to make the function stable for useEffect dependencies
+	const fetchChannels = useCallback(async () => {
+		if (!profile?.id) return;
+
+		try {
+			setLoading(true);
+			setError(null);
+			
+			// Modify the query to only select fields that definitely exist
+			const { data, error: fetchError } = await supabase
+				.from("channel_members")
+				.select(
+					`
+          channel:class_channels (
+            id,
+            name,
+            description,
+            created_at,
+            updated_at
+          )
+        `
+				)
+				.eq("user_id", profile.id)
+				.order("joined_at", { ascending: false });
+
+			if (fetchError) throw fetchError;
+			
+			// Filter out any null channels (in case of deleted channels)
+			const validChannels = data
+				.filter(item => item.channel !== null)
+				.map(item => item.channel);
+			
+			setChannels(validChannels || []);
+		} catch (err) {
+			console.error("Error fetching channels:", err);
+			setError(
+				err instanceof Error ? err.message : "Failed to fetch channels"
+			);
+		} finally {
+			setLoading(false);
+		}
+	}, [profile?.id]);
+
+	// Set up real-time subscriptions
 	useEffect(() => {
 		if (!profile?.id) return;
 
-		const fetchChannels = async () => {
-			try {
-				setLoading(true);
-				setError(null);
-				
-				// Modify the query to only select fields that definitely exist
-				const { data, error: fetchError } = await supabase
-					.from("channel_members")
-					.select(
-						`
-            channel:class_channels (
-              id,
-              name,
-              description,
-              created_at,
-              updated_at
-            )
-          `
-					)
-					.eq("user_id", profile.id)
-					.order("joined_at", { ascending: false });
-
-				if (fetchError) throw fetchError;
-				
-				// Filter out any null channels (in case of deleted channels)
-				const validChannels = data
-					.filter(item => item.channel !== null)
-					.map(item => item.channel);
-				
-				setChannels(validChannels || []);
-			} catch (err) {
-				console.error("Error fetching channels:", err);
-				setError(
-					err instanceof Error ? err.message : "Failed to fetch channels"
-				);
-			} finally {
-				setLoading(false);
-			}
-		};
-
+		// Fetch initial data
 		fetchChannels();
 
-		// Subscribe to channel updates
-		const subscription = supabase
-			.channel("channel_changes")
+		// Clean up any existing subscription
+		if (subscriptionRef.current) {
+			subscriptionRef.current.subscription.unsubscribe();
+		}
+
+		// Subscribe to channel_members changes for this user
+		const memberSubscription = supabase
+			.channel("user-channels")
+			.on(
+				"postgres_changes",
+				{
+					event: "INSERT",
+					schema: "public",
+					table: "channel_members",
+					filter: `user_id=eq.${profile.id}`,
+				},
+				() => {
+					console.log("Channel member added, refreshing channels");
+					fetchChannels();
+				}
+			)
+			.on(
+				"postgres_changes",
+				{
+					event: "DELETE",
+					schema: "public",
+					table: "channel_members",
+					filter: `user_id=eq.${profile.id}`,
+				},
+				() => {
+					console.log("Channel member removed, refreshing channels");
+					fetchChannels();
+				}
+			)
+			.subscribe((status) => {
+				console.log("Channel members subscription status:", status);
+			});
+
+		// Subscribe to channel changes
+		const channelSubscription = supabase
+			.channel("public-channels")
 			.on(
 				"postgres_changes",
 				{
@@ -71,16 +115,36 @@ export function useChannels() {
 					schema: "public",
 					table: "class_channels",
 				},
-				() => {
+				(payload) => {
+					console.log("Channel changed:", payload);
 					fetchChannels();
 				}
 			)
-			.subscribe();
+			.subscribe((status) => {
+				console.log("Channels subscription status:", status);
+			});
+
+		subscriptionRef.current = { 
+			subscription: {
+				unsubscribe: () => {
+					memberSubscription.unsubscribe();
+					channelSubscription.unsubscribe();
+				}
+			}
+		};
 
 		return () => {
-			subscription.unsubscribe();
+			if (subscriptionRef.current) {
+				subscriptionRef.current.subscription.unsubscribe();
+				subscriptionRef.current = null;
+			}
 		};
-	}, [profile?.id]);
+	}, [profile?.id, fetchChannels]);
 
-	return { channels, loading, error };
+	return { 
+		channels, 
+		loading, 
+		error,
+		refresh: fetchChannels // Expose refresh function
+	};
 }
