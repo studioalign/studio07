@@ -187,12 +187,16 @@ serve(async (req) => {
 
 				// Calculate the actual amount paid after discount
 				let finalAmount = invoice.total;
+				let discountAmount = 0;
+				
 				if (invoice.discount_value) {
-					if (invoice.discount_type === "percentage") {
-						finalAmount = invoice.total * (1 - invoice.discount_value / 100);
-					} else {
-						finalAmount = invoice.total - invoice.discount_value;
-					}
+				  if (invoice.discount_type === "percentage") {
+				    discountAmount = invoice.total * (invoice.discount_value / 100);
+				    finalAmount = invoice.total - discountAmount;
+				  } else {
+				    discountAmount = invoice.discount_value;
+				    finalAmount = invoice.total - discountAmount;
+				  }
 				}
 
 				// Check if a payment record already exists for this invoice to prevent duplicates
@@ -224,18 +228,13 @@ serve(async (req) => {
 
 					// Create payment record
 					const { error: paymentError } = await supabaseClient
-						.from("payments")
-						.insert([
-							{
-								invoice_id: invoiceId,
-								amount: finalAmount,
-								original_amount: invoice.total,
-								discount_amount:
-									invoice.discount_value > 0
-										? invoice.discount_type === "percentage"
-											? invoice.total * (invoice.discount_value / 100)
-											: invoice.discount_value
-										: null,
+					  .from("payments")
+					  .insert([
+					    {
+					      invoice_id: invoice.id,
+					      amount: finalAmount,
+					      original_amount: invoice.total,
+					      discount_amount: discountAmount > 0 ? discountAmount : null,
 								payment_method: "card",
 								transaction_id: session.id,
 								status: "completed",
