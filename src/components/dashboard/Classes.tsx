@@ -1,3 +1,4 @@
+import React from 'react';
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Plus, Edit2, Trash2, X } from "lucide-react";
 import WeeklyCalendar from "./WeeklyCalendar";
@@ -539,4 +540,4 @@ export default React.memo(function Classes() {
 			)}
 		</div>
 	);
-}
+});
