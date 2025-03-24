@@ -67,32 +67,40 @@ export default function ChannelMembers({
 			// Fetch available users
 			const { data: classData } = await supabase
 				.from("class_channels")
-				.select("class:classes(studio_id)")
+				.select("studio_id")
 				.eq("id", channelId)
 				.single();
 
-			if (classData) {
-				const memberIds = data ? data.map((m) => m.user_id || m.user?.id).filter(Boolean) : [];
-				const idList = memberIds.length > 0 ? `(${memberIds.join(",")})` : '(0)';
+			if (classData && classData.studio_id) {
+				// Get the current member IDs to exclude them from available users
+				const memberIds = data 
+					? data.map((m) => m.user_id || m.user?.id).filter(Boolean) 
+					: [];
 				
-				const { data: users } = await supabase
+				// Fetch all users in the studio
+				const { data: users, error: usersError } = await supabase
 					.from("users")
 					.select(
 						`
 						id,
 						email,
-						name
+						name,
+						role
 					`
 					)
-					.not("id", "in", idList)
-					.eq("studio_id", classData.class?.studio_id);
+					.eq("studio_id", classData.studio_id);
 
-				setAvailableUsers(
-					(users || []).map((user) => ({
+				if (usersError) throw usersError;
+
+				// Filter out users who are already members
+				const filteredUsers = users
+					?.filter(user => !memberIds.includes(user.id))
+					.map(user => ({
 						id: user.id,
-						label: `${user.name || "Unknown"} (${user.email})`,
-					}))
-				);
+						label: `${user.name || 'Unknown'} (${user.email}) - ${user.role}`
+					})) || [];
+
+				setAvailableUsers(filteredUsers);
 			}
 		} catch (err) {
 			console.error("Error fetching members:", err);
@@ -140,6 +148,7 @@ export default function ChannelMembers({
 			if (error) throw error;
 			fetchMembers();
 		} catch (err) {
+			console.error('Error deleting member:', err);
 			setError(err instanceof Error ? err.message : "Failed to remove member");
 		}
 	};
@@ -158,6 +167,7 @@ export default function ChannelMembers({
 			if (error) throw error;
 			fetchMembers();
 		} catch (err) {
+			console.error('Error updating role:', err);
 			setError(err instanceof Error ? err.message : "Failed to update role");
 		}
 	};
