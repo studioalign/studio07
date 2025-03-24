@@ -6,7 +6,6 @@ interface Channel {
 	id: string;
 	name: string;
 	description: string | null;
-	class_id: string;
 	created_at: string;
 	updated_at: string;
 }
@@ -22,6 +21,10 @@ export function useChannels() {
 
 		const fetchChannels = async () => {
 			try {
+				setLoading(true);
+				setError(null);
+				
+				// Modify the query to only select fields that definitely exist
 				const { data, error: fetchError } = await supabase
 					.from("channel_members")
 					.select(
@@ -30,7 +33,6 @@ export function useChannels() {
               id,
               name,
               description,
-              class_id,
               created_at,
               updated_at
             )
@@ -40,7 +42,13 @@ export function useChannels() {
 					.order("joined_at", { ascending: false });
 
 				if (fetchError) throw fetchError;
-				setChannels(data.map((item) => item.channel) || []);
+				
+				// Filter out any null channels (in case of deleted channels)
+				const validChannels = data
+					.filter(item => item.channel !== null)
+					.map(item => item.channel);
+				
+				setChannels(validChannels || []);
 			} catch (err) {
 				console.error("Error fetching channels:", err);
 				setError(
