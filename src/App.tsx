@@ -33,8 +33,10 @@ import PaymentSettings from "./pages/dashboard/payment-settings";
 import PaymentSuccessPage from "./pages/payment-success";
 import PaymentCancelPage from "./pages/payment-cancel";
 
-const DashboardRoutes = () => {
-	const { profile } = useAuth();
+const DashboardRoutes = React.memo(() => {
+  const { profile } = useAuth();
+  
+  console.log("DashboardRoutes rendering", new Date().toISOString());
 
 	return (
 		<Routes>
@@ -178,17 +180,17 @@ const DashboardRoutes = () => {
 };
 
 const App = () => {
-	return (
-		<AuthProvider>
-			<LocalizationProvider>
-				<BrowserRouter>
-					<MessagingProvider>
-						<DashboardRoutes />
-					</MessagingProvider>
-				</BrowserRouter>
-			</LocalizationProvider>
-		</AuthProvider>
-	);
+  return (
+    <AuthProvider>
+      <LocalizationProvider>
+        <BrowserRouter>
+          <MessagingProvider>
+            <DashboardRoutes />
+          </MessagingProvider>
+        </BrowserRouter>
+      </LocalizationProvider>
+    </AuthProvider>
+  );
 };
 
 export default App;
