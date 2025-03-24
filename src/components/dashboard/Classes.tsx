@@ -43,7 +43,7 @@ interface ClassInstance {
 	modificationScope: "single" | "future" | "all";
 }
 
-export default function Classes() {
+export default React.memo(function Classes() {
 	const [showAddForm, setShowAddForm] = useState(false);
 	const [editingClass, setEditingClass] = useState<ClassInstance | null>(null);
 	const [selectedClass, setSelectedClass] = useState<ClassInstance | null>(
@@ -360,6 +360,16 @@ export default function Classes() {
 			timeZone: timezone,
 		});
 	};
+
+	const [hasLoadedInitially, setHasLoadedInitially] = useState(false);
+  
+	useEffect(() => {
+	    // Only fetch on first load
+	    if (!hasLoadedInitially) {
+	      fetchClassInstances()
+	        .then(() => setHasLoadedInitially(true));
+	    }
+	}, [hasLoadedInitially, fetchClassInstances]);
 
 	// **Conditional Rendering Based on Loading and Error States**
 
