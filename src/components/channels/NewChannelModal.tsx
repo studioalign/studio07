@@ -27,18 +27,27 @@ export default function NewChannelModal({ onClose }: NewChannelModalProps) {
 	useEffect(() => {
 		async function fetchUsers() {
 			try {
+				if (!profile?.studio?.id) {
+					throw new Error("No studio ID found");
+				}
+
 				// Fetch all teachers and parents
 				const [teachers, parents] = await Promise.all([
-					getStudioUsersByRole("teacher", profile?.studio?.id || ""),
-					getStudioUsersByRole("parent", profile?.studio?.id || ""),
+					getStudioUsersByRole("teacher", profile.studio.id),
+					getStudioUsersByRole("parent", profile.studio.id),
 				]);
 
-				const users = [...teachers, ...parents].map((user) => ({
-					id: user.id,
-					label: `${user.name} (${user.email})`,
-				}));
+				// Filter out the current user from available members
+				// since they'll be automatically added as admin
+				const allUsers = [...teachers, ...parents];
+				const filteredUsers = allUsers
+					.filter(user => user.id !== profile.id)
+					.map(user => ({
+						id: user.id,
+						label: `${user.name || user.email} (${user.role})`,
+					}));
 
-				setAvailableUsers(users);
+				setAvailableUsers(filteredUsers);
 			} catch (err) {
 				console.error("Error fetching users:", err);
 				setError(err instanceof Error ? err.message : "Failed to fetch users");
@@ -48,12 +57,12 @@ export default function NewChannelModal({ onClose }: NewChannelModalProps) {
 		}
 
 		fetchUsers();
-	}, [profile?.studio?.id]);
+	}, [profile?.studio?.id, profile?.id]);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (selectedMembers.length === 0 || !name.trim()) {
-			setError("Channel name and at least one member are required");
+		if (!name.trim()) {
+			setError("Channel name is required");
 			return;
 		}
 
@@ -108,39 +117,40 @@ export default function NewChannelModal({ onClose }: NewChannelModalProps) {
 
 			console.log("Channel created successfully:", channel);
 
-			// Add all selected members to the channel
-			const memberInserts = selectedMembers.map((member) => ({
+			// Prepare member inserts - start with all selected members
+			const memberInserts = selectedMembers.map(member => ({
 				channel_id: channel.id,
 				user_id: member.id,
 				role: "member"
 			}));
 
-			// Add the creator as an admin (if not already included)
-			if (!selectedMembers.some(member => member.id === profile.id)) {
-				memberInserts.push({
-					channel_id: channel.id,
-					user_id: profile.id,
-					role: "admin"
-				});
-			}
+			// Always add the creator as an admin (they don't need to be in the selected list)
+			memberInserts.push({
+				channel_id: channel.id,
+				user_id: profile.id,
+				role: "admin"
+			});
 
 			console.log("Adding members:", memberInserts);
 
-			const memberResponse = await supabase
-				.from("channel_members")
-				.insert(memberInserts);
-				
-			const membersError = memberResponse.error;
+			// Only attempt to insert members if we have any
+			if (memberInserts.length > 0) {
+				const memberResponse = await supabase
+					.from("channel_members")
+					.insert(memberInserts);
+					
+				const membersError = memberResponse.error;
 
-			if (membersError) {
-				console.error("Member insertion error:", {
-					message: membersError.message,
-					code: membersError.code,
-					details: membersError.details,
-					hint: membersError.hint
-				});
-				// Still consider channel creation successful even if member addition fails
-				console.warn("Channel created but some members could not be added");
+				if (membersError) {
+					console.error("Member insertion error:", {
+						message: membersError.message,
+						code: membersError.code,
+						details: membersError.details,
+						hint: membersError.hint
+					});
+					// Still consider channel creation successful even if member addition fails
+					console.warn("Channel created but some members could not be added");
+				}
 			}
 
 			onClose();
@@ -168,15 +178,6 @@ export default function NewChannelModal({ onClose }: NewChannelModalProps) {
 				</div>
 
 				<form onSubmit={handleSubmit} className="space-y-4">
-					<MultiSelectDropdown
-						id="members"
-						label="Select Channel Members"
-						value={selectedMembers}
-						onChange={setSelectedMembers}
-						options={availableUsers}
-						isLoading={loading}
-					/>
-
 					<FormInput
 						id="name"
 						type="text"
@@ -202,6 +203,20 @@ export default function NewChannelModal({ onClose }: NewChannelModalProps) {
 						/>
 					</div>
 
+					<div>
+						<p className="mb-1 text-sm text-gray-500">
+							You'll automatically be added as an admin of this channel.
+						</p>
+						<MultiSelectDropdown
+							id="members"
+							label="Select Additional Members"
+							value={selectedMembers}
+							onChange={setSelectedMembers}
+							options={availableUsers}
+							isLoading={loading}
+						/>
+					</div>
+
 					{error && <p className="text-red-500 text-sm">{error}</p>}
 
 					<div className="flex justify-end space-x-3">
@@ -214,9 +229,7 @@ export default function NewChannelModal({ onClose }: NewChannelModalProps) {
 						</button>
 						<button
 							type="submit"
-							disabled={
-								isSubmitting || !name.trim() || selectedMembers.length === 0
-							}
+							disabled={isSubmitting || !name.trim()}
 							className="px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 disabled:bg-gray-400"
 						>
 							Create Channel
