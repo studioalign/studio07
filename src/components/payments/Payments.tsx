@@ -117,47 +117,53 @@ export default function Payments() {
 	};
 
 	const fetchStats = async (studioId: string) => {
-		try {
-			// Get total revenue from completed payments for this studio
-			const { data: revenueData, error: revenueError } = await supabase
-				.from("payments")
-				.select(
-					`
-					amount, 
-					invoice:invoices!payments_invoice_id_fkey (
-						studio_id
-					)
-				`
-				)
-				.eq("status", "completed");
-
-			if (revenueError) throw revenueError;
-
-			// Get outstanding invoices (sent but not paid) for this studio
-			const { data: pendingData, error: pendingError } = await supabase
-				.from("invoices")
-				.select("total")
-				.eq("status", "pending")
-				.eq("studio_id", studioId);
-
-			if (pendingError) throw pendingError;
-
-			// Get overdue invoices for this studio
-			const { data: overdueData, error: overdueError } = await supabase
-				.from("invoices")
-				.select("total")
-				.eq("status", "overdue")
-				.eq("studio_id", studioId);
-
-			if (overdueError) throw overdueError;
-
-			// Filter out payments where invoice is null or studio_id doesn't match
-			const filteredRevenueData = (revenueData || []).filter(
-				(p) => p.invoice && p.invoice.studio_id === studioId
-			);
-
-			const totalRevenue =
-				filteredRevenueData.reduce((sum, p) => sum + p.amount, 0) || 0;
+	    try {
+	        // Get total revenue from completed payments for this studio
+	        const { data: revenueData, error: revenueError } = await supabase
+	            .from("payments")
+	            .select(
+	                `
+	                id,
+	                amount, 
+	                original_amount,
+	                discount_amount,
+	                invoice:invoices!payments_invoice_id_fkey (
+	                    id,
+	                    studio_id,
+	                    total,
+	                    discount_type,
+	                    discount_value
+	                )
+	                `
+	            )
+	            .eq("status", "completed");
+	
+	        if (revenueError) throw revenueError;
+	
+	        console.log("Raw Revenue Data:", JSON.stringify(revenueData, null, 2));
+	
+	        // Filter out payments where invoice is null or studio_id doesn't match
+	        const filteredRevenueData = (revenueData || []).filter(
+	            (p) => p.invoice && p.invoice.studio_id === studioId
+	        );
+	
+	        console.log("Filtered Revenue Data:", JSON.stringify(filteredRevenueData, null, 2));
+	
+	        const totalRevenue =
+	            filteredRevenueData.reduce((sum, p) => sum + p.amount, 0) || 0;
+	
+	        console.log("Total Revenue Calculation:", {
+	            totalRevenue,
+	            payments: filteredRevenueData.map(p => ({
+	                id: p.id,
+	                amount: p.amount,
+	                originalAmount: p.original_amount,
+	                discountAmount: p.discount_amount,
+	                invoiceTotal: p.invoice?.total,
+	                discountType: p.invoice?.discount_type,
+	                discountValue: p.invoice?.discount_value
+	            }))
+	        });
 			const outstandingBalance =
 				pendingData?.reduce((sum, i) => sum + i.total, 0) || 0;
 			const overdueAmount =
