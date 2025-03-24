@@ -64,75 +64,114 @@ export default function Classes() {
 	const { timezone } = useLocalization();
 
 	const fetchClassInstances = useCallback(async () => {
-	    // Prevent multiple simultaneous queries
-	    if (queryInProgress) return;
-	    
-	    try {
-	        setQueryInProgress(true);
+	  // Prevent multiple simultaneous queries
+	  if (queryInProgress) return;
+	  
+	  try {
+	    setQueryInProgress(true);
 	
-	        const { data, error } = await supabase
-	            .from("classes")
-	            .select(
-	                `
-	                id,
-	                name,
-	                status,
-	                date,
-	                end_date,
-	                start_time,
-	                end_time,
-	                is_recurring,
-	                parent_class_id,
-	                notes,
-	                is_drop_in,
-	                capacity,
-	                drop_in_price,
-	                booked_count,
-	                studio:studios (
-	                    id,
-	                    name
-	                ),
-	                teacher:users (
-	                    id,
-	                    name
-	                ),
-	                location:locations (
-	                    id,
-	                    name
-	                )
-	            `
-	            )
-	            .eq("studio_id", profile?.studio?.id || "")
-	            .order("date", { ascending: true });
+	    const { data, error } = await supabase
+	      .from("classes")
+	      .select(
+	        `
+	        id,
+	        name,
+	        status,
+	        date,
+	        end_date,
+	        start_time,
+	        end_time,
+	        is_recurring,
+	        parent_class_id,
+	        notes,
+	        is_drop_in,
+	        capacity,
+	        drop_in_price,
+	        booked_count,
+	        studio:studios (
+	          id,
+	          name
+	        ),
+	        teacher:users (
+	          id,
+	          name
+	        ),
+	        location:locations (
+	          id,
+	          name
+	        )
+	      `
+	      )
+	      .eq("studio_id", profile?.studio?.id || "")
+	      .order("date", { ascending: true });
 	
-	        if (error) throw error;
+	    if (error) throw error;
 	
-	        // For parent users, fetch enrolled students for each class
-	        if (profile?.role === "parent") {
-	            const instancesWithEnrollments = await Promise.all(
-	                data.map(async (instance) => {
-	                    const students = await getEnrolledStudents(
-	                        instance.id,
-	                        profile?.id
-	                    );
-	                    return {
-	                        ...instance,
-	                        enrolledStudents: students.map((s) => s.name),
-	                    };
-	                })
+	    // For parent users, fetch enrolled students for each class
+	    if (profile?.role === "parent") {
+	      const instancesWithEnrollments = await Promise.all(
+	        data.map(async (instance) => {
+	          try {
+	            const students = await getEnrolledStudents(
+	              instance.id,
+	              profile?.id
 	            );
-	            setClassInstances(instancesWithEnrollments);
-	        } else {
-	            setClassInstances(data);
-	        }
-	    } catch (err) {
-	        console.error("Error fetching class_instances:", err);
-	        setError(err instanceof Error ? err.message : "Failed to fetch classes");
-	    } finally {
-	        setQueryInProgress(false);
-	        setLoading(false);
+	            return {
+	              ...instance,
+	              enrolledStudents: students.map((s) => s.name),
+	            };
+	          } catch (err) {
+	            console.error(`Error fetching enrollments for class ${instance.id}:`, err);
+	            return {
+	              ...instance,
+	              enrolledStudents: [],
+	            };
+	          }
+	        })
+	      );
+	      setClassInstances(instancesWithEnrollments);
+	    } else {
+	      setClassInstances(data);
 	    }
+	  } catch (err) {
+	    console.error("Error fetching class_instances:", err);
+	    setError(err instanceof Error ? err.message : "Failed to fetch classes");
+	  } finally {
+	    setQueryInProgress(false);
+	    setLoading(false);
+	  }
 	}, [profile?.studio?.id, profile?.role, profile?.id]);
+
+	// Set up realtime subscription to classes
+	useEffect(() => {
+	  if (!profile?.studio?.id) return;
+	  
+	  // Only fetch data when component mounts or relevant profile data changes
+	  fetchClassInstances();
+	  
+	  // Set up a subscription to class changes
+	  const classSubscription = supabase
+	    .channel('classes-changes')
+	    .on(
+	      'postgres_changes',
+	      {
+	        event: '*',
+	        schema: 'public',
+	        table: 'classes',
+	        filter: `studio_id=eq.${profile.studio.id}`
+	      },
+	      (payload) => {
+	        console.log('Class change detected:', payload);
+	        fetchClassInstances();
+	      }
+	    )
+	    .subscribe();
+	  
+	  // Return cleanup function
+	  return () => {
+	    classSubscription.unsubscribe();
+	  };
+	}, [fetchClassInstances, profile?.studio?.id]);
 	
 	// Also update the useEffect that uses fetchClassInstances
 	useEffect(() => {
