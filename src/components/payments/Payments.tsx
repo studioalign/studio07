@@ -140,30 +140,14 @@ export default function Payments() {
 	
 	        if (revenueError) throw revenueError;
 	
-	        console.log("Raw Revenue Data:", JSON.stringify(revenueData, null, 2));
-	
 	        // Filter out payments where invoice is null or studio_id doesn't match
 	        const filteredRevenueData = (revenueData || []).filter(
 	            (p) => p.invoice && p.invoice.studio_id === studioId
 	        );
 	
-	        console.log("Filtered Revenue Data:", JSON.stringify(filteredRevenueData, null, 2));
-	
+	        // Use the actual amount paid for the total revenue calculation
 	        const totalRevenue =
 	            filteredRevenueData.reduce((sum, p) => sum + p.amount, 0) || 0;
-	
-	        console.log("Total Revenue Calculation:", {
-	            totalRevenue,
-	            payments: filteredRevenueData.map(p => ({
-	                id: p.id,
-	                amount: p.amount,
-	                originalAmount: p.original_amount,
-	                discountAmount: p.discount_amount,
-	                invoiceTotal: p.invoice?.total,
-	                discountType: p.invoice?.discount_type,
-	                discountValue: p.invoice?.discount_value
-	            }))
-	        });
 	
 	        // Get outstanding invoices (sent but not paid) for this studio
 	        const { data: pendingData, error: pendingError } = await supabase
@@ -325,11 +309,19 @@ export default function Payments() {
 										</div>
 									</div>
 									<div className="text-right">
-										{/* FIX: Don't show discount information in the payment view since 
-                                     the amount already reflects the discount from the invoice */}
 										<p className="font-medium">
 											{formatCurrency(payment.amount, currency)}
 										</p>
+										{payment.discount_amount && payment.discount_amount > 0 && (
+											<p className="text-xs text-gray-500">
+												Original: {formatCurrency(payment.original_amount || 0, currency)}
+												{payment.discount_amount > 0 && (
+													<span className="ml-1 text-green-600">
+														(-{formatCurrency(payment.discount_amount, currency)})
+													</span>
+												)}
+											</p>
+										)}
 										<p
 											className={`text-sm ${
 												payment.status === "completed"
