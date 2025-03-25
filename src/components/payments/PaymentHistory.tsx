@@ -149,11 +149,19 @@ export default function PaymentHistory({
 									</div>
 								</div>
 								<div className="text-right">
-									{/* FIX: Don't show discount information in payment history, as 
-                                  the payment amount already reflects the discount applied at invoice level */}
 									<p className="font-medium">
 										{formatCurrency(payment.amount, currency)}
 									</p>
+									{payment.discount_amount && payment.discount_amount > 0 && (
+										<p className="text-xs text-gray-500">
+											Original: {formatCurrency(payment.original_amount || 0, currency)}
+											{payment.discount_amount > 0 && (
+												<span className="ml-1 text-green-600">
+													(-{formatCurrency(payment.discount_amount, currency)})
+												</span>
+											)}
+										</p>
+									)}
 									<p
 										className={`text-sm ${
 											payment.status === "completed"
