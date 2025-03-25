@@ -56,44 +56,27 @@ serve(async (req) => {
 			  const stripeInvoiceId = session.metadata?.stripe_invoice_id || session.payment_link?.metadata?.stripe_invoice_id;
 			  const studioConnectId = session.metadata?.studio_connect_id || session.payment_link?.metadata?.studio_connect_id;
 			
-			  console.log("Session metadata:", { invoiceId, stripeInvoiceId, studioConnectId });
-			
 			  if (!invoiceId) {
 			    console.error("No invoice ID found in session or payment link metadata");
 			    break;
 			  }
 			
-			  // If we have a Stripe invoice ID and studio connect ID, mark the invoice as paid in Stripe
+			  // Mark the invoice as paid in Stripe if needed
 			  if (stripeInvoiceId && studioConnectId) {
 			    try {
-			      // Retrieve the invoice
-			      const stripeInvoice = await stripe.invoices.retrieve(
+			      // Pay the invoice using paid_out_of_band
+			      await stripe.invoices.pay(
 			        stripeInvoiceId,
+			        { paid_out_of_band: true },
 			        { stripeAccount: studioConnectId }
 			      );
-			
-			      console.log("Retrieved Stripe invoice:", stripeInvoice.id, "with status:", stripeInvoice.status);
-			
-			      // If the invoice is not paid yet, mark it as paid
-			      if (stripeInvoice.status !== "paid") {
-			        console.log("Attempting to mark invoice as paid");
-			
-			        // Pay the invoice using paid_out_of_band
-			        const paidInvoice = await stripe.invoices.pay(
-			          stripeInvoiceId,
-			          { paid_out_of_band: true }, // Mark as paid without charging again
-			          { stripeAccount: studioConnectId }
-			        );
-			
-			        console.log("Updated invoice status to paid:", paidInvoice.id, "New status:", paidInvoice.status);
-			      }
 			    } catch (err) {
 			      console.error("Error updating Stripe invoice:", err);
 			      // Continue processing even if Stripe invoice update fails
 			    }
 			  }
 			
-			  // Update invoice status in the database
+			  // Update invoice status in our database
 			  const { error: updateError } = await supabaseClient
 			    .from("invoices")
 			    .update({
@@ -107,7 +90,7 @@ serve(async (req) => {
 			    throw updateError;
 			  }
 			
-			  // Fetch the invoice to get the amount paid (already includes discount)
+			  // Fetch the invoice to get the amount paid (after any discount)
 			  const { data: invoice, error: fetchError } = await supabaseClient
 			    .from("invoices")
 			    .select("id, total, discount_value, discount_type, is_recurring, recurring_interval")
@@ -119,7 +102,7 @@ serve(async (req) => {
 			    throw fetchError;
 			  }
 			
-			  // Calculate the final amount after discount, which is what was actually paid
+			  // Calculate the final amount after discount
 			  let finalAmount = invoice.total;
 			  
 			  if (invoice.discount_value) {
@@ -133,57 +116,50 @@ serve(async (req) => {
 			  // Round to 2 decimal places
 			  finalAmount = Math.round(finalAmount * 100) / 100;
 			
-			  // Check if a payment record already exists for this invoice to prevent duplicates
+			  // Check if a payment record already exists
 			  const { data: existingPayment, error: paymentCheckError } = await supabaseClient
 			    .from("payments")
 			    .select("id")
-			    .match({
-			      invoice_id: invoiceId,
-			      status: "completed",
-			      transaction_id: session.id,
-			    })
+			    .eq("invoice_id", invoiceId)
+			    .eq("status", "completed")
 			    .single();
 			
-			  if (paymentCheckError && !paymentCheckError.message.includes("No rows found")) {
-			    console.error("Error checking for existing payment:", paymentCheckError);
-			    throw paymentCheckError;
-			  }
-			
-			  // Only create payment record if one doesn't already exist
 			  if (!existingPayment) {
-			    console.log("No existing payment found, creating new payment record");
+			    // Create payment record - EXPLICITLY SPECIFY ONLY NECESSARY FIELDS
+			    const paymentRecord = {
+			      invoice_id: invoiceId,
+			      amount: finalAmount,
+			      payment_method: "card",
+			      status: "completed",
+			      transaction_id: session.id,
+			      payment_date: new Date().toISOString(),
+			      stripe_payment_intent_id: session.payment_intent,
+			      stripe_invoice_id: stripeInvoiceId,
+			      is_recurring: invoice.is_recurring || false
+			    };
+			    
+			    // Only add recurring_interval if it exists and is recurring
+			    if (invoice.is_recurring && invoice.recurring_interval) {
+			      paymentRecord.recurring_interval = invoice.recurring_interval;
+			    }
 			
-			    // Create simplified payment record - NO DISCOUNT TRACKING
 			    const { error: paymentError } = await supabaseClient
 			      .from("payments")
-			      .insert([
-			        {
-			          invoice_id: invoiceId,
-			          amount: finalAmount, // The actual amount paid (already accounts for discount)
-			          payment_method: "card",
-			          status: "completed",
-			          transaction_id: session.id,
-			          payment_date: new Date().toISOString(),
-			          stripe_payment_intent_id: session.payment_intent,
-			          stripe_invoice_id: stripeInvoiceId,
-			          is_recurring: invoice.is_recurring || false,
-			          recurring_interval: invoice.is_recurring ? invoice.recurring_interval : null,
-			        },
-			      ]);
+			      .insert([paymentRecord]);
 			
 			    if (paymentError) {
 			      console.error("Error creating payment record:", paymentError);
 			      throw paymentError;
 			    }
 			
-			    console.log("Payment record created successfully for checkout session");
+			    console.log("Payment record created successfully");
 			  } else {
-			    console.log("Payment record already exists for this checkout session, skipping creation");
+			    console.log("Payment record already exists for this invoice, skipping creation");
 			  }
 			
-			  console.log("Successfully processed checkout.session.completed event");
 			  break;
 			}
+				
 			case "invoice.updated": {
 				console.log("Stripe invoice updated event received");
 				await handleInvoiceEvent(event.data.object, supabaseClient);
@@ -264,7 +240,6 @@ serve(async (req) => {
 			
 			  if (fetchError) {
 			    console.error("Error finding invoice:", fetchError);
-			    // This might be an invoice not created through our system
 			    break;
 			  }
 			
@@ -272,8 +247,6 @@ serve(async (req) => {
 			    console.log("No matching invoice found in our database for this Stripe invoice");
 			    break;
 			  }
-			
-			  console.log("Found matching invoice in our database:", invoice.id);
 			
 			  // Calculate the final amount after discount
 			  let finalAmount = invoice.total;
@@ -289,48 +262,45 @@ serve(async (req) => {
 			  // Round to 2 decimal places
 			  finalAmount = Math.round(finalAmount * 100) / 100;
 			
-			  // Check if a payment record already exists for this invoice
+			  // Check if a payment record already exists
 			  const { data: existingPayment, error: paymentCheckError } = await supabaseClient
 			    .from("payments")
 			    .select("id")
 			    .eq("invoice_id", invoice.id)
 			    .eq("status", "completed")
-			    .maybeSingle();
+			    .single();
 			
-			  if (paymentCheckError && !paymentCheckError.message.includes("No rows found")) {
-			    console.error("Error checking for existing payment:", paymentCheckError);
-			  }
-			
-			  // Only create a new payment record if one doesn't exist
 			  if (!existingPayment) {
-			    // Create simplified payment record - NO DISCOUNT TRACKING
+			    // Create payment record - EXPLICITLY SPECIFY ONLY NECESSARY FIELDS
+			    const paymentRecord = {
+			      invoice_id: invoice.id,
+			      amount: finalAmount,
+			      payment_method: "card",
+			      status: "completed",
+			      transaction_id: stripeInvoice.id,
+			      payment_date: new Date().toISOString(),
+			      stripe_payment_intent_id: stripeInvoice.payment_intent,
+			      stripe_invoice_id: stripeInvoice.id,
+			      is_recurring: invoice.is_recurring || false
+			    };
+			    
+			    // Only add recurring_interval if it exists and is recurring
+			    if (invoice.is_recurring && invoice.recurring_interval) {
+			      paymentRecord.recurring_interval = invoice.recurring_interval;
+			    }
+			
 			    const { error: paymentError } = await supabaseClient
 			      .from("payments")
-			      .insert([
-			        {
-			          invoice_id: invoice.id,
-			          amount: finalAmount, // The actual amount paid (already accounts for discount)
-			          payment_method: "card",
-			          status: "completed",
-			          transaction_id: stripeInvoice.id,
-			          payment_date: new Date().toISOString(),
-			          stripe_payment_intent_id: stripeInvoice.payment_intent,
-			          stripe_invoice_id: stripeInvoice.id,
-			          is_recurring: invoice.is_recurring || false,
-			          recurring_interval: invoice.is_recurring ? invoice.recurring_interval : null,
-			        },
-			      ]);
-			
-			    console.log("Payment record created:", paymentError ? "Error" : "Success");
+			      .insert([paymentRecord]);
 			
 			    if (paymentError) {
+			      console.error("Error creating payment record:", paymentError);
 			      throw paymentError;
 			    }
-			  } else {
-			    console.log("Payment record already exists for this invoice, skipping creation");
+			
+			    console.log("Payment record created successfully");
 			  }
 			
-			  console.log("Successfully processed invoice.payment_succeeded event");
 			  break;
 			}
 
@@ -427,22 +397,26 @@ serve(async (req) => {
 			  // Round to 2 decimal places
 			  finalAmount = Math.round(finalAmount * 100) / 100;
 			
-			  // Create a failed payment record - NO DISCOUNT TRACKING
+			  // Create a failed payment record - EXPLICITLY SPECIFY ONLY NECESSARY FIELDS
+			  const paymentRecord = {
+			    invoice_id: invoice.id,
+			    amount: finalAmount,
+			    payment_method: "card",
+			    status: "failed",
+			    transaction_id: paymentIntent.id,
+			    payment_date: new Date().toISOString(),
+			    stripe_payment_intent_id: paymentIntent.id,
+			    is_recurring: invoice.is_recurring || false
+			  };
+			  
+			  // Only add recurring_interval if it exists and is recurring
+			  if (invoice.is_recurring && invoice.recurring_interval) {
+			    paymentRecord.recurring_interval = invoice.recurring_interval;
+			  }
+			
 			  const { error: paymentError } = await supabaseClient
 			    .from("payments")
-			    .insert([
-			      {
-			        invoice_id: invoice.id,
-			        amount: finalAmount, // The amount that would have been paid
-			        payment_method: "card",
-			        status: "failed",
-			        transaction_id: paymentIntent.id,
-			        payment_date: new Date().toISOString(),
-			        stripe_payment_intent_id: paymentIntent.id,
-			        is_recurring: invoice.is_recurring || false,
-			        recurring_interval: invoice.is_recurring ? invoice.recurring_interval : null,
-			      },
-			    ]);
+			    .insert([paymentRecord]);
 			
 			  if (paymentError) {
 			    console.error("Error creating failed payment record:", paymentError);
