@@ -52,28 +52,14 @@ serve(async (req) => {
 			  console.log("Checkout session completed:", session.id);
 			
 			  // Extract metadata from the session
-			  // Try both direct metadata and payment_link metadata (for payment links)
-			  const invoiceId =
-			    session.metadata?.invoice_id ||
-			    session.payment_link?.metadata?.invoice_id;
-			  const stripeInvoiceId =
-			    session.metadata?.stripe_invoice_id ||
-			    session.payment_link?.metadata?.stripe_invoice_id;
-			  const studioConnectId =
-			    session.metadata?.studio_connect_id ||
-			    session.payment_link?.metadata?.studio_connect_id;
+			  const invoiceId = session.metadata?.invoice_id || session.payment_link?.metadata?.invoice_id;
+			  const stripeInvoiceId = session.metadata?.stripe_invoice_id || session.payment_link?.metadata?.stripe_invoice_id;
+			  const studioConnectId = session.metadata?.studio_connect_id || session.payment_link?.metadata?.studio_connect_id;
 			
-			  console.log("Session data:", session);
-			  console.log("Session metadata:", {
-			    invoiceId,
-			    stripeInvoiceId,
-			    studioConnectId,
-			  });
+			  console.log("Session metadata:", { invoiceId, stripeInvoiceId, studioConnectId });
 			
 			  if (!invoiceId) {
-			    console.error(
-			      "No invoice ID found in session or payment link metadata"
-			    );
+			    console.error("No invoice ID found in session or payment link metadata");
 			    break;
 			  }
 			
@@ -83,17 +69,10 @@ serve(async (req) => {
 			      // Retrieve the invoice
 			      const stripeInvoice = await stripe.invoices.retrieve(
 			        stripeInvoiceId,
-			        {
-			          stripeAccount: studioConnectId,
-			        }
+			        { stripeAccount: studioConnectId }
 			      );
 			
-			      console.log(
-			        "Retrieved Stripe invoice:",
-			        stripeInvoice.id,
-			        "with status:",
-			        stripeInvoice.status
-			      );
+			      console.log("Retrieved Stripe invoice:", stripeInvoice.id, "with status:", stripeInvoice.status);
 			
 			      // If the invoice is not paid yet, mark it as paid
 			      if (stripeInvoice.status !== "paid") {
@@ -102,54 +81,11 @@ serve(async (req) => {
 			        // Pay the invoice using paid_out_of_band
 			        const paidInvoice = await stripe.invoices.pay(
 			          stripeInvoiceId,
-			          {
-			            paid_out_of_band: true, // Mark as paid without charging again
-			          },
-			          {
-			            stripeAccount: studioConnectId,
-			          }
+			          { paid_out_of_band: true }, // Mark as paid without charging again
+			          { stripeAccount: studioConnectId }
 			        );
 			
-			        console.log(
-			          "Updated invoice status to paid:",
-			          paidInvoice.id,
-			          "New status:",
-			          paidInvoice.status
-			        );
-			
-			        // Verify the invoice status after marking it as paid
-			        const verifiedInvoice = await stripe.invoices.retrieve(
-			          stripeInvoiceId,
-			          {
-			            stripeAccount: studioConnectId,
-			            expand: ["payment_intent"],
-			          }
-			        );
-			
-			        console.log("Verified invoice status:", verifiedInvoice.status);
-			
-			        // If still not paid, try updating it directly
-			        if (verifiedInvoice.status !== "paid") {
-			          console.log(
-			            "Invoice still not paid, trying to update it directly"
-			          );
-			
-			          // Update the invoice status directly
-			          const updatedInvoice = await stripe.invoices.update(
-			            stripeInvoiceId,
-			            {
-			              status: "paid",
-			            },
-			            {
-			              stripeAccount: studioConnectId,
-			            }
-			          );
-			
-			          console.log(
-			            "Directly updated invoice status:",
-			            updatedInvoice.status
-			          );
-			        }
+			        console.log("Updated invoice status to paid:", paidInvoice.id, "New status:", paidInvoice.status);
 			      }
 			    } catch (err) {
 			      console.error("Error updating Stripe invoice:", err);
@@ -171,12 +107,10 @@ serve(async (req) => {
 			    throw updateError;
 			  }
 			
-			  // Create payment record
+			  // Fetch the invoice to get the amount paid (already includes discount)
 			  const { data: invoice, error: fetchError } = await supabaseClient
 			    .from("invoices")
-			    .select(
-			      "id, total, discount_value, discount_type, is_recurring, recurring_interval"
-			    )
+			    .select("id, total, discount_value, discount_type, is_recurring, recurring_interval")
 			    .eq("id", invoiceId)
 			    .single();
 			
@@ -185,43 +119,33 @@ serve(async (req) => {
 			    throw fetchError;
 			  }
 			
-			  // Calculate the actual amount paid after discount
+			  // Calculate the final amount after discount, which is what was actually paid
 			  let finalAmount = invoice.total;
-			  let discountAmount = 0;
 			  
 			  if (invoice.discount_value) {
 			    if (invoice.discount_type === "percentage") {
-			      discountAmount = parseFloat((invoice.total * (invoice.discount_value / 100)).toFixed(2));
-			      finalAmount = invoice.total - discountAmount;
+			      finalAmount = invoice.total * (1 - invoice.discount_value / 100);
 			    } else {
-			      discountAmount = invoice.discount_value;
-			      finalAmount = invoice.total - discountAmount;
+			      finalAmount = invoice.total - invoice.discount_value;
 			    }
-			  
-			    // ENSURE finalAmount is rounded to 2 decimal places
-			    finalAmount = Number(finalAmount.toFixed(2));
 			  }
+			  
+			  // Round to 2 decimal places
+			  finalAmount = Math.round(finalAmount * 100) / 100;
 			
 			  // Check if a payment record already exists for this invoice to prevent duplicates
-			  const { data: existingPayment, error: paymentCheckError } =
-			    await supabaseClient
-			      .from("payments")
-			      .select("id")
-			      .match({
-			        invoice_id: invoiceId,
-			        status: "completed",
-			        transaction_id: session.id,
-			      })
-			      .single();
+			  const { data: existingPayment, error: paymentCheckError } = await supabaseClient
+			    .from("payments")
+			    .select("id")
+			    .match({
+			      invoice_id: invoiceId,
+			      status: "completed",
+			      transaction_id: session.id,
+			    })
+			    .single();
 			
-			  if (
-			    paymentCheckError &&
-			    !paymentCheckError.message.includes("No rows found")
-			  ) {
-			    console.error(
-			      "Error checking for existing payment:",
-			      paymentCheckError
-			    );
+			  if (paymentCheckError && !paymentCheckError.message.includes("No rows found")) {
+			    console.error("Error checking for existing payment:", paymentCheckError);
 			    throw paymentCheckError;
 			  }
 			
@@ -229,15 +153,13 @@ serve(async (req) => {
 			  if (!existingPayment) {
 			    console.log("No existing payment found, creating new payment record");
 			
-			    // Create payment record with proper handling of original and discounted amounts
+			    // Create simplified payment record - NO DISCOUNT TRACKING
 			    const { error: paymentError } = await supabaseClient
 			      .from("payments")
 			      .insert([
 			        {
 			          invoice_id: invoiceId,
-			          amount: finalAmount, // The actual amount paid after discount
-			          original_amount: invoice.total, // The pre-discount amount
-			          discount_amount: discountAmount, // The explicit discount amount
+			          amount: finalAmount, // The actual amount paid (already accounts for discount)
 			          payment_method: "card",
 			          status: "completed",
 			          transaction_id: session.id,
@@ -245,9 +167,7 @@ serve(async (req) => {
 			          stripe_payment_intent_id: session.payment_intent,
 			          stripe_invoice_id: stripeInvoiceId,
 			          is_recurring: invoice.is_recurring || false,
-			          recurring_interval: invoice.is_recurring
-			            ? invoice.recurring_interval
-			            : null,
+			          recurring_interval: invoice.is_recurring ? invoice.recurring_interval : null,
 			        },
 			      ]);
 			
@@ -256,19 +176,14 @@ serve(async (req) => {
 			      throw paymentError;
 			    }
 			
-			    console.log(
-			      "Payment record created successfully for checkout session"
-			    );
+			    console.log("Payment record created successfully for checkout session");
 			  } else {
-			    console.log(
-			      "Payment record already exists for this checkout session, skipping creation"
-			    );
+			    console.log("Payment record already exists for this checkout session, skipping creation");
 			  }
 			
 			  console.log("Successfully processed checkout.session.completed event");
 			  break;
 			}
-
 			case "invoice.updated": {
 				console.log("Stripe invoice updated event received");
 				await handleInvoiceEvent(event.data.object, supabaseClient);
@@ -343,9 +258,7 @@ serve(async (req) => {
 			  // Check if this is an invoice created through our system
 			  const { data: invoice, error: fetchError } = await supabaseClient
 			    .from("invoices")
-			    .select(
-			      "id, total, discount_value, discount_type, is_recurring, recurring_interval"
-			    )
+			    .select("id, total, discount_value, discount_type, is_recurring, recurring_interval")
 			    .eq("stripe_invoice_id", stripeInvoice.id)
 			    .single();
 			
@@ -356,39 +269,33 @@ serve(async (req) => {
 			  }
 			
 			  if (!invoice) {
-			    console.log(
-			      "No matching invoice found in our database for this Stripe invoice"
-			    );
+			    console.log("No matching invoice found in our database for this Stripe invoice");
 			    break;
 			  }
 			
 			  console.log("Found matching invoice in our database:", invoice.id);
 			
-			  // Calculate the actual amount paid after discount
+			  // Calculate the final amount after discount
 			  let finalAmount = invoice.total;
-			  let discountAmount = 0;
 			  
 			  if (invoice.discount_value) {
 			    if (invoice.discount_type === "percentage") {
-			      discountAmount = parseFloat((invoice.total * (invoice.discount_value / 100)).toFixed(2));
-			      finalAmount = invoice.total - discountAmount;
+			      finalAmount = invoice.total * (1 - invoice.discount_value / 100);
 			    } else {
-			      discountAmount = invoice.discount_value;
-			      finalAmount = invoice.total - discountAmount;
+			      finalAmount = invoice.total - invoice.discount_value;
 			    }
-			  
-			    // ENSURE finalAmount is rounded to 2 decimal places
-			    finalAmount = Number(finalAmount.toFixed(2));
 			  }
+			  
+			  // Round to 2 decimal places
+			  finalAmount = Math.round(finalAmount * 100) / 100;
 			
 			  // Check if a payment record already exists for this invoice
-			  const { data: existingPayment, error: paymentCheckError } =
-			    await supabaseClient
-			      .from("payments")
-			      .select("id")
-			      .eq("invoice_id", invoice.id)
-			      .eq("status", "completed")
-			      .maybeSingle();
+			  const { data: existingPayment, error: paymentCheckError } = await supabaseClient
+			    .from("payments")
+			    .select("id")
+			    .eq("invoice_id", invoice.id)
+			    .eq("status", "completed")
+			    .maybeSingle();
 			
 			  if (paymentCheckError && !paymentCheckError.message.includes("No rows found")) {
 			    console.error("Error checking for existing payment:", paymentCheckError);
@@ -396,15 +303,13 @@ serve(async (req) => {
 			
 			  // Only create a new payment record if one doesn't exist
 			  if (!existingPayment) {
-			    // Create payment record with proper original amount and discount handling
+			    // Create simplified payment record - NO DISCOUNT TRACKING
 			    const { error: paymentError } = await supabaseClient
 			      .from("payments")
 			      .insert([
 			        {
 			          invoice_id: invoice.id,
-			          amount: finalAmount, // The actual amount paid after discount
-			          original_amount: invoice.total, // The pre-discount amount
-			          discount_amount: discountAmount, // The explicit discount amount
+			          amount: finalAmount, // The actual amount paid (already accounts for discount)
 			          payment_method: "card",
 			          status: "completed",
 			          transaction_id: stripeInvoice.id,
@@ -412,16 +317,11 @@ serve(async (req) => {
 			          stripe_payment_intent_id: stripeInvoice.payment_intent,
 			          stripe_invoice_id: stripeInvoice.id,
 			          is_recurring: invoice.is_recurring || false,
-			          recurring_interval: invoice.is_recurring
-			            ? invoice.recurring_interval
-			            : null,
+			          recurring_interval: invoice.is_recurring ? invoice.recurring_interval : null,
 			        },
 			      ]);
 			
-			    console.log(
-			      "Payment record created:",
-			      paymentError ? "Error" : "Success"
-			    );
+			    console.log("Payment record created:", paymentError ? "Error" : "Success");
 			
 			    if (paymentError) {
 			      throw paymentError;
@@ -440,9 +340,7 @@ serve(async (req) => {
 			  // Find our invoice associated with this Stripe invoice
 			  const { data: invoice, error: fetchError } = await supabaseClient
 			    .from("invoices")
-			    .select(
-			      "id, total, discount_value, discount_type, is_recurring, recurring_interval"
-			    )
+			    .select("id, total, discount_value, discount_type, is_recurring, recurring_interval")
 			    .eq("stripe_invoice_id", stripeInvoice.id)
 			    .single();
 			
@@ -451,39 +349,31 @@ serve(async (req) => {
 			  }
 			
 			  if (!invoice) {
-			    console.error(
-			      "No matching invoice found for Stripe invoice:",
-			      stripeInvoice.id
-			    );
+			    console.error("No matching invoice found for Stripe invoice:", stripeInvoice.id);
 			    break;
 			  }
 			
-			  // Calculate amounts for record-keeping
+			  // Calculate the final amount after discount
 			  let finalAmount = invoice.total;
-			  let discountAmount = 0;
 			  
 			  if (invoice.discount_value) {
 			    if (invoice.discount_type === "percentage") {
-			      discountAmount = parseFloat((invoice.total * (invoice.discount_value / 100)).toFixed(2));
-			      finalAmount = invoice.total - discountAmount;
+			      finalAmount = invoice.total * (1 - invoice.discount_value / 100);
 			    } else {
-			      discountAmount = invoice.discount_value;
-			      finalAmount = invoice.total - discountAmount;
+			      finalAmount = invoice.total - invoice.discount_value;
 			    }
-			  
-			    // ENSURE finalAmount is rounded to 2 decimal places
-			    finalAmount = Number(finalAmount.toFixed(2));
 			  }
+			  
+			  // Round to 2 decimal places
+			  finalAmount = Math.round(finalAmount * 100) / 100;
 			
-			  // Create a payment record with failed status
+			  // Create a failed payment record - NO DISCOUNT TRACKING
 			  const { error: paymentError } = await supabaseClient
 			    .from("payments")
 			    .insert([
 			      {
 			        invoice_id: invoice.id,
 			        amount: finalAmount, // The amount that would have been paid
-			        original_amount: invoice.total, // The pre-discount amount
-			        discount_amount: discountAmount, // The explicit discount amount
 			        payment_method: "card",
 			        status: "failed",
 			        transaction_id: stripeInvoice.id,
@@ -491,9 +381,7 @@ serve(async (req) => {
 			        stripe_payment_intent_id: stripeInvoice.payment_intent,
 			        stripe_invoice_id: stripeInvoice.id,
 			        is_recurring: invoice.is_recurring || false,
-			        recurring_interval: invoice.is_recurring
-			          ? invoice.recurring_interval
-			          : null,
+			        recurring_interval: invoice.is_recurring ? invoice.recurring_interval : null,
 			      },
 			    ]);
 			
@@ -516,9 +404,7 @@ serve(async (req) => {
 			  // Find our invoice associated with this payment intent
 			  const { data: invoice, error: fetchError } = await supabaseClient
 			    .from("invoices")
-			    .select(
-			      "id, total, discount_value, discount_type, is_recurring, recurring_interval"
-			    )
+			    .select("id, total, discount_value, discount_type, is_recurring, recurring_interval")
 			    .eq("id", invoiceId)
 			    .single();
 			
@@ -527,41 +413,34 @@ serve(async (req) => {
 			    break;
 			  }
 			
-			  // Calculate amounts for record-keeping
+			  // Calculate the final amount after discount
 			  let finalAmount = invoice.total;
-			  let discountAmount = 0;
 			  
 			  if (invoice.discount_value) {
 			    if (invoice.discount_type === "percentage") {
-			      discountAmount = parseFloat((invoice.total * (invoice.discount_value / 100)).toFixed(2));
-			      finalAmount = invoice.total - discountAmount;
+			      finalAmount = invoice.total * (1 - invoice.discount_value / 100);
 			    } else {
-			      discountAmount = invoice.discount_value;
-			      finalAmount = invoice.total - discountAmount;
+			      finalAmount = invoice.total - invoice.discount_value;
 			    }
-			  
-			    // ENSURE finalAmount is rounded to 2 decimal places
-			    finalAmount = Number(finalAmount.toFixed(2));
 			  }
+			  
+			  // Round to 2 decimal places
+			  finalAmount = Math.round(finalAmount * 100) / 100;
 			
-			  // Create a payment record with failed status
+			  // Create a failed payment record - NO DISCOUNT TRACKING
 			  const { error: paymentError } = await supabaseClient
 			    .from("payments")
 			    .insert([
 			      {
 			        invoice_id: invoice.id,
 			        amount: finalAmount, // The amount that would have been paid
-			        original_amount: invoice.total, // The pre-discount amount
-			        discount_amount: discountAmount, // The explicit discount amount
 			        payment_method: "card",
 			        status: "failed",
 			        transaction_id: paymentIntent.id,
 			        payment_date: new Date().toISOString(),
 			        stripe_payment_intent_id: paymentIntent.id,
 			        is_recurring: invoice.is_recurring || false,
-			        recurring_interval: invoice.is_recurring
-			          ? invoice.recurring_interval
-			          : null,
+			        recurring_interval: invoice.is_recurring ? invoice.recurring_interval : null,
 			      },
 			    ]);
 			
@@ -571,6 +450,7 @@ serve(async (req) => {
 			
 			  break;
 			}
+				
 			default:
 				console.log("Unhandled event type:", event.type);
 				break;
