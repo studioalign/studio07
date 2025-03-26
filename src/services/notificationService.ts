@@ -540,18 +540,34 @@ async function notifyPaymentReceived(studioId: string, parentName: string, amoun
   }
 }
 
-async function notifyPaymentOverdue(userId: string, studioId: string, invoiceId: string, amount: number, daysOverdue: number) {
+async function notifyPaymentOverdue(
+  userId: string, 
+  studioId: string, 
+  invoiceId: string, 
+  amount: number, 
+  daysOverdue: number,
+  description?: string, // Add optional description
+  invoiceNumber?: number // Add optional invoice number
+) {
   // Notify parent
   await createNotification({
     user_id: userId,
     studio_id: studioId,
     type: 'payment_overdue',
-    title: 'Payment Overdue',
-    message: `Your payment of $${amount} is ${daysOverdue} days overdue`,
+    title: `Payment Overdue${invoiceNumber ? ` - Invoice #${invoiceNumber}` : ''}`,
+    message: `Your payment of ${new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount)} is ${daysOverdue} days overdue${description ? ` for ${description}` : ''}`,
     priority: 'high',
     entity_id: invoiceId,
     entity_type: 'invoice',
-    details: { amount, daysOverdue },
+    details: { 
+      amount, 
+      daysOverdue, 
+      description,
+      invoiceNumber
+    },
     requires_action: true,
     email_required: true
   });
@@ -563,12 +579,20 @@ async function notifyPaymentOverdue(userId: string, studioId: string, invoiceId:
       user_id: owner.id,
       studio_id: studioId,
       type: 'payment_overdue',
-      title: 'Customer Payment Overdue',
-      message: `Payment of $${amount} is ${daysOverdue} days overdue`,
+      title: `Customer Payment Overdue${invoiceNumber ? ` - Invoice #${invoiceNumber}` : ''}`,
+      message: `Payment of ${new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD'
+      }).format(amount)} is ${daysOverdue} days overdue${description ? ` for ${description}` : ''}`,
       priority: 'medium',
       entity_id: invoiceId,
       entity_type: 'invoice',
-      details: { amount, daysOverdue },
+      details: { 
+        amount, 
+        daysOverdue,
+        description,
+        invoiceNumber
+      },
       email_required: true
     });
   }
@@ -965,40 +989,61 @@ async function notifyPaymentRequest(
   amount: number, 
   dueDate: string, 
   invoiceId: string,
-  currency: string
+  currency: string,
+  description?: string, // Add optional description
+  invoiceNumber?: number // Add optional invoice number
 ) {
   await createNotification({
     user_id: parentId,
     studio_id: studioId,
     type: 'payment_request',
-    title: 'Payment Request',
+    title: `Payment Request${invoiceNumber ? ` - Invoice #${invoiceNumber}` : ''}`,
     message: `Payment of ${new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency
-    }).format(amount)} is due by ${dueDate}`,
+    }).format(amount)} is due by ${dueDate}${description ? ` for ${description}` : ''}`,
     priority: 'high',
     entity_id: invoiceId,
     entity_type: 'invoice',
-    details: { amount, dueDate, currency },
+    details: { 
+      amount, 
+      dueDate, 
+      currency, 
+      description, 
+      invoiceNumber 
+    },
     requires_action: true,
     email_required: true
   });
 }
 
-async function notifyPaymentConfirmation(parentId: string, studioId: string, amount: number, invoiceId: string, currency: string) {
+async function notifyPaymentConfirmation(
+  parentId: string, 
+  studioId: string, 
+  amount: number, 
+  invoiceId: string, 
+  currency: string,
+  description?: string, // Add optional description
+  invoiceNumber?: number // Add optional invoice number
+) {
   await createNotification({
     user_id: parentId,
     studio_id: studioId,
     type: 'payment_confirmation',
-    title: 'Payment Confirmation',
+    title: `Payment Confirmation${invoiceNumber ? ` - Invoice #${invoiceNumber}` : ''}`,
     message: `Your payment of ${new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency
-    }).format(amount)} has been received. Thank you!`,
+    }).format(amount)} has been received. Thank you!${description ? ` for ${description}` : ''}`,
     priority: 'medium',
     entity_id: invoiceId,
     entity_type: 'invoice',
-    details: { amount, currency },
+    details: { 
+      amount, 
+      currency,
+      description,
+      invoiceNumber
+    },
     email_required: true
   });
 }
