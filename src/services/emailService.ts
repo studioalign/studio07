@@ -153,8 +153,6 @@ export class EmailService {
     daysOverdue: number;
     invoiceId: string;
     currency: string;
-    description?: string; // Add optional description
-    invoiceNumber?: number; // Add optional invoice number
   }): Promise<boolean> {
     console.log('Preparing payment overdue email', {
       recipient: params.recipientEmail,
@@ -163,30 +161,28 @@ export class EmailService {
       daysOverdue: params.daysOverdue,
       invoiceId: params.invoiceId
     });
-  
+
     const invoiceUrl = `https://app.studioalignpro.com/dashboard/payments`;
-  
+
     const emailHtml = emailTemplates.paymentOverdue({
       recipient: { name: params.recipientName },
       amount: params.amount,
       daysOverdue: params.daysOverdue,
       invoiceUrl,
-      currency: params.currency,
-      description: params.description, // Pass description to the template
-      invoiceNumber: params.invoiceNumber // Pass invoice number to the template
+      currency: params.currency
     });
-  
+
     const result = await this.sendEmail({
       to: params.recipientEmail,
-      subject: `Payment Overdue${params.invoiceNumber ? ` - Invoice #${params.invoiceNumber}` : ''}`,
+      subject: 'Payment Overdue',
       html: emailHtml
     });
-  
+
     console.log('Payment overdue email result', {
       recipient: params.recipientEmail,
       success: result
     });
-  
+
     return result;
   }
 
@@ -501,8 +497,6 @@ export class EmailService {
     amount: number;
     invoiceId: string;
     currency: string;
-    description?: string; // Add optional description
-    invoiceNumber?: number; // Add optional invoice number
   }): Promise<boolean> {
     console.log('Preparing payment confirmation email', {
       recipient: params.recipientEmail,
@@ -510,30 +504,28 @@ export class EmailService {
       amount: params.amount,
       invoiceId: params.invoiceId
     });
-  
+
     const invoiceUrl = `https://app.studioalignpro.com/dashboard/payments`;
-  
+
     const emailHtml = emailTemplates.paymentConfirmation({
       recipient: { name: params.recipientName },
       amount: params.amount,
       invoiceId: params.invoiceId,
       invoiceUrl,
-      currency: params.currency,
-      description: params.description, // Pass description to the template
-      invoiceNumber: params.invoiceNumber // Pass invoice number to the template
+      currency: params.currency
     });
-  
+
     const result = await this.sendEmail({
       to: params.recipientEmail,
-      subject: `Payment Confirmation${params.invoiceNumber ? ` - Invoice #${params.invoiceNumber}` : ''}`,
+      subject: 'Payment Confirmation',
       html: emailHtml
     });
-  
+
     console.log('Payment confirmation email result', {
       recipient: params.recipientEmail,
       success: result
     });
-  
+
     return result;
   }
 
