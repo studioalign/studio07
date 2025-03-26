@@ -98,12 +98,14 @@ serve(async (req) => {
 					throw updateError;
 				}
 
-				// When fetching the invoice for payment success
+				// Fetch the invoice to get the amount paid (after any discount)
 				const { data: invoice, error: fetchError } = await supabaseClient
-				  .from("invoices")
-				  .select("id, number, description, total, discount_value, discount_type, is_recurring, recurring_interval")
-				  .eq("stripe_invoice_id", stripeInvoice.id)
-				  .single();
+					.from("invoices")
+					.select(
+						"id, total, discount_value, discount_type, is_recurring, recurring_interval"
+					)
+					.eq("id", invoiceId)
+					.single();
 
 				if (fetchError) {
 					console.error("Error fetching invoice:", fetchError);
