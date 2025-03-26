@@ -32,6 +32,28 @@ export default function Settings() {
   const [deleteStudioWithAccount, setDeleteStudioWithAccount] = useState(true);
   const [isCheckingOwners, setIsCheckingOwners] = useState(false);
 
+  // Check for other owners in the studio
+  const checkForOtherOwners = async (userId: string, studioId: string) => {
+    setIsCheckingOwners(true);
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('studio_id', studioId)
+        .eq('role', 'owner')
+        .neq('id', userId);
+
+      if (error) throw error;
+
+      setHasOtherOwners(data && data.length > 0);
+    } catch (err) {
+      console.error('Error checking for other owners:', err);
+      setHasOtherOwners(false);
+    } finally {
+      setIsCheckingOwners(false);
+    }
+  };
+
   // Fetch user preferences when component mounts
   useEffect(() => {
     if (!profile?.id) return;
@@ -82,7 +104,7 @@ export default function Settings() {
       }
       
       // Use .upsert with on conflict clause to handle existing records
-      const { error: upsertError } = await supabase
+      const { data, error: upsertError } = await supabase
         .from('user_preferences')
         .upsert(
           {
@@ -93,8 +115,9 @@ export default function Settings() {
             updated_at: new Date().toISOString()
           },
           { 
-            onConflict: 'user_id',  // Specify the column to handle conflicts
-            ignoreDuplicates: false  // Allow updates on conflict
+            onConflict: 'user_id',
+            ignoreDuplicates: false,
+            returning: 'minimal'
           }
         );
 
@@ -299,6 +322,15 @@ export default function Settings() {
       throw new Error('Failed to delete user account. Please contact support.');
     }
   };
+
+  // If profile is not loaded yet, show loading state
+  if (!profile) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-pulse">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div>
