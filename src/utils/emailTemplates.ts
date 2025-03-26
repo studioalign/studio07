@@ -119,8 +119,6 @@ export interface PaymentOverdueParams extends BaseTemplateParams {
   daysOverdue: number;
   invoiceUrl: string;
   currency: string;
-  description?: string; // Add optional description
-  invoiceNumber?: number; // Add optional invoice number
 }
 
 export interface MonthlyFinancialSummaryParams extends BaseTemplateParams {
@@ -180,8 +178,6 @@ export interface PaymentConfirmationParams extends BaseTemplateParams {
   invoiceId: string;
   invoiceUrl: string;
   currency: string;
-  description?: string; // Add optional description
-  invoiceNumber?: number; // Add optional invoice number
 }
 
 export interface ClassCancellationParams extends BaseTemplateParams {
@@ -247,9 +243,8 @@ export function paymentOverdueTemplate(params: PaymentOverdueParams) {
   
   const content = `
     <div class="alert">
-      <h2>Payment Overdue${params.invoiceNumber ? ` - Invoice #${params.invoiceNumber}` : ''}</h2>
+      <h2>Payment Overdue</h2>
       <p>Your payment of ${formattedAmount} is ${params.daysOverdue} days overdue.</p>
-      ${params.description ? `<p><strong>Description:</strong> ${params.description}</p>` : ''}
       <p>Please complete your payment to avoid any additional fees.</p>
     </div>
     <a href="${params.invoiceUrl}" class="btn">View Invoice</a>
@@ -401,9 +396,8 @@ export function paymentConfirmationTemplate(params: PaymentConfirmationParams) {
   const formattedAmount = formatCurrency(params.amount, params.currency);
   
   const content = `
-    <h2>Payment Confirmation${params.invoiceNumber ? ` - Invoice #${params.invoiceNumber}` : ''}</h2>
+    <h2>Payment Confirmation</h2>
     <p>Your payment of ${formattedAmount} has been received. Thank you!</p>
-    ${params.description ? `<p><strong>Description:</strong> ${params.description}</p>` : ''}
     <a href="${params.invoiceUrl}" class="btn">View Invoice</a>
   `;
 
