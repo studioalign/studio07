@@ -98,9 +98,11 @@ export default function NotificationsPage() {
     window.scrollTo(0, 0);
   };
 
-  useEffect(() => {
-  updateUnreadCount();
-}, [updateUnreadCount]);
+  // If this is causing issues, you can uncomment this and modify
+  // useEffect(() => {
+  //   console.log('Notifications:', notifications);
+  //   console.log('Loading state:', isLoading);
+  // }, [notifications, isLoading]);
 
   return (
     <div>
