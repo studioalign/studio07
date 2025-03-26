@@ -16,12 +16,6 @@ interface Payment {
 	status: string;
 	transaction_id: string | null;
 	payment_date: string;
-	description?: string;
-	invoice?: {
-		id: string;
-		number?: number; // Add invoice number
-		description?: string; // Add invoice description
-	};
 	refunds: {
 		id: string;
 		amount: number;
@@ -66,12 +60,6 @@ export default function PaymentHistory({
           status,
           transaction_id,
           payment_date,
-          description,
-          invoice:invoices!payments_invoice_id_fkey (
-            id,
-            number,
-            description
-          ),
           refunds (
             id,
             amount,
@@ -188,20 +176,6 @@ export default function PaymentHistory({
 									</p>
 								</div>
 							</div>
-
-							{/* Display invoice number and description */}
-							{payment.invoice?.number && (
-								<p className="text-sm text-gray-700 mb-1">
-									<span className="font-medium">Invoice #:</span> {payment.invoice.number}
-								</p>
-							)}
-							
-							{/* Show the description from either payment or invoice */}
-							{(payment.description || payment.invoice?.description) && (
-								<p className="text-sm text-gray-700 mb-2">
-									<span className="font-medium">Description:</span> {payment.description || payment.invoice?.description}
-								</p>
-							)}
 
 							{payment.transaction_id && (
 								<p className="text-sm text-gray-500 mb-2">
