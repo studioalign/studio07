@@ -271,28 +271,15 @@ serve(async (req) => {
 					: undefined
 			);
 
-			// After finalizing the invoice
 			console.log("Finalized Invoice:", finalizedInvoice.id);
-			
-			// Get the next invoice number for this studio
-			const { data: nextNumber, error: numberError } = await supabaseClient.rpc(
-			  'get_next_invoice_number',
-			  { studio_id_param: invoice.studio_id }
-			);
-			
-			if (numberError) {
-			  console.error("Error getting next invoice number:", numberError);
-			}
-			
-			// Update the invoice in Supabase with the number and other details
+
 			const { error: updateError } = await supabaseClient
-			  .from("invoices")
-			  .update({
-			    number: nextNumber || 1, // Use 1 as fallback if the function fails
-			    stripe_invoice_id: finalizedInvoice.id,
-			    pdf_url: finalizedInvoice.invoice_pdf, // Stripe provides this URL
-			  })
-			  .eq("id", invoice.id);
+				.from("invoices")
+				.update({
+					stripe_invoice_id: finalizedInvoice.id,
+					pdf_url: finalizedInvoice.invoice_pdf, // Stripe provides this URL
+				})
+				.eq("id", invoice.id);
 
 			if (updateError) {
 				console.error("Error updating invoice in Supabase:", updateError);
