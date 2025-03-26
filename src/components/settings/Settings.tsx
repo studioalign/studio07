@@ -69,27 +69,6 @@ export default function Settings() {
     }
   }, [profile?.id, profile?.role, profile?.studio?.id]);
 
-  // Check if there are other owners in the studio
-  const checkForOtherOwners = async (userId: string, studioId: string) => {
-    setIsCheckingOwners(true);
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id')
-        .eq('studio_id', studioId)
-        .eq('role', 'owner')
-        .neq('id', userId);
-        
-      if (error) throw error;
-      
-      setHasOtherOwners(data && data.length > 0);
-    } catch (err) {
-      console.error('Error checking for other owners:', err);
-    } finally {
-      setIsCheckingOwners(false);
-    }
-  };
-
   // Handle saving notification preferences
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,15 +81,22 @@ export default function Settings() {
         throw new Error('User not authenticated');
       }
       
+      // Use .upsert with on conflict clause to handle existing records
       const { error: upsertError } = await supabase
         .from('user_preferences')
-        .upsert({
-          user_id: profile.id,
-          email_class_updates: emailNotifications.classUpdates,
-          email_messages: emailNotifications.messages,
-          email_billing: emailNotifications.billing,
-          updated_at: new Date().toISOString()
-        });
+        .upsert(
+          {
+            user_id: profile.id,
+            email_class_updates: emailNotifications.classUpdates,
+            email_messages: emailNotifications.messages,
+            email_billing: emailNotifications.billing,
+            updated_at: new Date().toISOString()
+          },
+          { 
+            onConflict: 'user_id',  // Specify the column to handle conflicts
+            ignoreDuplicates: false  // Allow updates on conflict
+          }
+        );
 
       if (upsertError) throw upsertError;
       
