@@ -20,6 +20,8 @@ interface Payment {
 	payment_date: string;
 	invoice: {
 		id: string;
+		number?: number;
+		description?: string;
 		studio_id: string;
 		parent: {
 			name: string;
@@ -93,6 +95,8 @@ export default function Payments() {
           payment_date,
           invoice:invoices!payments_invoice_id_fkey (
             id,
+            number,
+            description,
             studio_id,
             parent:users!invoices_parent_id_fkey (
               name
@@ -292,9 +296,14 @@ export default function Payments() {
 										<CreditCard className="w-5 h-5 text-brand-primary mr-3" />
 										<div>
 											<p className="font-medium">
-												Invoice #{payment.invoice?.id} -{" "}
+												Invoice #{payment.invoice?.number || payment.invoice?.id.slice(-6)} -{" "}
 												{payment.invoice?.parent.name}
 											</p>
+											{payment.invoice?.description && (
+												<p className="text-sm text-gray-700">
+													{payment.invoice.description}
+												</p>
+											)}
 											<div className="flex items-center space-x-2 text-sm text-gray-500">
 												<span>
 													{formatDate(payment.payment_date, dateFormat)}
