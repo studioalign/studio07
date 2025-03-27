@@ -489,7 +489,7 @@ export function documentDeadlineTemplate(params: DocumentDeadlineParams) {
   });
 }
 
-export function classAssignedTemplate(params: ClassAssignedParams) {
+export function sendClassAssignedEmail(params: ClassAssignedParams) {
   const formatTimeStr = (time: string) => {
     return new Date(`2000-01-01T${time}`).toLocaleTimeString([], {
       hour: 'numeric',
@@ -552,7 +552,7 @@ export const emailTemplates = {
   documentAssigned: documentAssignedTemplate,  // This was the issue - now it's correctly exported
   documentReminder: documentReminderTemplate,
   documentDeadline: documentDeadlineTemplate,
-  classAssigned: classAssignedTemplate
+  sendClassAssignedEmail
 };
 
 export default emailTemplates;
