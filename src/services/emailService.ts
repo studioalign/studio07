@@ -677,6 +677,46 @@ export class EmailService {
     return result;
   }
 
+  async sendClassAssignedEmail(params: {
+    recipientEmail: string;
+    recipientName: string;
+    className: string;
+    classId: string;
+    studioId: string;
+    schedule: any;
+  }): Promise<boolean> {
+    console.log('Preparing class assignment email', {
+      recipient: params.recipientEmail,
+      recipientName: params.recipientName,
+      className: params.className,
+      schedule: params.schedule
+    });
+  
+    const baseUrl = window.location.origin;
+    const dashboardUrl = `${baseUrl}/dashboard/classes`;
+  
+    // Make sure this function exists in your emailTemplates
+    const emailHtml = emailTemplates.sendClassAssignedEmail({
+      recipient: { name: params.recipientName },
+      className: params.className,
+      scheduleDetails: params.schedule,
+      dashboardUrl
+    });
+  
+    const result = await this.sendEmail({
+      to: params.recipientEmail,
+      subject: `Class Assignment: ${params.className}`,
+      html: emailHtml
+    });
+  
+    console.log('Class assignment email result', {
+      recipient: params.recipientEmail,
+      success: result
+    });
+  
+    return result;
+  }
+
   async sendDocumentDeadlineEmail(params: {
     recipientEmail: string;
     recipientName: string;
