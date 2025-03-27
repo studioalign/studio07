@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Eye, PenSquare, Send, AlertCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { supabase } from '../../lib/supabase';
+import { notificationService } from '../../services/notificationService';
 
 interface Recipient {
   id: string;
@@ -14,7 +16,7 @@ interface Recipient {
 interface Document {
   id: string;
   name: string;
-  description: string;
+  description: string | null;
   created_at: string;
   requires_signature: boolean;
   expires_at: string | null;
@@ -27,9 +29,12 @@ interface OwnerDocumentTableProps {
 
 export default function OwnerDocumentTable({ documents }: OwnerDocumentTableProps) {
   const [expandedDocument, setExpandedDocument] = useState<string | null>(null);
+  const [sendingReminder, setSendingReminder] = useState<string | null>(null);
 
   const sendReminder = async (documentId: string, recipientId: string) => {
     try {
+      setSendingReminder(recipientId);
+      
       // Fetch recipient and document details
       const { data: recipientData, error } = await supabase
         .from('document_recipients')
@@ -45,18 +50,13 @@ export default function OwnerDocumentTable({ documents }: OwnerDocumentTableProp
       const { user, document } = recipientData;
   
       // Send in-app and email reminder
-      await notificationService.createNotification({
-        user_id: user.id,
-        studio_id: document.studio_id,
-        type: 'document_reminder',
-        title: 'Document Reminder',
-        message: `Reminder: Please ${document.requires_signature ? 'sign' : 'view'} the document "${document.name}"`,
-        priority: 'high',
-        entity_id: document.id,
-        entity_type: 'document',
-        requires_action: true,
-        email_required: true
-      });
+      await notificationService.notifyDocumentReminder(
+        user.id,
+        document.studio_id,
+        document.name,
+        document.id,
+        document.requires_signature
+      );
   
       // Update last reminder sent timestamp
       await supabase
@@ -68,6 +68,8 @@ export default function OwnerDocumentTable({ documents }: OwnerDocumentTableProp
     } catch (err) {
       console.error('Error sending reminder:', err);
       alert('Failed to send reminder');
+    } finally {
+      setSendingReminder(null);
     }
   };
 
@@ -198,11 +200,15 @@ export default function OwnerDocumentTable({ documents }: OwnerDocumentTableProp
                                       e.stopPropagation();
                                       sendReminder(doc.id, recipient.id);
                                     }}
-                                    className="inline-flex items-center px-2 sm:px-3 py-1 border border-transparent text-xs sm:text-sm leading-5 font-medium rounded-md text-white bg-brand-primary hover:bg-brand-secondary-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-accent"
+                                    disabled={sendingReminder === recipient.id}
+                                    className="inline-flex items-center px-2 sm:px-3 py-1 border border-transparent text-xs sm:text-sm leading-5 font-medium rounded-md text-white bg-brand-primary hover:bg-brand-secondary-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-accent disabled:bg-gray-400"
                                   >
                                     <Send className="w-4 h-4 mr-1" />
                                     <span className="hidden sm:inline">Send Reminder</span>
                                     <span className="sm:hidden">Send</span>
+                                    {sendingReminder === recipient.id && 
+                                      <span className="ml-1 animate-pulse">...</span>
+                                    }
                                   </button>
                                 )}
                               </td>
