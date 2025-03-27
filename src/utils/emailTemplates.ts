@@ -1,4 +1,3 @@
-// src/utils/emailTemplates.ts
 import { formatCurrency, formatDate } from './formatters';
 
 // Base template interface
@@ -204,6 +203,20 @@ export interface DocumentDeadlineParams extends BaseTemplateParams {
   documentName: string;
   requiresSignature: boolean;
   unprocessedCount?: number;
+  dashboardUrl: string;
+}
+
+export interface ClassAssignedParams extends BaseTemplateParams {
+  className: string;
+  scheduleDetails: {
+    startTime: string;
+    endTime: string;
+    dayOfWeek?: string | null;
+    date?: string | null;
+    endDate?: string | null;
+    isRecurring: boolean;
+    location?: string;
+  };
   dashboardUrl: string;
 }
 
@@ -476,6 +489,50 @@ export function documentDeadlineTemplate(params: DocumentDeadlineParams) {
   });
 }
 
+export function classAssignedTemplate(params: ClassAssignedParams) {
+  const formatTimeStr = (time: string) => {
+    return new Date(`2000-01-01T${time}`).toLocaleTimeString([], {
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  };
+  
+  // Format schedule information
+  let scheduleInfo = '';
+  if (params.scheduleDetails.isRecurring && params.scheduleDetails.dayOfWeek) {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayName = days[parseInt(params.scheduleDetails.dayOfWeek)];
+    scheduleInfo = `Weekly on ${dayName}s from ${formatTimeStr(params.scheduleDetails.startTime)} to ${formatTimeStr(params.scheduleDetails.endTime)}`;
+    if (params.scheduleDetails.endDate) {
+      scheduleInfo += ` until ${new Date(params.scheduleDetails.endDate).toLocaleDateString()}`;
+    }
+  } else if (params.scheduleDetails.date) {
+    scheduleInfo = `On ${new Date(params.scheduleDetails.date).toLocaleDateString()} from ${formatTimeStr(params.scheduleDetails.startTime)} to ${formatTimeStr(params.scheduleDetails.endTime)}`;
+  } else {
+    scheduleInfo = `From ${formatTimeStr(params.scheduleDetails.startTime)} to ${formatTimeStr(params.scheduleDetails.endTime)}`;
+  }
+  
+  if (params.scheduleDetails.location) {
+    scheduleInfo += ` at ${params.scheduleDetails.location}`;
+  }
+
+  const content = `
+    <h2>Class Assignment</h2>
+    <p>You have been assigned to teach the class "${params.className}".</p>
+    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 6px; margin: 15px 0;">
+      <p><strong>Schedule:</strong> ${scheduleInfo}</p>
+    </div>
+    <p>Please review the class details and prepare accordingly.</p>
+    <a href="${params.dashboardUrl}" class="btn">View Class Details</a>
+  `;
+
+  return generateBaseTemplate({
+    recipient: params.recipient,
+    content,
+    title: 'Class Assignment'
+  });
+}
+
 // Export all template functions and interfaces
 export const emailTemplates = {
   generateBaseTemplate,
@@ -494,7 +551,8 @@ export const emailTemplates = {
   classCancellation: classCancellationTemplate,
   documentAssigned: documentAssignedTemplate,  // This was the issue - now it's correctly exported
   documentReminder: documentReminderTemplate,
-  documentDeadline: documentDeadlineTemplate
+  documentDeadline: documentDeadlineTemplate,
+  classAssigned: classAssignedTemplate
 };
 
 export default emailTemplates;
