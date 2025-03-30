@@ -20,6 +20,7 @@ interface Payment {
 	payment_date: string;
 	invoice: {
 		id: string;
+		index: number;
 		studio_id: string;
 		parent: {
 			name: string;
@@ -93,6 +94,7 @@ export default function Payments() {
           payment_date,
           invoice:invoices!payments_invoice_id_fkey (
             id,
+            index,
             studio_id,
             parent:users!invoices_parent_id_fkey (
               name
@@ -117,12 +119,12 @@ export default function Payments() {
 	};
 
 	const fetchStats = async (studioId: string) => {
-	    try {
-	        // Get total revenue from completed payments for this studio
-	        const { data: revenueData, error: revenueError } = await supabase
-	            .from("payments")
-	            .select(
-	                `
+		try {
+			// Get total revenue from completed payments for this studio
+			const { data: revenueData, error: revenueError } = await supabase
+				.from("payments")
+				.select(
+					`
 	                id,
 	                amount, 
 	                original_amount,
@@ -135,58 +137,58 @@ export default function Payments() {
 	                    discount_value
 	                )
 	                `
-	            )
-	            .eq("status", "completed");
-	
-	        if (revenueError) throw revenueError;
-	
-	        // Filter out payments where invoice is null or studio_id doesn't match
-	        const filteredRevenueData = (revenueData || []).filter(
-	            (p) => p.invoice && p.invoice.studio_id === studioId
-	        );
-	
-	        // Use the actual amount paid for the total revenue calculation
-	        const totalRevenue =
-	            filteredRevenueData.reduce((sum, p) => sum + p.amount, 0) || 0;
-	
-	        // Get outstanding invoices (sent but not paid) for this studio
-	        const { data: pendingData, error: pendingError } = await supabase
-	            .from("invoices")
-	            .select("total")
-	            .eq("status", "pending")
-	            .eq("studio_id", studioId);
-	
-	        if (pendingError) throw pendingError;
-	
-	        // Get overdue invoices for this studio
-	        const { data: overdueData, error: overdueError } = await supabase
-	            .from("invoices")
-	            .select("total")
-	            .eq("status", "overdue")
-	            .eq("studio_id", studioId);
-	
-	        if (overdueError) throw overdueError;
-	
-	        const outstandingBalance =
-	            pendingData?.reduce((sum, i) => sum + i.total, 0) || 0;
-	        const overdueAmount =
-	            overdueData?.reduce((sum, i) => sum + i.total, 0) || 0;
-	
-	        setStats({
-	            totalRevenue,
-	            outstandingBalance,
-	            outstandingCount: pendingData?.length || 0,
-	            overdueAmount,
-	            overdueCount: overdueData?.length || 0,
-	        });
-	    } catch (err) {
-	        console.error("Error fetching stats:", err);
-	        setError(
-	            err instanceof Error ? err.message : "Failed to fetch statistics"
-	        );
-	    } finally {
-	        setLoading(false);
-	    }
+				)
+				.eq("status", "completed");
+
+			if (revenueError) throw revenueError;
+
+			// Filter out payments where invoice is null or studio_id doesn't match
+			const filteredRevenueData = (revenueData || []).filter(
+				(p) => p.invoice && p.invoice.studio_id === studioId
+			);
+
+			// Use the actual amount paid for the total revenue calculation
+			const totalRevenue =
+				filteredRevenueData.reduce((sum, p) => sum + p.amount, 0) || 0;
+
+			// Get outstanding invoices (sent but not paid) for this studio
+			const { data: pendingData, error: pendingError } = await supabase
+				.from("invoices")
+				.select("total")
+				.eq("status", "pending")
+				.eq("studio_id", studioId);
+
+			if (pendingError) throw pendingError;
+
+			// Get overdue invoices for this studio
+			const { data: overdueData, error: overdueError } = await supabase
+				.from("invoices")
+				.select("total")
+				.eq("status", "overdue")
+				.eq("studio_id", studioId);
+
+			if (overdueError) throw overdueError;
+
+			const outstandingBalance =
+				pendingData?.reduce((sum, i) => sum + i.total, 0) || 0;
+			const overdueAmount =
+				overdueData?.reduce((sum, i) => sum + i.total, 0) || 0;
+
+			setStats({
+				totalRevenue,
+				outstandingBalance,
+				outstandingCount: pendingData?.length || 0,
+				overdueAmount,
+				overdueCount: overdueData?.length || 0,
+			});
+		} catch (err) {
+			console.error("Error fetching stats:", err);
+			setError(
+				err instanceof Error ? err.message : "Failed to fetch statistics"
+			);
+		} finally {
+			setLoading(false);
+		}
 	};
 
 	if (loading) {
@@ -292,7 +294,7 @@ export default function Payments() {
 										<CreditCard className="w-5 h-5 text-brand-primary mr-3" />
 										<div>
 											<p className="font-medium">
-												Invoice #{payment.invoice?.id} -{" "}
+												Invoice-{payment.invoice?.index} -{" "}
 												{payment.invoice?.parent.name}
 											</p>
 											<div className="flex items-center space-x-2 text-sm text-gray-500">
@@ -314,10 +316,12 @@ export default function Payments() {
 										</p>
 										{payment.discount_amount && payment.discount_amount > 0 && (
 											<p className="text-xs text-gray-500">
-												Original: {formatCurrency(payment.original_amount || 0, currency)}
+												Original:{" "}
+												{formatCurrency(payment.original_amount || 0, currency)}
 												{payment.discount_amount > 0 && (
 													<span className="ml-1 text-green-600">
-														(-{formatCurrency(payment.discount_amount, currency)})
+														(-
+														{formatCurrency(payment.discount_amount, currency)})
 													</span>
 												)}
 											</p>

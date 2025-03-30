@@ -27,7 +27,7 @@ interface InvoiceItem {
 
 interface Invoice {
 	id: string;
-	number: string;
+	index: number;
 	status: string;
 	due_date: string;
 	subtotal: number;
@@ -100,7 +100,7 @@ export default function ParentInvoices() {
 			// Type annotation for the expected response
 			type InvoiceData = {
 				id: string;
-				number?: string;
+				index?: number;
 				status: string;
 				due_date: string;
 				subtotal: number;
@@ -169,10 +169,7 @@ export default function ParentInvoices() {
 				const formattedInvoices: Invoice[] = (data as InvoiceData[]).map(
 					(invoice) => ({
 						id: invoice.id,
-						// Generate a number if it doesn't exist in the database
-						number:
-							invoice.number ||
-							`INV-${new Date().getFullYear()}-${invoice.id.slice(0, 6)}`,
+						index: invoice.index || 1,
 						status: invoice.status || "pending",
 						due_date: invoice.due_date || new Date().toISOString(),
 						subtotal: invoice.subtotal || 0,
@@ -291,7 +288,7 @@ export default function ParentInvoices() {
 			const link = document.createElement("a");
 			link.href = invoice.pdf_url;
 			link.target = "_blank";
-			link.download = `Invoice-${invoice.number}.pdf`;
+			link.download = `Invoice-${invoice.index}.pdf`;
 			document.body.appendChild(link);
 			link.click();
 			document.body.removeChild(link);
@@ -398,7 +395,7 @@ export default function ParentInvoices() {
 										<div className="flex items-center space-x-3">
 											{getStatusIcon(invoice.status)}
 											<h3 className="font-medium text-gray-900">
-												{invoice.number}
+												Invoice-{invoice.index}
 											</h3>
 											<span
 												className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(
@@ -423,16 +420,20 @@ export default function ParentInvoices() {
 									</div>
 									<div className="text-right">
 										<div className="space-y-1">
-										{invoice.discount_value > 0 && (
-											<span className="text-sm text-green-600">
-												{invoice.discount_type === "percentage"
-												? `${invoice.discount_value}% off`
-												: `${formatCurrency(invoice.discount_value, currency)} off`}
-												{invoice.discount_reason && ` - ${invoice.discount_reason}`}
-											</span>
+											{invoice.discount_value > 0 && (
+												<span className="text-sm text-green-600">
+													{invoice.discount_type === "percentage"
+														? `${invoice.discount_value}% off`
+														: `${formatCurrency(
+																invoice.discount_value,
+																currency
+														  )} off`}
+													{invoice.discount_reason &&
+														` - ${invoice.discount_reason}`}
+												</span>
 											)}
 											<p className="text-2xl font-bold text-brand-primary">
-											{formatCurrency(invoice.total, currency)}
+												{formatCurrency(invoice.total, currency)}
 											</p>
 											{invoice.discount_reason && (
 												<p className="text-sm text-gray-500">

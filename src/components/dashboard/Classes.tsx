@@ -1,4 +1,3 @@
-import React from 'react';
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Plus, Edit2, Trash2, X } from "lucide-react";
 import WeeklyCalendar from "./WeeklyCalendar";
@@ -65,16 +64,16 @@ export default React.memo(function Classes() {
 	const { timezone } = useLocalization();
 
 	const fetchClassInstances = useCallback(async () => {
-	  // Prevent multiple simultaneous queries
-	  if (queryInProgress) return;
-	  
-	  try {
-	    setQueryInProgress(true);
-	
-	    const { data, error } = await supabase
-	      .from("classes")
-	      .select(
-	        `
+		// Prevent multiple simultaneous queries
+		if (queryInProgress) return;
+
+		try {
+			setQueryInProgress(true);
+
+			const { data, error } = await supabase
+				.from("classes")
+				.select(
+					`
 	        id,
 	        name,
 	        status,
@@ -102,87 +101,90 @@ export default React.memo(function Classes() {
 	          name
 	        )
 	      `
-	      )
-	      .eq("studio_id", profile?.studio?.id || "")
-	      .order("date", { ascending: true });
-	
-	    if (error) throw error;
-	
-	    // For parent users, fetch enrolled students for each class
-	    if (profile?.role === "parent") {
-	      const instancesWithEnrollments = await Promise.all(
-	        data.map(async (instance) => {
-	          try {
-	            const students = await getEnrolledStudents(
-	              instance.id,
-	              profile?.id
-	            );
-	            return {
-	              ...instance,
-	              enrolledStudents: students.map((s) => s.name),
-	            };
-	          } catch (err) {
-	            console.error(`Error fetching enrollments for class ${instance.id}:`, err);
-	            return {
-	              ...instance,
-	              enrolledStudents: [],
-	            };
-	          }
-	        })
-	      );
-	      setClassInstances(instancesWithEnrollments);
-	    } else {
-	      setClassInstances(data);
-	    }
-	  } catch (err) {
-	    console.error("Error fetching class_instances:", err);
-	    setError(err instanceof Error ? err.message : "Failed to fetch classes");
-	  } finally {
-	    setQueryInProgress(false);
-	    setLoading(false);
-	  }
+				)
+				.eq("studio_id", profile?.studio?.id || "")
+				.order("date", { ascending: true });
+
+			if (error) throw error;
+
+			// For parent users, fetch enrolled students for each class
+			if (profile?.role === "parent") {
+				const instancesWithEnrollments = await Promise.all(
+					data.map(async (instance) => {
+						try {
+							const students = await getEnrolledStudents(
+								instance.id,
+								profile?.id
+							);
+							return {
+								...instance,
+								enrolledStudents: students.map((s) => s.name),
+							};
+						} catch (err) {
+							console.error(
+								`Error fetching enrollments for class ${instance.id}:`,
+								err
+							);
+							return {
+								...instance,
+								enrolledStudents: [],
+							};
+						}
+					})
+				);
+				setClassInstances(instancesWithEnrollments);
+			} else {
+				setClassInstances(data);
+			}
+		} catch (err) {
+			console.error("Error fetching class_instances:", err);
+			setError(err instanceof Error ? err.message : "Failed to fetch classes");
+		} finally {
+			setQueryInProgress(false);
+			setLoading(false);
+		}
 	}, [profile?.studio?.id, profile?.role, profile?.id]);
 
 	// Set up realtime subscription to classes
 	useEffect(() => {
-	  if (!profile?.studio?.id) return;
-	  
-	  // Only fetch data when component mounts or relevant profile data changes
-	  fetchClassInstances();
-	  
-	  // Set up a subscription to class changes
-	  const classSubscription = supabase
-	    .channel('classes-changes')
-	    .on(
-	      'postgres_changes',
-	      {
-	        event: '*',
-	        schema: 'public',
-	        table: 'classes',
-	        filter: `studio_id=eq.${profile.studio.id}`
-	      },
-	      (payload) => {
-	        console.log('Class change detected:', payload);
-	        fetchClassInstances();
-	      }
-	    )
-	    .subscribe();
-	  
-	  // Return cleanup function
-	  return () => {
-	    classSubscription.unsubscribe();
-	  };
+		if (!profile?.studio?.id) return;
+
+		// Only fetch data when component mounts or relevant profile data changes
+		fetchClassInstances();
+
+		// Set up a subscription to class changes
+		const classSubscription = supabase
+			.channel("classes-changes")
+			.on(
+				"postgres_changes",
+				{
+					event: "*",
+					schema: "public",
+					table: "classes",
+					filter: `studio_id=eq.${profile.studio.id}`,
+				},
+				(payload) => {
+					console.log("Class change detected:", payload);
+					fetchClassInstances();
+				}
+			)
+			.subscribe();
+
+		// Return cleanup function
+		return () => {
+			classSubscription.unsubscribe();
+		};
 	}, [fetchClassInstances, profile?.studio?.id]);
-	
+
 	// Also update the useEffect that uses fetchClassInstances
 	useEffect(() => {
-	    // Only fetch data when component mounts or relevant profile data changes
-	    fetchClassInstances();
-	    
-	    // Return cleanup function to cancel any pending operations
-	    return () => {
-	        // If you had any subscriptions or timeouts, cancel them here
-	    };
+		// Only fetch data when component mounts or relevant profile data changes
+		fetchClassInstances();
+
+		// Return cleanup function to cancel any pending operations
+		return () => {
+			// If you had any subscriptions or timeouts, cancel them here
+		};
 	}, [fetchClassInstances]); // Include fetchClassInstances as a dependency
 
 	useEffect(() => {
@@ -312,33 +314,35 @@ export default React.memo(function Classes() {
 		}
 	};
 
-	const [parentStudents, setParentStudents] = useState<{ id: string; label: string }[]>([]);
+	const [parentStudents, setParentStudents] = useState<
+		{ id: string; label: string }[]
+	>([]);
 
 	// Add this useEffect to fetch students for parent users
 	useEffect(() => {
-	const fetchParentStudents = async () => {
-		if (profile?.role !== "parent" || !profile?.id) return;
-		
-		try {
-		const { data, error } = await supabase
-			.from("students")
-			.select("id, name")
-			.eq("parent_id", profile.id);
-			
-		if (error) throw error;
-		
-		setParentStudents(
-			(data || []).map(student => ({
-			id: student.id,
-			label: student.name
-			}))
-		);
-		} catch (err) {
-		console.error("Error fetching parent students:", err);
-		}
-	};
-	
-	fetchParentStudents();
+		const fetchParentStudents = async () => {
+			if (profile?.role !== "parent" || !profile?.id) return;
+
+			try {
+				const { data, error } = await supabase
+					.from("students")
+					.select("id, name")
+					.eq("parent_id", profile.id);
+
+				if (error) throw error;
+
+				setParentStudents(
+					(data || []).map((student) => ({
+						id: student.id,
+						label: student.name,
+					}))
+				);
+			} catch (err) {
+				console.error("Error fetching parent students:", err);
+			}
+		};
+
+		fetchParentStudents();
 	}, [profile?.id, profile?.role]);
 
 	// **Utility Functions for Formatting**
@@ -363,13 +367,12 @@ export default React.memo(function Classes() {
 	};
 
 	const [hasLoadedInitially, setHasLoadedInitially] = useState(false);
-  
+
 	useEffect(() => {
-	    // Only fetch on first load
-	    if (!hasLoadedInitially) {
-	      fetchClassInstances()
-	        .then(() => setHasLoadedInitially(true));
-	    }
+		// Only fetch on first load
+		if (!hasLoadedInitially) {
+			fetchClassInstances().then(() => setHasLoadedInitially(true));
+		}
 	}, [hasLoadedInitially, fetchClassInstances]);
 
 	// **Conditional Rendering Based on Loading and Error States**
@@ -518,25 +521,25 @@ export default React.memo(function Classes() {
 
 			{/* Book Drop-In Modal */}
 			{bookingClass && profile?.role === "parent" && (
-			<BookDropInModal
-				classInfo={{
-				id: bookingClass.id,
-				name: bookingClass.name,
-				date: bookingClass.date,
-				start_time: bookingClass.start_time,
-				end_time: bookingClass.end_time,
-				drop_in_price: bookingClass.drop_in_price || 0,
-				capacity: bookingClass.capacity || 0,
-				booked_count: bookingClass.booked_count || 0,
-				teacher_id: bookingClass.teacher ? bookingClass.teacher.id : ""
-				}}
-				students={parentStudents}
-				onClose={() => setBookingClass(null)}
-				onSuccess={() => {
-				setBookingClass(null);
-				fetchClassInstances();
-				}}
-			/>
+				<BookDropInModal
+					classInfo={{
+						id: bookingClass.id,
+						name: bookingClass.name,
+						date: bookingClass.date,
+						start_time: bookingClass.start_time,
+						end_time: bookingClass.end_time,
+						drop_in_price: bookingClass.drop_in_price || 0,
+						capacity: bookingClass.capacity || 0,
+						booked_count: bookingClass.booked_count || 0,
+						teacher_id: bookingClass.teacher ? bookingClass.teacher.id : "",
+					}}
+					students={parentStudents}
+					onClose={() => setBookingClass(null)}
+					onSuccess={() => {
+						setBookingClass(null);
+						fetchClassInstances();
+					}}
+				/>
 			)}
 		</div>
 	);

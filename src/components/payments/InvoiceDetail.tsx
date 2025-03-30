@@ -21,6 +21,7 @@ interface InvoiceItem {
 
 interface Invoice {
 	id: string;
+	index: number;
 	number: string;
 	status: string;
 	due_date: string;
@@ -64,12 +65,12 @@ export default function InvoiceDetail({
 		// If status wasn't already "paid" and is now "paid"
 		if (previousStatusRef.current !== "paid" && invoice.status === "paid") {
 			console.log("Invoice status changed to paid, sending notifications");
-			
+
 			const sendPaymentNotifications = async () => {
 				try {
 					// Use studio_id from invoice or from current user profile
 					const studioId = invoice.studio_id || profile?.studio?.id;
-					
+
 					if (!studioId) {
 						console.error("No studio ID available for notifications");
 						return;
@@ -101,10 +102,17 @@ export default function InvoiceDetail({
 
 			sendPaymentNotifications();
 		}
-		
+
 		// Update ref for next render
 		previousStatusRef.current = invoice.status;
-	}, [invoice.status, invoice.id, invoice.total, invoice.parent, invoice.studio_id, profile]);
+	}, [
+		invoice.status,
+		invoice.id,
+		invoice.total,
+		invoice.parent,
+		invoice.studio_id,
+		profile,
+	]);
 
 	const getStatusColor = (status: string) => {
 		switch (status) {
@@ -125,7 +133,7 @@ export default function InvoiceDetail({
 				<div>
 					<div className="flex items-center space-x-4">
 						<h2 className="text-2xl font-bold text-brand-primary">
-							{invoice.number}
+							Invoice-{invoice.index}
 						</h2>
 						<span
 							className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(

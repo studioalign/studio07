@@ -29,6 +29,7 @@ interface InvoiceItem {
 
 interface Invoice {
   id: string;
+  index: number;
   parent_id: string;
   due_date: string;
   notes: string | null;

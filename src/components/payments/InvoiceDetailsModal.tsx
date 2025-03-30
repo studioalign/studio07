@@ -6,6 +6,7 @@ import { formatCurrency } from "../../utils/formatters";
 interface InvoiceDetailsModalProps {
 	invoice: {
 		id: string;
+		index: number;
 		number: string;
 		status: string;
 		due_date: string;
@@ -67,7 +68,7 @@ export default function InvoiceDetailsModal({
 			const link = document.createElement("a");
 			link.href = invoice.pdf_url;
 			link.target = "_blank";
-			link.download = `Invoice-${invoice.number}.pdf`;
+			link.download = `Invoice-${invoice.index}.pdf`;
 			document.body.appendChild(link);
 			link.click();
 			document.body.removeChild(link);
@@ -96,7 +97,7 @@ export default function InvoiceDetailsModal({
 					<div className="space-y-1">
 						<div className="flex items-center gap-3">
 							<h2 className="text-2xl font-semibold text-brand-primary">
-								Invoice {invoice.number}
+								Invoice-{invoice.index}
 							</h2>
 							<span
 								className={`px-3 py-1 text-sm font-medium rounded-full ${
@@ -166,7 +167,7 @@ export default function InvoiceDetailsModal({
 								<h3 className="text-lg font-medium">Invoice Details</h3>
 							</div>
 							<div className="text-sm text-gray-600 space-y-2">
-								<p>Invoice Number: {invoice.number}</p>
+								<p>Invoice-{invoice.index}</p>
 								<p>
 									Issue Date: {new Date(invoice.due_date).toLocaleDateString()}
 								</p>
@@ -298,8 +299,7 @@ export default function InvoiceDetailsModal({
 									className="flex items-center px-8 py-4 bg-brand-primary text-white rounded-xl hover:bg-brand-secondary-400 transform hover:scale-105 transition-all duration-200"
 								>
 									<CreditCard className="w-5 h-5 mr-3" />
-									Pay{" "}
-									{formatCurrency(invoice.total, currency)}
+									Pay {formatCurrency(invoice.total, currency)}
 								</button>
 							) : (
 								<div className="text-right">

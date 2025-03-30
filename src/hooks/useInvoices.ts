@@ -12,6 +12,7 @@ export type InvoiceStatus =
 
 export interface Invoice {
 	id: string;
+	index: number;
 	status: InvoiceStatus;
 	due_date: string;
 	subtotal: number;
@@ -80,6 +81,7 @@ export function useInvoices({ status, search }: UseInvoicesOptions = {}) {
 				.select(
 					`
           id,
+          index,
           status,
           due_date,
           subtotal,

@@ -263,13 +263,14 @@ export default function Invoices() {
 										<div className="flex items-center">
 											<FileText className="w-5 h-5 text-brand-primary mr-3" />
 											<div className="text-left">
-												<p className="font-medium">{invoice.id}</p>
+												<p className="font-medium">invoice-{invoice.index}</p>
 												<p className="text-sm text-gray-500">
 													{invoice.parent.name}
 												</p>
 												{invoice.is_recurring && (
 													<p className="text-xs text-blue-600 mt-1">
-														↻ Recurring {invoice.recurring_interval.toLowerCase()}
+														↻ Recurring{" "}
+														{invoice.recurring_interval.toLowerCase()}
 													</p>
 												)}
 											</div>
@@ -278,11 +279,17 @@ export default function Invoices() {
 											<div className="text-right">
 												<p className="font-medium">
 													{formatCurrency(invoice.total, currency)}
-													{invoice.discount_value && invoice.discount_value > 0 ? (
+													{invoice.discount_value &&
+													invoice.discount_value > 0 ? (
 														<span className="text-xs ml-1 text-green-600">
-															({invoice.discount_type === "percentage" 
-																? `${invoice.discount_value}% off` 
-																: `${formatCurrency(invoice.discount_value, currency)} off`})
+															(
+															{invoice.discount_type === "percentage"
+																? `${invoice.discount_value}% off`
+																: `${formatCurrency(
+																		invoice.discount_value,
+																		currency
+																  )} off`}
+															)
 														</span>
 													) : null}
 												</p>

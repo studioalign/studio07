@@ -6,6 +6,7 @@ import { supabase } from "../lib/supabase";
 // Define a proper invoice interface
 interface Invoice {
 	id: string;
+	index: number;
 	status: string;
 	total: number;
 	parent?: {

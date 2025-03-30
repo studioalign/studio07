@@ -9,6 +9,7 @@ import { useLocalization } from "../../contexts/LocalizationContext";
 
 interface Invoice {
 	id: string;
+	index: number;
 	status: string;
 	due_date: string;
 	subtotal: number;
