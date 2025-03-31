@@ -80,40 +80,40 @@ export function useInvoices({ status, search }: UseInvoicesOptions = {}) {
 				.from("invoices")
 				.select(
 					`
-          id,
-          index,
-          status,
-          due_date,
-          subtotal,
-          tax,
-          total,
-          created_at,
-          is_recurring,
-          recurring_interval,
-          recurring_end_date,
-          discount_type,
-          discount_value,
-          discount_reason,
-          pdf_url,
-          stripe_invoice_id,
-          paid_at,
-          items:invoice_items (
-            id,
-            description,
-            quantity,
-            unit_price,
-            total,
-            type,
-            student:students (
-              id,
-              name
-            )
-          ),
-          parent:users (
-            name,
-            email
-          )
-        `
+				id,
+				index,
+				status,
+				due_date,
+				subtotal,
+				tax,
+				total,
+				created_at,
+				is_recurring,
+				recurring_interval,
+				recurring_end_date,
+				discount_type,
+				discount_value,
+				discount_reason,
+				pdf_url,
+				stripe_invoice_id,
+				paid_at,
+				items:invoice_items (
+					id,
+					description,
+					quantity,
+					unit_price,
+					total,
+					type,
+					student:students (
+					id,
+					name
+					)
+				),
+				parent:users (
+					name,
+					email
+				)
+				`
 				)
 				.eq("studio_id", profile?.studio?.id + "")
 				.order("created_at", { ascending: false });

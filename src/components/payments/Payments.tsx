@@ -16,7 +16,7 @@ interface Payment {
 	recurring_interval?: string | null;
 	payment_method: string;
 	status: string;
-	transaction_id: string | null;
+	stripe_payment_intent_id: string | null;
 	payment_date: string;
 	invoice: {
 		id: string;
@@ -90,7 +90,7 @@ export default function Payments() {
           recurring_interval,
           payment_method,
           status,
-          transaction_id,
+          stripe_payment_intent_id,
           payment_date,
           invoice:invoices!payments_invoice_id_fkey (
             id,

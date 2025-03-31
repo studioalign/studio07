@@ -129,7 +129,6 @@ serve(async (req) => {
 						discount_amount: invoice.subtotal - invoice.total,
 						payment_method: "card",
 						status: "completed",
-						transaction_id: session.id,
 						payment_date: new Date().toISOString(),
 						stripe_payment_intent_id: session.payment_intent,
 						stripe_invoice_id: stripeInvoiceId,
@@ -256,13 +255,12 @@ serve(async (req) => {
 				}
 
 				// Check if a payment record already exists
-				const { data: existingPayment, error: paymentCheckError } =
-					await supabaseClient
-						.from("payments")
-						.select("id")
-						.eq("invoice_id", invoice.id)
-						.eq("status", "completed")
-						.single();
+				const { data: existingPayment } = await supabaseClient
+					.from("payments")
+					.select("id")
+					.eq("invoice_id", invoice.id)
+					.eq("status", "completed")
+					.single();
 
 				if (!existingPayment) {
 					// Create payment record - EXPLICITLY SPECIFY ONLY NECESSARY FIELDS
@@ -273,7 +271,6 @@ serve(async (req) => {
 						discount_amount: invoice.subtotal - invoice.total,
 						payment_method: "card",
 						status: "completed",
-						transaction_id: stripeInvoice.id,
 						payment_date: new Date().toISOString(),
 						stripe_payment_intent_id: stripeInvoice.payment_intent,
 						stripe_invoice_id: stripeInvoice.id,
@@ -338,7 +335,6 @@ serve(async (req) => {
 							discount_amount: invoice.subtotal - invoice.total,
 							payment_method: "card",
 							status: "failed",
-							transaction_id: stripeInvoice.id,
 							payment_date: new Date().toISOString(),
 							stripe_payment_intent_id: stripeInvoice.payment_intent,
 							stripe_invoice_id: stripeInvoice.id,
@@ -399,7 +395,6 @@ serve(async (req) => {
 					amount: finalAmount,
 					payment_method: "card",
 					status: "failed",
-					transaction_id: paymentIntent.id,
 					payment_date: new Date().toISOString(),
 					stripe_payment_intent_id: paymentIntent.id,
 					is_recurring: invoice.is_recurring || false,

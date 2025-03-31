@@ -16,6 +16,10 @@ interface Payment {
 	status: string;
 	transaction_id: string | null;
 	payment_date: string;
+	invoice: {
+		id: string;
+		studio_id: string;
+	};
 	refunds: {
 		id: string;
 		amount: number;
@@ -50,24 +54,28 @@ export default function PaymentHistory({
 				.from("payments")
 				.select(
 					`
-          id,
-          amount,
-          original_amount,
-          discount_amount,
-          is_recurring,
-          recurring_interval,
-          payment_method,
-          status,
-          transaction_id,
-          payment_date,
-          refunds (
-            id,
-            amount,
-            status,
-            reason,
-            refund_date
-          )
-        `
+					id,
+					amount,
+					original_amount,
+					discount_amount,
+					is_recurring,
+					recurring_interval,
+					payment_method,
+					status,
+					stripe_payment_intent_id,
+					payment_date,
+					invoice:invoices!payments_invoice_id_fkey (
+						id,
+						studio_id
+					),
+					refunds (
+						id,
+						amount,
+						status,
+						reason,
+						refund_date
+					)
+					`
 				)
 				.eq("invoice_id", invoiceId)
 				.order("payment_date", { ascending: false });
@@ -154,7 +162,8 @@ export default function PaymentHistory({
 									</p>
 									{payment.discount_amount && payment.discount_amount > 0 && (
 										<p className="text-xs text-gray-500">
-											Original: {formatCurrency(payment.original_amount || 0, currency)}
+											Original:{" "}
+											{formatCurrency(payment.original_amount || 0, currency)}
 											{payment.discount_amount > 0 && (
 												<span className="ml-1 text-green-600">
 													(-{formatCurrency(payment.discount_amount, currency)})
@@ -179,7 +188,7 @@ export default function PaymentHistory({
 
 							{payment.transaction_id && (
 								<p className="text-sm text-gray-500 mb-2">
-									Transaction ID: {payment.transaction_id}
+									Transaction ID: {payment.stripe_payment_intent_id}
 								</p>
 							)}
 
