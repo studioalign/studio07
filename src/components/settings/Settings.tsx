@@ -243,7 +243,7 @@ export default function Settings() {
     }
 
     // Force redirection to sign-in page
-    window.location.href = '/signin';
+    window.location.href = '/';
 
   } catch (err) {
     console.error('Error deleting account:', err);
