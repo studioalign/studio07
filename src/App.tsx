@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import SignupForm from "./components/SignupForm";
 import SigninForm from "./components/SigninForm";
 import ForgotPasswordForm from "./components/ForgotPasswordForm";
+import ResetPasswordForm from "./components/ResetPasswordForm";
 import DashboardLayout from "./components/dashboard/DashboardLayout";
 import Classes from "./components/dashboard/Classes";
 import StudioInfo from "./components/dashboard/StudioInfo";
@@ -174,6 +175,14 @@ const DashboardRoutes = React.memo(() => {
 							<MyStudents />
 						</PrivateRoute>
 					}
+				/>
+				<Route
+				  path="/reset-password"
+				  element={
+				    <div className="min-h-screen bg-gradient-to-br from-brand-secondary-400 to-brand-primary flex items-center justify-center p-4">
+				      <ResetPasswordForm />
+				    </div>
+				  }
 				/>
 			</Route>
 		</Routes>
