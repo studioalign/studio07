@@ -224,20 +224,23 @@ export default function Settings() {
       .from('users')
       .update({
         name: 'Deleted User',
-        email: deletedEmail,  // Use a unique generated email
+        email: deletedEmail,
         photo_url: null,
         phone: null,
-        role: 'deleted',
-        studio_id: null,  // Remove studio association
-        status: 'deleted',
+        role: 'deleted',  // Now using the new 'deleted' role
+        studio_id: null,
         deleted_at: new Date().toISOString()
       })
       .eq('id', profile.id);
 
     if (updateError) throw updateError;
 
-    // Optional: Invalidate the user's sessions
-    const { error: signOutError } = await supabase.auth.signOut();
+    // Attempt to sign out and redirect
+    try {
+      await supabase.auth.signOut();
+    } catch (signOutError) {
+      console.warn('Sign out error:', signOutError);
+    }
 
     // Force redirection to sign-in page
     window.location.href = '/signin';
