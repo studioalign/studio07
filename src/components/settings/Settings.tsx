@@ -203,13 +203,32 @@ export default function Settings() {
       throw new Error('User not authenticated');
     }
 
-    // Instead of deleting, update the user record
+    // For parents, delete associated students first
+    if (profile.role === 'parent') {
+      const { error: studentDeleteError } = await supabase
+        .from('students')
+        .delete()
+        .eq('parent_id', profile.id);
+
+      if (studentDeleteError) {
+        console.error('Error deleting students:', studentDeleteError);
+        throw studentDeleteError;
+      }
+    }
+
+    // Generate a unique email for deleted users to maintain uniqueness
+    const deletedEmail = `deleted_user_${profile.id}_${Date.now()}@deleted.studioalign.com`;
+
+    // Update user record with deletion information
     const { error: updateError } = await supabase
       .from('users')
       .update({
         name: 'Deleted User',
-        email: null,
+        email: deletedEmail,  // Use a unique generated email
         photo_url: null,
+        phone: null,
+        role: 'deleted',
+        studio_id: null,  // Remove studio association
         status: 'deleted',
         deleted_at: new Date().toISOString()
       })
@@ -217,10 +236,10 @@ export default function Settings() {
 
     if (updateError) throw updateError;
 
-    // Sign out the user
-    await supabase.auth.signOut();
-    
-    // Redirect to sign-in page
+    // Optional: Invalidate the user's sessions
+    const { error: signOutError } = await supabase.auth.signOut();
+
+    // Force redirection to sign-in page
     window.location.href = '/signin';
 
   } catch (err) {
