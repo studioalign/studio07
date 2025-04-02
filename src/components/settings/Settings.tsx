@@ -207,34 +207,53 @@ export default function Settings() {
       if (profile.role === 'owner' && profile.studio?.id) {
         if (deleteStudioWithAccount) {
           // Delete the entire studio
+          console.log('Deleting entire studio and owner account');
           const { data, error } = await supabase.rpc('delete_studio', {
             p_studio_id: profile.studio.id,
             p_owner_id: profile.id
           });
           
-          if (error) throw error;
+          if (error) {
+            console.error('Error in delete_studio RPC:', error);
+            throw error;
+          }
+          
+          console.log('Studio deletion result:', data);
         } else {
           // Just delete the owner's account
           if (!hasOtherOwners) {
             throw new Error('Cannot keep studio open without other owners. Please assign another owner first.');
           }
           
+          console.log('Deleting only owner account');
           const { data, error } = await supabase.rpc('delete_user_account', {
             p_user_id: profile.id
           });
           
-          if (error) throw error;
+          if (error) {
+            console.error('Error in delete_user_account RPC:', error);
+            throw error;
+          }
+          
+          console.log('User account deletion result:', data);
         }
       } else {
         // For non-owners, just delete the user account
+        console.log('Deleting non-owner user account');
         const { data, error } = await supabase.rpc('delete_user_account', {
           p_user_id: profile.id
         });
         
-        if (error) throw error;
+        if (error) {
+          console.error('Error in delete_user_account RPC:', error);
+          throw error;
+        }
+        
+        console.log('User account deletion result:', data);
       }
       
-      // Sign out after successful deletion
+      // Account was successfully deleted, now sign out
+      console.log('Account deleted successfully, signing out');
       await signOut();
       
     } catch (err) {
