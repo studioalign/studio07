@@ -227,7 +227,7 @@ export default function Settings() {
         email: deletedEmail,
         photo_url: null,
         phone: null,
-        role: 'deleted',  // Now using the new 'deleted' role
+        role: 'deleted',
         studio_id: null,
         deleted_at: new Date().toISOString()
       })
@@ -235,15 +235,22 @@ export default function Settings() {
 
     if (updateError) throw updateError;
 
-    // Attempt to sign out and redirect
-    try {
-      await supabase.auth.signOut();
-    } catch (signOutError) {
-      console.warn('Sign out error:', signOutError);
+    // Disable the user in Supabase Auth
+    const { error: authError } = await supabase.auth.updateUser({
+      email: deletedEmail,
+      password: crypto.randomUUID() // Generate a random password
+    });
+
+    if (authError) {
+      console.error('Auth update error:', authError);
+      throw authError;
     }
 
+    // Sign out the user
+    await supabase.auth.signOut();
+
     // Force redirection to sign-in page
-    window.location.href = '/';
+    window.location.href = '/signin';
 
   } catch (err) {
     console.error('Error deleting account:', err);
