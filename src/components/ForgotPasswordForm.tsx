@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { KeyRound, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 import FormInput from './FormInput';
 
 export default function ForgotPasswordForm() {
@@ -15,11 +16,25 @@ export default function ForgotPasswordForm() {
     setError(null);
     
     try {
-      // Mock success - in real implementation, this would call Supabase auth.resetPasswordForEmail()
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Use Supabase's password reset method
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        // Specify the redirect URL for password reset 
+        // This should be a page in your app that handles password reset
+        redirectTo: `${window.location.origin}/reset-password`
+      });
+
+      if (error) {
+        throw error;
+      }
+
       setSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send reset email');
+      console.error('Password reset error:', err);
+      setError(
+        err instanceof Error 
+          ? err.message 
+          : 'Failed to send reset email. Please try again.'
+      );
     } finally {
       setIsSubmitting(false);
     }
