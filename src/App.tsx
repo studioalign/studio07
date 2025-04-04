@@ -67,6 +67,14 @@ const DashboardRoutes = React.memo(() => {
 				}
 			/>
 			<Route
+				path="/reset-password"
+				element={
+					<div className="min-h-screen bg-gradient-to-br from-brand-secondary-400 to-brand-primary flex items-center justify-center p-4">
+						<ResetPasswordForm />
+					</div>
+				}
+			/>
+			<Route
 				path="/onboarding"
 				element={
 					<PrivateRoute requiredRole="owner">
@@ -175,14 +183,6 @@ const DashboardRoutes = React.memo(() => {
 							<MyStudents />
 						</PrivateRoute>
 					}
-				/>
-				<Route
-				  path="/reset-password"
-				  element={
-				    <div className="min-h-screen bg-gradient-to-br from-brand-secondary-400 to-brand-primary flex items-center justify-center p-4">
-				      <ResetPasswordForm />
-				    </div>
-				  }
 				/>
 			</Route>
 		</Routes>
