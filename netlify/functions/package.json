@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Netlify Functions for Studio Align",
   "dependencies": {
-    "@sendgrid/mail": "^7.7.0",
+    "@sendgrid/mail": "^8.1.1",
     "@supabase/supabase-js": "^2.33.1",
     "stripe": "^12.5.0"
   },
