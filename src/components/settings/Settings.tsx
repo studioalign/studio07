@@ -235,10 +235,35 @@ export default function Settings() {
 
     if (updateError) throw updateError;
 
+    // Generate a complex password that meets all requirements
+    const generateComplexPassword = () => {
+      const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+      const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const numbers = '0123456789';
+      const special = '!@#$%^&*()_+-=[]{};\':"|<>?,./`~';
+      
+      // Get one of each required character type
+      const getRandomChar = (str: string) => str.charAt(Math.floor(Math.random() * str.length));
+      const requiredChars = [
+        getRandomChar(lowercase),
+        getRandomChar(uppercase),
+        getRandomChar(numbers),
+        getRandomChar(special)
+      ];
+      
+      // Add more random characters to make it longer (20 chars total)
+      const allChars = lowercase + uppercase + numbers + special;
+      const remainingChars = Array.from({ length: 16 }, () => getRandomChar(allChars));
+      
+      // Combine and shuffle
+      const shuffled = [...requiredChars, ...remainingChars].sort(() => 0.5 - Math.random());
+      return shuffled.join('');
+    };
+
     // Disable the user in Supabase Auth
     const { error: authError } = await supabase.auth.updateUser({
       email: deletedEmail,
-      password: crypto.randomUUID() // Generate a random password
+      password: generateComplexPassword()
     });
 
     if (authError) {
