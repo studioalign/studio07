@@ -57,7 +57,7 @@ export default function ResetPasswordForm() {
 
       // Redirect to sign-in after a short delay
       setTimeout(() => {
-        navigate('/signin');
+        navigate('/'); // Changed from '/signin' to '/' to match your root login page
       }, 3000);
 
     } catch (err) {
