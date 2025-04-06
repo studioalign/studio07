@@ -3,6 +3,7 @@ import { Save, Bell, Shield, AlertTriangle, Lock, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import FormInput from '../FormInput';
+import TwoFactorSettings from './TwoFactorSettings'; // Import the new component
 
 export default function Settings() {
   const { profile, signOut } = useAuth();
@@ -190,100 +191,100 @@ export default function Settings() {
 
   // Handle account deletion
   const handleDeleteAccount = async () => {
-  if (deleteConfirmText !== 'delete my account') {
-    setError('Please type "delete my account" to confirm');
-    return;
-  }
-
-  setIsSubmitting(true);
-  setError(null);
-
-  try {
-    if (!profile?.id) {
-      throw new Error('User not authenticated');
+    if (deleteConfirmText !== 'delete my account') {
+      setError('Please type "delete my account" to confirm');
+      return;
     }
 
-    // For parents, delete associated students first
-    if (profile.role === 'parent') {
-      const { error: studentDeleteError } = await supabase
-        .from('students')
-        .delete()
-        .eq('parent_id', profile.id);
+    setIsSubmitting(true);
+    setError(null);
 
-      if (studentDeleteError) {
-        console.error('Error deleting students:', studentDeleteError);
-        throw studentDeleteError;
+    try {
+      if (!profile?.id) {
+        throw new Error('User not authenticated');
       }
-    }
 
-    // Generate a unique email for deleted users to maintain uniqueness
-    const deletedEmail = `deleted_user_${profile.id}_${Date.now()}@deleted.studioalign.com`;
+      // For parents, delete associated students first
+      if (profile.role === 'parent') {
+        const { error: studentDeleteError } = await supabase
+          .from('students')
+          .delete()
+          .eq('parent_id', profile.id);
 
-    // Update user record with deletion information
-    const { error: updateError } = await supabase
-      .from('users')
-      .update({
-        name: 'Deleted User',
+        if (studentDeleteError) {
+          console.error('Error deleting students:', studentDeleteError);
+          throw studentDeleteError;
+        }
+      }
+
+      // Generate a unique email for deleted users to maintain uniqueness
+      const deletedEmail = `deleted_user_${profile.id}_${Date.now()}@deleted.studioalign.com`;
+
+      // Update user record with deletion information
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({
+          name: 'Deleted User',
+          email: deletedEmail,
+          photo_url: null,
+          phone: null,
+          role: 'deleted',
+          studio_id: null,
+          deleted_at: new Date().toISOString()
+        })
+        .eq('id', profile.id);
+
+      if (updateError) throw updateError;
+
+      // Generate a complex password that meets all requirements
+      const generateComplexPassword = () => {
+        const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+        const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const numbers = '0123456789';
+        const special = '!@#$%^&*()_+-=[]{};\':"|<>?,./`~';
+        
+        // Get one of each required character type
+        const getRandomChar = (str: string) => str.charAt(Math.floor(Math.random() * str.length));
+        const requiredChars = [
+          getRandomChar(lowercase),
+          getRandomChar(uppercase),
+          getRandomChar(numbers),
+          getRandomChar(special)
+        ];
+        
+        // Add more random characters to make it longer (20 chars total)
+        const allChars = lowercase + uppercase + numbers + special;
+        const remainingChars = Array.from({ length: 16 }, () => getRandomChar(allChars));
+        
+        // Combine and shuffle
+        const shuffled = [...requiredChars, ...remainingChars].sort(() => 0.5 - Math.random());
+        return shuffled.join('');
+      };
+
+      // Disable the user in Supabase Auth
+      const { error: authError } = await supabase.auth.updateUser({
         email: deletedEmail,
-        photo_url: null,
-        phone: null,
-        role: 'deleted',
-        studio_id: null,
-        deleted_at: new Date().toISOString()
-      })
-      .eq('id', profile.id);
+        password: generateComplexPassword()
+      });
 
-    if (updateError) throw updateError;
+      if (authError) {
+        console.error('Auth update error:', authError);
+        throw authError;
+      }
 
-    // Generate a complex password that meets all requirements
-    const generateComplexPassword = () => {
-      const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-      const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-      const numbers = '0123456789';
-      const special = '!@#$%^&*()_+-=[]{};\':"|<>?,./`~';
-      
-      // Get one of each required character type
-      const getRandomChar = (str: string) => str.charAt(Math.floor(Math.random() * str.length));
-      const requiredChars = [
-        getRandomChar(lowercase),
-        getRandomChar(uppercase),
-        getRandomChar(numbers),
-        getRandomChar(special)
-      ];
-      
-      // Add more random characters to make it longer (20 chars total)
-      const allChars = lowercase + uppercase + numbers + special;
-      const remainingChars = Array.from({ length: 16 }, () => getRandomChar(allChars));
-      
-      // Combine and shuffle
-      const shuffled = [...requiredChars, ...remainingChars].sort(() => 0.5 - Math.random());
-      return shuffled.join('');
-    };
+      // Sign out the user
+      await supabase.auth.signOut();
 
-    // Disable the user in Supabase Auth
-    const { error: authError } = await supabase.auth.updateUser({
-      email: deletedEmail,
-      password: generateComplexPassword()
-    });
+      // Force redirection to sign-in page
+      window.location.href = '/signin';
 
-    if (authError) {
-      console.error('Auth update error:', authError);
-      throw authError;
+    } catch (err) {
+      console.error('Error deleting account:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete account');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Sign out the user
-    await supabase.auth.signOut();
-
-    // Force redirection to sign-in page
-    window.location.href = '/signin';
-
-  } catch (err) {
-    console.error('Error deleting account:', err);
-    setError(err instanceof Error ? err.message : 'Failed to delete account');
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+  };
 
   // If profile is not loaded yet, show loading state
   if (!profile) {
@@ -314,6 +315,9 @@ export default function Settings() {
             <span className="block sm:inline">{error}</span>
           </div>
         )}
+
+        {/* Two-Factor Authentication Section */}
+        <TwoFactorSettings />
 
         {/* Notifications */}
         <div className="bg-white rounded-lg shadow p-6">
