@@ -26,6 +26,7 @@ export default function SignupForm() {
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [cooldownRemaining, setCooldownRemaining] = useState(0);
+	const [confirmationSent, setConfirmationSent] = useState(false);
 	const navigate = useNavigate();
 	const {
 		studios,
@@ -134,10 +135,16 @@ export default function SignupForm() {
 				console.error("Failed to send registration notification:", notificationError);
 			}
 
-			if (selectedRole === "owner") {
-				navigate("/onboarding");
+			// Show confirmation message if email confirmation is needed
+			if (!authData.session) {
+				setConfirmationSent(true);
 			} else {
-				navigate("/");
+				// User is already confirmed, proceed to appropriate page
+				if (selectedRole === "owner") {
+					navigate("/onboarding");
+				} else {
+					navigate("/dashboard");
+				}
 			}
 		} catch (err) {
 			console.error("Error in signup:", err);
@@ -171,6 +178,47 @@ export default function SignupForm() {
 			setIsSubmitting(false);
 		}
 	};
+
+	if (confirmationSent) {
+		return (
+			<div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl">
+				<div className="text-center mb-8">
+					<div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							className="h-8 w-8 text-green-600"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+						>
+							<path
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								strokeWidth={2}
+								d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+							/>
+						</svg>
+					</div>
+					<h1 className="text-2xl font-bold text-brand-primary mb-2">
+						Check your email
+					</h1>
+					<p className="text-brand-secondary-400 mb-4">
+						We've sent a confirmation email to <strong>{email}</strong>
+					</p>
+					<p className="text-sm text-gray-600 mb-6">
+						Please click the link in the email to confirm your account. The link will
+						take you to the appropriate setup page based on your role.
+					</p>
+					<Link
+						to="/"
+						className="text-brand-primary hover:text-brand-secondary-400"
+					>
+						Return to sign in
+					</Link>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div className="w-full max-w-4xl p-8 bg-white rounded-2xl shadow-xl">
