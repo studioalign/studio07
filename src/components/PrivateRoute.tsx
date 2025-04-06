@@ -58,8 +58,8 @@ export default function PrivateRoute({ children, requiredRole }: PrivateRoutePro
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
-  // If email is not confirmed and the path is not onboarding
-  if (isConfirmed === false && location.pathname !== "/onboarding") {
+  // If email is not confirmed
+  if (isConfirmed === false) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
         <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-md">
