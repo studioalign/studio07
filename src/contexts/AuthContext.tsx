@@ -39,8 +39,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authResponse, setAuthResponse] = useState<AuthResponse | null>(null);
   const [mfaAuthenticationInProgress, setMfaAuthenticationInProgress] = useState(false);
 
-  // console.log(profile);
-
   useEffect(() => {
     let mounted = true;
   
@@ -206,39 +204,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
       }
       
-      return { success: true };
-    } catch (error) {
-      console.error("Error verifying MFA code:", error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'An unexpected error occurred during verification' 
-      };
-    }
-  };
-      
-      // Create a challenge
-      const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({
-        factorId: totpFactor.id
-      });
-      
-      if (challengeError) throw challengeError;
-      
-      // Verify the challenge with the code
-      const { data, error: verifyError } = await supabase.auth.mfa.verify({
-        factorId: totpFactor.id,
-        challengeId: challengeData.id,
-        code
-      });
-      
-      if (verifyError) {
-        return { 
-          success: false, 
-          error: verifyError.message 
-        };
-      }
-      
-      // MFA verification successful
-      setMfaAuthenticationInProgress(false);
       return { success: true };
     } catch (error) {
       console.error("Error verifying MFA code:", error);
