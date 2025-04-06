@@ -59,10 +59,16 @@ export default function AuthCallbackPage() {
           throw new Error('User authentication failed');
         }
 
-        // Get the user's profile to check their role
+        // Get the user's complete profile including studio information
         const { data: userProfile, error: profileError } = await supabase
           .from('users')
-          .select('role')
+          .select(`
+            role,
+            studio:studios!users_studio_id_fkey (
+              id,
+              name
+            )
+          `)
           .eq('id', userData.user.id)
           .single();
           
@@ -70,10 +76,17 @@ export default function AuthCallbackPage() {
           throw profileError;
         }
 
-        // Redirect based on role
+        // Redirect based on role and whether studio already exists
         if (userProfile?.role === 'owner') {
-          navigate('/onboarding');
+          if (!userProfile.studio || !userProfile.studio.name) {
+            // Owner without studio info - send to onboarding
+            navigate('/onboarding');
+          } else {
+            // Owner with completed studio - send to dashboard
+            navigate('/dashboard');
+          }
         } else {
+          // Teachers and parents go to dashboard
           navigate('/dashboard');
         }
       } catch (err) {
