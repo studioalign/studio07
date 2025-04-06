@@ -5,6 +5,22 @@
 		<link rel="icon" type="image/svg+xml" href="/vite.svg" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>StudioAlign</title>
+		<script>
+		  // Handle Supabase auth redirects for email confirmations
+		  (function() {
+		    // Check if we have a hash fragment with Supabase auth data
+		    if (window.location.hash && (window.location.hash.includes('access_token=') || window.location.hash.includes('error='))) {
+		      // Get the current path
+		      const basePath = window.location.pathname;
+		      
+		      // Only redirect if we're not already on the auth callback page
+		      if (basePath !== '/auth/callback' && basePath !== '/auth/callback/') {
+		        // Redirect to the auth callback handler with the hash intact
+		        window.location.href = '/auth/callback' + window.location.hash;
+		      }
+		    }
+		  })();
+		</script>
 	</head>
 	<body>
 		<div id="root"></div>
