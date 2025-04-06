@@ -25,7 +25,6 @@ export default function MfaVerification({ onBack }: MfaVerificationProps) {
     }
   };
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -44,7 +43,8 @@ export default function MfaVerification({ onBack }: MfaVerificationProps) {
         throw new Error(result.error || 'Verification failed. Please try again.');
       }
       
-      // Verification successful - the AuthContext will handle the session update
+      // Verification successful - redirect to dashboard
+      window.location.href = '/dashboard';
     } catch (err) {
       console.error('Error verifying MFA code:', err);
       setError(err instanceof Error ? err.message : 'Verification failed. Please try again.');
