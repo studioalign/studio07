@@ -135,17 +135,9 @@ export default function SignupForm() {
 				console.error("Failed to send registration notification:", notificationError);
 			}
 
-			// Show confirmation message if email confirmation is needed
-			if (!authData.session) {
-				setConfirmationSent(true);
-			} else {
-				// User is already confirmed, proceed to appropriate page
-				if (selectedRole === "owner") {
-					navigate("/onboarding");
-				} else {
-					navigate("/dashboard");
-				}
-			}
+			// Always show confirmation message after signup, regardless of role
+			// This ensures users confirm their email before proceeding
+			setConfirmationSent(true);
 		} catch (err) {
 			console.error("Error in signup:", err);
 			
@@ -206,8 +198,10 @@ export default function SignupForm() {
 						We've sent a confirmation email to <strong>{email}</strong>
 					</p>
 					<p className="text-sm text-gray-600 mb-6">
-						Please click the link in the email to confirm your account. The link will
-						take you to the appropriate setup page based on your role.
+						Please check your email and click the confirmation link to activate your account.
+						{selectedRole === "owner" && 
+							" After confirming, you'll be taken to the studio setup page to complete your registration."
+						}
 					</p>
 					<Link
 						to="/"
