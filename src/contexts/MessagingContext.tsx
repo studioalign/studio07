@@ -264,6 +264,17 @@ import React, {
 	        // Add optimistic message to UI immediately
 	        setMessages(prev => [...prev, optimisticMessage]);
 	        
+	        // Also update the conversation's last_message in the local state
+	        setConversations(prev => prev.map(conv => 
+	            conv.id === activeConversation 
+	                ? { 
+	                    ...conv, 
+	                    last_message: content,
+	                    last_message_at: new Date().toISOString()
+	                } 
+	                : conv
+	        ));
+	        
 	        // Send to server
 	        const { data: newMessage, error: sendError } = await supabase
 	            .from("messages")
