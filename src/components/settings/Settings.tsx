@@ -189,6 +189,7 @@ export default function Settings() {
     }
   };
 
+  // Handle account deletion
   const handleDeleteAccount = async () => {
     if (deleteConfirmText !== 'delete my account') {
       setError('Please type "delete my account" to confirm');
@@ -216,10 +217,10 @@ export default function Settings() {
         }
       }
 
-      // Generate a unique email for deleted users to maintain uniqueness
+      // Generate a unique email for deleted users to mark the record in public.users
       const deletedEmail = `deleted_user_${profile.id}_${Date.now()}@deleted.studioalign.com`;
 
-      // Update user record with deletion information
+      // Update user record with deletion information in public.users
       const { error: updateError } = await supabase
         .from('users')
         .update({
@@ -235,80 +236,30 @@ export default function Settings() {
 
       if (updateError) throw updateError;
 
-      // Generate a complex password that meets all requirements
-      const generateComplexPassword = () => {
-        const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-        const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        const numbers = '0123456789';
-        const special = '!@#$%^&*()_+-=[]{};\':"|<>?,./`~';
-        
-        // Get one of each required character type
-        const getRandomChar = (str: string) => str.charAt(Math.floor(Math.random() * str.length));
-        const requiredChars = [
-          getRandomChar(lowercase),
-          getRandomChar(uppercase),
-          getRandomChar(numbers),
-          getRandomChar(special)
-        ];
-        
-        // Add more random characters to make it longer (20 chars total)
-        const allChars = lowercase + uppercase + numbers + special;
-        const remainingChars = Array.from({ length: 16 }, () => getRandomChar(allChars));
-        
-        // Combine and shuffle
-        const shuffled = [...requiredChars, ...remainingChars].sort(() => 0.5 - Math.random());
-        return shuffled.join('');
-      };
-
-      // Create a Netlify function call to properly handle auth user deletion
+      // Call the serverless function to handle the auth user's email randomization
+      // This will free up the email address for reuse
       try {
-        // First try to anonymize the auth user
-        // Update the auth user with a random email and password
-        const { error: authError } = await supabase.auth.updateUser({
-          email: deletedEmail,
-          password: generateComplexPassword()
+        const response = await fetch('/.netlify/functions/delete-auth-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            userId: profile.id,
+            email: deletedEmail 
+          }),
         });
-
-        if (authError) {
-          console.error('Auth update error:', authError);
-          throw authError;
+        
+        if (!response.ok) {
+          const data = await response.json();
+          console.warn('Auth user email randomization via function had issues:', data.error);
+          // We'll continue even if this fails, as the public.users record is updated
+        } else {
+          console.log('Auth user email successfully randomized via serverless function');
         }
-        
-        // Since we can't directly delete from auth.users with client-side code,
-        // we have two options:
-        
-        // Option 1: Call a serverless function to delete or further anonymize the auth user (recommended)
-        try {
-          // This is a placeholder for a Netlify serverless function call
-          // You would need to create a function `delete-auth-user` that has admin privileges
-          const response = await fetch('/.netlify/functions/delete-auth-user', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ 
-              userId: profile.id,
-              email: deletedEmail 
-            }),
-          });
-          
-          if (!response.ok) {
-            const data = await response.json();
-            console.warn('Auth user anonymization via function had issues:', data.error);
-            // We continue even if this fails as we've already anonymized the public user
-          }
-        } catch (functionError) {
-          console.warn('Error calling auth user deletion function:', functionError);
-          // Continue with deletion process even if serverless function fails
-        }
-        
-        // Option 2: If serverless functions aren't available, 
-        // we've at least changed the email to something random and 
-        // set a very complex password that makes the account inaccessible
-      } catch (authError) {
-        console.error('Error updating auth user:', authError);
-        // We don't throw this error to allow the process to continue
-        // The public.users record has already been anonymized
+      } catch (functionError) {
+        console.warn('Error calling auth user email randomization function:', functionError);
+        // Continue with the process even if the serverless function fails
       }
 
       // Sign out the user
