@@ -10,7 +10,7 @@ export default function ForgotPasswordForm() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
@@ -24,6 +24,15 @@ export default function ForgotPasswordForm() {
       });
 
       if (error) {
+        console.error('Password reset error:', error);
+        
+        // Check for specific error messages related to invalid email
+        if (error.message.includes("user not found") || 
+            error.message.includes("email not found") ||
+            error.message.includes("Invalid email")) {
+          throw new Error("No account exists with this email address. Please check the email or sign up for a new account.");
+        }
+        
         throw error;
       }
 
@@ -39,7 +48,7 @@ export default function ForgotPasswordForm() {
       setIsSubmitting(false);
     }
   };
-
+  
   if (success) {
     return (
       <div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl">
