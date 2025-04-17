@@ -9,7 +9,7 @@ interface ChannelListProps {
 }
 
 export default function ChannelList({ onNewChannel }: ChannelListProps) {
-	const { channels, loading, error } = useChannels();
+	const { channels, loading, error, refresh } = useChannels();
 	const { channelId } = useParams();
 	const navigate = useNavigate();
 	const { profile } = useAuth();
@@ -18,10 +18,13 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 	// Add function to refresh channels manually
 	const handleRefresh = async () => {
 		setIsRefreshing(true);
-		// Wait a bit to simulate refreshing
-		setTimeout(() => {
-			window.location.reload();
-		}, 1000);
+		try {
+			await refresh();
+		} catch (error) {
+			console.error("Error refreshing channels:", error);
+		} finally {
+			setIsRefreshing(false);
+		}
 	};
 
 	if (loading) {
@@ -51,20 +54,7 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 						{isRefreshing ? 'Refreshing...' : 'Retry'}
 					</button>
 				</div>
-				{profile?.role === "owner" && (
-					<div className="mt-6 text-center">
-						<p className="text-sm text-gray-600 mb-3">
-							Or create a new channel to get started
-						</p>
-						<button
-							onClick={onNewChannel}
-							className="px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 flex items-center justify-center mx-auto"
-						>
-							<Plus className="w-4 h-4 mr-2" />
-							Create New Channel
-						</button>
-					</div>
-				)}
+				{/* Remove duplicate Create Channel button from error state */}
 			</div>
 		);
 	}
@@ -74,9 +64,10 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 			<div className="p-4 border-b">
 				<div className="flex items-center justify-between mb-4">
 					<h2 className="font-semibold text-brand-primary">Class Channels</h2>
+					{/* Keep this Create Channel button in the header */}
 					{profile?.role === "owner" && (
 						<button
-							onClick={onNewChannel} // Use the callback here
+							onClick={onNewChannel}
 							className="p-1 text-gray-500 hover:text-brand-primary"
 							title="Create Channel"
 						>
@@ -90,16 +81,10 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 				{channels.length === 0 ? (
 					<div className="p-4 text-center text-gray-500">
 						<p>No channels available</p>
+						{/* Remove duplicate Create Channel button for empty state */}
 						{profile?.role === "owner" && (
 							<div className="mt-4">
-								<p className="text-sm mb-3">Create a channel to get started</p>
-								<button
-									onClick={onNewChannel}
-									className="px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 flex items-center justify-center mx-auto"
-								>
-									<Plus className="w-4 h-4 mr-2" />
-									Create Channel
-								</button>
+								<p className="text-sm mb-3">Click the plus icon above to create a channel</p>
 							</div>
 						)}
 					</div>
