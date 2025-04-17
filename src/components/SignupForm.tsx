@@ -86,7 +86,7 @@ export default function SignupForm() {
 				throw new Error("Please select a studio");
 			}
 
-			// Sign up the user with metadata
+		// Sign up the user with metadata
 			const { data: authData, error: signUpError } = await supabase.auth.signUp(
 				{
 					email,
@@ -104,6 +104,14 @@ export default function SignupForm() {
 
 			if (signUpError) {
 				console.error("Signup error:", signUpError);
+				
+				// Check specifically for email already registered error
+				if (signUpError.message.includes("User already registered") || 
+					signUpError.message.includes("already in use") ||
+					signUpError.message.includes("already exists")) {
+					throw new Error("This email address is already registered. Please use a different email or try signing in.");
+				}
+				
 				throw signUpError;
 			}
 
