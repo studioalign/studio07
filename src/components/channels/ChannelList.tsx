@@ -1,12 +1,11 @@
-import React, { useEffect } from "react";
-import { Plus, Hash, RefreshCw } from "lucide-react";
+import { Plus, Hash } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useChannels } from "../../hooks/useChannels";
 import { useAuth } from "../../contexts/AuthContext";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface ChannelListProps {
-	onNewChannel: () => void; // Add prop for triggering the modal
+	onNewChannel: () => void;
 }
 
 export default function ChannelList({ onNewChannel }: ChannelListProps) {
@@ -16,13 +15,11 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 	const { profile } = useAuth();
 	const [isRefreshing, setIsRefreshing] = useState(false);
 
-	// Add useEffect to refresh channels when channelId changes
-	// This helps ensure we have updated channel names when switching channels
+	// This effect will ensure the channel list updates when changes occur
 	useEffect(() => {
 		refresh();
 	}, [channelId, refresh]);
 
-	// Add function to refresh channels manually
 	const handleRefresh = async () => {
 		setIsRefreshing(true);
 		try {
@@ -57,11 +54,9 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 						className="px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 flex items-center justify-center mx-auto"
 						disabled={isRefreshing}
 					>
-						<RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
 						{isRefreshing ? 'Refreshing...' : 'Retry'}
 					</button>
 				</div>
-				{/* Remove duplicate Create Channel button from error state */}
 			</div>
 		);
 	}
@@ -71,7 +66,6 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 			<div className="p-4 border-b">
 				<div className="flex items-center justify-between mb-4">
 					<h2 className="font-semibold text-brand-primary">Class Channels</h2>
-					{/* Keep this Create Channel button in the header */}
 					{profile?.role === "owner" && (
 						<button
 							onClick={onNewChannel}
@@ -82,23 +76,12 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 						</button>
 					)}
 				</div>
-				
-				{/* Add manual refresh button */}
-				<button
-					onClick={handleRefresh}
-					className="text-xs text-brand-primary hover:text-brand-secondary-400 flex items-center"
-					disabled={isRefreshing}
-				>
-					<RefreshCw className={`w-3 h-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
-					{isRefreshing ? 'Refreshing...' : 'Refresh channels'}
-				</button>
 			</div>
 
 			<div className="flex-1 overflow-y-auto">
 				{channels.length === 0 ? (
 					<div className="p-4 text-center text-gray-500">
 						<p>No channels available</p>
-						{/* Remove duplicate Create Channel button for empty state */}
 						{profile?.role === "owner" && (
 							<div className="mt-4">
 								<p className="text-sm mb-3">Click the plus icon above to create a channel</p>
