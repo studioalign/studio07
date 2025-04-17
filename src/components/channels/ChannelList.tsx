@@ -1,3 +1,4 @@
+import React, { useEffect } from "react";
 import { Plus, Hash, RefreshCw } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useChannels } from "../../hooks/useChannels";
@@ -14,6 +15,12 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 	const navigate = useNavigate();
 	const { profile } = useAuth();
 	const [isRefreshing, setIsRefreshing] = useState(false);
+
+	// Add useEffect to refresh channels when channelId changes
+	// This helps ensure we have updated channel names when switching channels
+	useEffect(() => {
+		refresh();
+	}, [channelId, refresh]);
 
 	// Add function to refresh channels manually
 	const handleRefresh = async () => {
@@ -75,6 +82,16 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 						</button>
 					)}
 				</div>
+				
+				{/* Add manual refresh button */}
+				<button
+					onClick={handleRefresh}
+					className="text-xs text-brand-primary hover:text-brand-secondary-400 flex items-center"
+					disabled={isRefreshing}
+				>
+					<RefreshCw className={`w-3 h-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+					{isRefreshing ? 'Refreshing...' : 'Refresh channels'}
+				</button>
 			</div>
 
 			<div className="flex-1 overflow-y-auto">
