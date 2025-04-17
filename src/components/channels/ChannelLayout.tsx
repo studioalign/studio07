@@ -51,7 +51,7 @@ export default function ChannelLayout() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex relative">
+    <div className="h-[calc(100vh-4rem)] flex relative overflow-hidden">
       {/* Mobile back button when showing feed */}
       {!showList && channelId && (
         <button
@@ -63,7 +63,7 @@ export default function ChannelLayout() {
       )}
 
       <div
-        className={`absolute lg:relative w-full lg:w-80 border-r bg-white transition-transform duration-200 ease-in-out ${
+        className={`absolute lg:relative w-full lg:w-80 border-r bg-white h-full overflow-y-auto transition-transform duration-200 ease-in-out ${
           showList ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
@@ -71,7 +71,7 @@ export default function ChannelLayout() {
       </div>
 
       <div
-        className={`absolute lg:relative inset-0 lg:inset-auto flex-1 bg-gray-50 transition-transform duration-200 ease-in-out ${
+        className={`absolute lg:relative inset-0 lg:inset-auto flex-1 bg-gray-50 flex flex-col overflow-hidden transition-transform duration-200 ease-in-out ${
           showList ? 'translate-x-full lg:translate-x-0' : 'translate-x-0'
         }`}
       >
