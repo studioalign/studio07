@@ -18,6 +18,7 @@ interface Document {
   status: 'active' | 'archived';
   viewed_at: string | null;
   signed_at: string | null;
+  recipient_id?: string; // Added to track user's recipient record ID
 }
 
 export default function DocumentList() {
@@ -39,6 +40,36 @@ export default function DocumentList() {
       loadDocuments();
     }
   }, [profile]);
+
+  // Set up real-time subscriptions for document updates
+  useEffect(() => {
+    if (!profile?.id) return;
+    
+    // Create the subscription for document_recipients changes
+    const subscription = supabase
+      .channel('document-status-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'document_recipients',
+          filter: profile.role === 'owner' 
+            ? undefined  // Subscribe to all updates for owners
+            : `user_id=eq.${profile.id}` // Only user's own updates for non-owners
+        },
+        (payload) => {
+          console.log('Document recipient updated:', payload);
+          // Refresh documents when a document status changes
+          loadDocuments();
+        }
+      )
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [profile?.id, profile?.role]);
 
   // Load the appropriate documents based on user role
   const loadDocuments = async () => {
@@ -118,6 +149,7 @@ export default function DocumentList() {
       if (error) throw error;
       
       // Transform data to match component expectations
+      // Ensure signed_at from document_recipients takes precedence
       const transformedData = data.map(item => ({
         id: item.document?.id || '',
         name: item.document?.name || 'Unknown Document',
@@ -128,9 +160,8 @@ export default function DocumentList() {
         expires_at: item.document?.expires_at || null,
         status: item.document?.status || 'active',
         viewed_at: item.viewed_at,
-        signed_at: item.signed_at,
-        // Include recipient id for easier access when signing
-        recipient_id: item.id
+        signed_at: item.signed_at, // Use the recipient's signed_at status
+        recipient_id: item.id // Store the recipient record ID for updates
       }));
       
       return transformedData;
@@ -153,19 +184,32 @@ export default function DocumentList() {
     return <File className="w-5 h-5 text-brand-primary" />;
   };
 
+  // Add a helper function to correctly check document status
+  const isDocumentSigned = (doc: Document) => {
+    return !!doc.signed_at;
+  };
+
   const filteredDocuments = ownerDocuments.filter(doc => {
     if (filter === 'pending') {
-      return !doc.signed_at && doc.status === 'active';
+      // Properly check if any recipients haven't signed yet
+      const hasUnsignedRecipients = doc.recipients.some(r => 
+        doc.requires_signature && !r.signed_at && doc.status === 'active'
+      );
+      return hasUnsignedRecipients;
     }
     if (filter === 'signed') {
-      return !!doc.signed_at;
+      // All recipients have signed
+      const allSigned = doc.recipients.every(r => 
+        !doc.requires_signature || !!r.signed_at
+      );
+      return allSigned;
     }
     return true;
   });
 
   const filteredUserDocuments = userDocuments.filter(doc => {
     if (filter === 'pending') {
-      return !doc.signed_at && doc.status === 'active';
+      return !doc.signed_at && doc.requires_signature && doc.status === 'active';
     }
     if (filter === 'signed') {
       return !!doc.signed_at;
