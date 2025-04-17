@@ -112,6 +112,32 @@ export default function ChannelSettingsModal({
     }
   };
 
+  const handleSaveSettings = async () => {
+    setIsSubmitting(true);
+    try {
+      // Update the channel
+      const { error: updateError } = await supabase
+        .from('class_channels')
+        .update({
+          name: channelName,
+          description: channelDescription,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', channel.id);
+        
+      if (updateError) throw updateError;
+      
+      // Call onChannelUpdated to refresh the channel list
+      onChannelUpdated();
+      onClose();
+    } catch (err) {
+      console.error('Error updating channel:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update channel');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
