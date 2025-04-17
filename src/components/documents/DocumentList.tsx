@@ -70,11 +70,6 @@ export default function DocumentList() {
       supabase.removeChannel(subscription);
     };
   }, [profile?.id, profile?.role]);
-    
-    return () => {
-      supabase.removeChannel(subscription);
-    };
-  }, [profile?.id, profile?.role]);
 
   // Load the appropriate documents based on user role
   const loadDocuments = async () => {
