@@ -166,20 +166,18 @@ function WeeklyCalendar({
                                                     {classItem.location?.name || "Unknown Location"}
                                                 </p>
                                                 {classItem.is_drop_in && (
-                                                    <div className="mt-2 flex items-center justify-between">
-                                                        <span className="text-brand-primary font-medium">
-                                                        {formatCurrency(classItem.drop_in_price, profile?.studio?.currency || 'USD')} per class
-                                                        </span>
-                                                        <span
-                                                            className={`text-sm ${
-                                                                (classItem.capacity || 0) - (classItem.booked_count || 0) <= 3
-                                                                    ? "text-red-600"
-                                                                    : "text-gray-600"
-                                                            }`}
-                                                        >
-                                                            {(classItem.capacity || 0) - (classItem.booked_count || 0)} spots left
-                                                        </span>
-                                                    </div>
+                                                  <div className="mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                                                    <span className="text-brand-primary font-medium mb-1 sm:mb-0">
+                                                      {formatCurrency(classItem.drop_in_price, profile?.studio?.currency || 'USD')}
+                                                    </span>
+                                                    <span className={`text-sm ${
+                                                      (classItem.capacity || 0) - (classItem.booked_count || 0) <= 3
+                                                        ? "text-red-600"
+                                                        : "text-gray-600"
+                                                    }`}>
+                                                      {(classItem.capacity || 0) - (classItem.booked_count || 0)} spots left
+                                                    </span>
+                                                  </div>
                                                 )}
 
                                                 {userRole === "owner" && (
