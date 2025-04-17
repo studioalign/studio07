@@ -86,7 +86,7 @@ export default function SignupForm() {
 				throw new Error("Please select a studio");
 			}
 
-		// Sign up the user with metadata
+			// Sign up the user with metadata
 			const { data: authData, error: signUpError } = await supabase.auth.signUp(
 				{
 					email,
@@ -102,6 +102,10 @@ export default function SignupForm() {
 				}
 			);
 
+			// Important: When an email already exists, Supabase might not return an error
+			// Instead, it may return a user object without creating a new account
+			// Let's check for this specific condition
+			
 			if (signUpError) {
 				console.error("Signup error:", signUpError);
 				
@@ -114,10 +118,15 @@ export default function SignupForm() {
 				
 				throw signUpError;
 			}
-
-			if (!authData.user) {
-				console.error("No user data returned");
-				throw new Error("Signup failed");
+			
+			// Check Supabase response for indicators that the email exists
+			// When email exists, Supabase often returns something like { identities: [] }
+			// or it may set a specific flag
+			if (!authData.user || 
+				(authData.user.identities && authData.user.identities.length === 0) ||
+				authData.user.email_confirmed_at) {
+				console.log("Email likely already exists:", authData);
+				throw new Error("This email address is already registered. Please use a different email or try signing in.");
 			}
 
 			// Send appropriate notifications based on role
