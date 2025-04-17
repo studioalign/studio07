@@ -15,15 +15,26 @@ export default function AuthCallbackPage() {
   const [isProcessing, setIsProcessing] = useState(true);
 
   useEffect(() => {
-    async function handleAuthCallback() {
-      try {
-        setIsProcessing(true);
-        
-        // Get the URL hash parameters
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        
-        // Process the authentication confirmation
-        const { data, error } = await supabase.auth.getSession();
+  async function handleAuthCallback() {
+    try {
+      setIsProcessing(true);
+      
+      // Get the URL hash parameters
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      
+      // Check if this is a password reset callback
+      const type = hashParams.get('type');
+      
+      if (type === 'recovery') {
+        // This is a password reset link
+        // Redirect to the password reset page instead of auto-login
+        navigate('/reset-password');
+        return;
+      }
+      
+      // Rest of the existing code for handling other types of auth callbacks...
+      // Process the authentication confirmation
+      const { data, error } = await supabase.auth.getSession();
 
         // Check if there was an error or no session
         if (error) {
