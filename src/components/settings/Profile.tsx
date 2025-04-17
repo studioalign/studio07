@@ -13,6 +13,7 @@ export default function Profile() {
 	const [phone, setPhone] = useState(profile?.phone || "");
 	const [timezone, setTimezone] = useState(profile?.timezone || "");
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [successMessage, setSuccessMessage] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
 	const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -32,26 +33,45 @@ export default function Profile() {
 	};
 
 	const handleSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		setIsSubmitting(true);
-		setError(null);
-
-		try {
-			const { error: updateError } = await supabase
-				.from("users")
-				.update({
-					name,
-					email,
-					phone,
-					timezone,
-				})
-				.eq("id", profile?.id || "");
-			if (updateError) throw updateError;
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to update profile");
-		} finally {
-			setIsSubmitting(false);
-		}
+	    e.preventDefault();
+	    setIsSubmitting(true);
+	    setError(null);
+	
+	    try {
+	        const { error: updateError } = await supabase
+	            .from("users")
+	            .update({
+	                name,
+	                email,
+	                phone,
+	                timezone,
+	            })
+	            .eq("id", profile?.id || "");
+	        if (updateError) throw updateError;
+	        
+	        // Add this to refresh the user's profile after updating
+	        const { data: updatedProfile, error: profileError } = await supabase
+	            .from("users")
+	            .select(`
+	                id, name, email, phone, timezone, photo_url,
+	                studio:studios!users_studio_id_fkey(
+	                    id, name, address, phone, email, country, currency, timezone
+	                )
+	            `)
+	            .eq("id", profile?.id || "")
+	            .single();
+	            
+	        if (profileError) throw profileError;
+	        
+	        // Add success message
+	        setSuccessMessage("Profile updated successfully!");
+	        setTimeout(() => setSuccessMessage(null), 3000);
+	        
+	    } catch (err) {
+	        setError(err instanceof Error ? err.message : "Failed to update profile");
+	    } finally {
+	        setIsSubmitting(false);
+	    }
 	};
 
 	return (
@@ -150,6 +170,12 @@ export default function Profile() {
 					</div>
 
 					{error && <p className="text-red-500 text-sm">{error}</p>}
+
+					{successMessage && (
+					    <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-md">
+					        {successMessage}
+					    </div>
+					)}
 
 					<button
 						type="submit"
