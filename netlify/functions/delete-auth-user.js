@@ -58,16 +58,10 @@ exports.handler = async function(event, context) {
       };
     }
     
-    console.log(`Processing auth user anonymization for user ID: ${userId}`);
+    console.log(`Processing auth user email randomization for user ID: ${userId}`);
     
     // Initialize Supabase with service role key for admin privileges
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    
-    // With service role key, we have several options:
-    // 1. Actually delete the user from auth.users (not recommended as it can break referential integrity)
-    // 2. Anonymize the user in auth.users (better approach)
-    
-    // Approach: Anonymize the user in auth.users
     
     // First, check if the user exists in auth.users
     const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
@@ -95,61 +89,57 @@ exports.handler = async function(event, context) {
       };
     }
     
-    // Next, update the user's metadata to indicate account deletion
+    // Store the original email temporarily
+    const originalEmail = userData.user.email;
+    
+    // Generate a unique, random email that won't conflict with real emails
+    const randomEmail = `deleted.${userId}.${Date.now()}@deleted-accounts.studioalign.com`;
+    
+    // Update the auth user with the random email
     const { error: updateError } = await supabase.auth.admin.updateUserById(
       userId,
       { 
+        email: randomEmail,
         user_metadata: { 
           ...userData.user.user_metadata,
           deleted: true,
           deleted_at: new Date().toISOString(),
-          original_email: userData.user.email, // store original email in metadata
-        },
-        email: email // use the anonymized email
+          original_email: originalEmail // store original email in metadata
+        }
       }
     );
     
     if (updateError) {
-      console.error('Error updating auth user:', updateError);
+      console.error('Error updating auth user email:', updateError);
       return {
         statusCode: 500,
         headers,
         body: JSON.stringify({ 
           success: false, 
-          error: 'Failed to update auth user' 
+          error: 'Failed to update auth user email: ' + updateError.message
         }),
       };
     }
     
-    // Finally, disable the user's account
-    // This approach is better than deleting as it preserves referential integrity
-    const { error: disableError } = await supabase.auth.admin.updateUserById(
+    // Additionally ban the user to prevent any access
+    const { error: banError } = await supabase.auth.admin.updateUserById(
       userId,
-      { 
-        banned: true, // ban the user so they can't sign in
-      }
+      { banned: true }
     );
     
-    if (disableError) {
-      console.error('Error disabling auth user:', disableError);
-      return {
-        statusCode: 500,
-        headers,
-        body: JSON.stringify({ 
-          success: false, 
-          error: 'Failed to disable auth user' 
-        }),
-      };
+    if (banError) {
+      console.warn('Failed to ban user, but email was randomized:', banError);
+      // Continue despite this error since the email was freed up
     }
     
-    console.log(`Successfully anonymized auth user: ${userId}`);
+    console.log(`Successfully randomized auth user email from ${originalEmail} to ${randomEmail}`);
     
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({ 
         success: true, 
-        message: 'Auth user successfully anonymized' 
+        message: 'Auth user email randomized. Original email is now available for reuse.'
       }),
     };
   } catch (error) {
@@ -159,7 +149,7 @@ exports.handler = async function(event, context) {
       headers,
       body: JSON.stringify({ 
         success: false, 
-        error: 'Server error processing request' 
+        error: 'Server error processing request: ' + (error.message || 'Unknown error')
       }),
     };
   }
