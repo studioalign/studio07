@@ -466,10 +466,10 @@ export default function Settings() {
             <h3 className="text-lg font-medium text-red-500">Delete Account</h3>
           </div>
           
-          <div style={{ maxWidth: '100%' }}>
-            <p className="text-gray-600 mb-4" style={{ wordBreak: 'normal', overflowWrap: 'anywhere' }}>
-              Once you delete your account, there is no going back. Please be certain.
-            </p>
+        <div style={{ maxWidth: '100%' }}>
+          <p className="text-gray-600 mb-4" style={{ wordBreak: 'normal', overflowWrap: 'anywhere' }}>
+            Once you delete your account, there is no going back. Please be certain.
+          </p>
             
             {!showDeleteConfirm ? (
               <button
