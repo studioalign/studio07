@@ -466,9 +466,9 @@ export default function Settings() {
             <h3 className="text-lg font-medium text-red-500">Delete Account</h3>
           </div>
           
-          <div className="max-w-lg">
-            <p className="text-gray-600 mb-4">
-              Once you delete your account, there is no going back. Please be certain.
+        <div className="max-w-lg">
+            <p className="text-gray-600 mb-4 whitespace-normal max-w-full">
+                Once you delete your account, there is no going back. Please be certain.
             </p>
             
             {!showDeleteConfirm ? (
