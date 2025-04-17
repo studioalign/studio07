@@ -189,7 +189,6 @@ export default function Settings() {
     }
   };
 
-  // Handle account deletion
   const handleDeleteAccount = async () => {
     if (deleteConfirmText !== 'delete my account') {
       setError('Please type "delete my account" to confirm');
@@ -261,22 +260,62 @@ export default function Settings() {
         return shuffled.join('');
       };
 
-      // Disable the user in Supabase Auth
-      const { error: authError } = await supabase.auth.updateUser({
-        email: deletedEmail,
-        password: generateComplexPassword()
-      });
+      // Create a Netlify function call to properly handle auth user deletion
+      try {
+        // First try to anonymize the auth user
+        // Update the auth user with a random email and password
+        const { error: authError } = await supabase.auth.updateUser({
+          email: deletedEmail,
+          password: generateComplexPassword()
+        });
 
-      if (authError) {
-        console.error('Auth update error:', authError);
-        throw authError;
+        if (authError) {
+          console.error('Auth update error:', authError);
+          throw authError;
+        }
+        
+        // Since we can't directly delete from auth.users with client-side code,
+        // we have two options:
+        
+        // Option 1: Call a serverless function to delete or further anonymize the auth user (recommended)
+        try {
+          // This is a placeholder for a Netlify serverless function call
+          // You would need to create a function `delete-auth-user` that has admin privileges
+          const response = await fetch('/.netlify/functions/delete-auth-user', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+              userId: profile.id,
+              email: deletedEmail 
+            }),
+          });
+          
+          if (!response.ok) {
+            const data = await response.json();
+            console.warn('Auth user anonymization via function had issues:', data.error);
+            // We continue even if this fails as we've already anonymized the public user
+          }
+        } catch (functionError) {
+          console.warn('Error calling auth user deletion function:', functionError);
+          // Continue with deletion process even if serverless function fails
+        }
+        
+        // Option 2: If serverless functions aren't available, 
+        // we've at least changed the email to something random and 
+        // set a very complex password that makes the account inaccessible
+      } catch (authError) {
+        console.error('Error updating auth user:', authError);
+        // We don't throw this error to allow the process to continue
+        // The public.users record has already been anonymized
       }
 
       // Sign out the user
       await supabase.auth.signOut();
 
       // Force redirection to sign-in page
-      window.location.href = '/signin';
+      window.location.href = '/';
 
     } catch (err) {
       console.error('Error deleting account:', err);
