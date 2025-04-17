@@ -45,6 +45,21 @@ export default function NotificationDropdown({ onClose }: { onClose: () => void 
 
   const handleNotificationClick = (notification: Notification) => {
     markAsRead(notification.id);
+    
+    // Check if this is a message notification and handle navigation
+    if (notification.type.includes('message') && notification.entity_id) {
+        // Navigate to the conversation
+        window.location.href = `/dashboard/messages?conversation=${notification.entity_id}`;
+        return;
+    }
+    
+    // For other types of notifications with links
+    if (notification.link) {
+        window.location.href = notification.link;
+        return;
+    }
+    
+    // Default behavior for other notifications
     onClose();
   };
 
