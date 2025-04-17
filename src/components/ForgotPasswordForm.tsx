@@ -16,6 +16,24 @@ export default function ForgotPasswordForm() {
     setError(null);
     
     try {
+      // First, check if the email exists in the system
+      // We'll do this by checking if there's a user with this email in the public.users table
+      const { data: userExists, error: checkError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+      
+      if (checkError) {
+        console.error('Error checking if user exists:', checkError);
+        // Continue with the reset attempt instead of throwing error here
+      }
+      
+      // If we can definitively determine the email doesn't exist, show error
+      if (userExists === null) {
+        throw new Error("No account exists with this email address. Please check the email or sign up for a new account.");
+      }
+      
       // Use Supabase's password reset method
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         // Specify the redirect URL for password reset 
