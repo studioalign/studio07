@@ -309,10 +309,10 @@ export default function AttendanceModal({
   return (
     <>
       <div 
-        className="fixed inset-0 bg-black bg-opacity-25 transition-opacity"
+        className="fixed inset-0 bg-black bg-opacity-25 transition-opacity z-[60]"
         onClick={onClose}
       />
-      <div className="fixed inset-y-0 right-0 w-full md:w-[600px] bg-white shadow-xl transform transition-transform duration-300 ease-in-out translate-x-0 flex flex-col">
+      <div className="fixed inset-y-0 right-0 w-full md:w-[600px] bg-white shadow-xl transform transition-transform duration-300 ease-in-out translate-x-0 flex flex-col z-[70]">
         {/* Header */}
         <div className="flex-none px-6 py-4 border-b">
           <div className="flex justify-between items-center">
