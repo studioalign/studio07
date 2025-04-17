@@ -49,6 +49,7 @@ export function useChannels() {
 				.filter(item => item.channel !== null)
 				.map(item => item.channel);
 			
+			console.log('Fetched channels:', validChannels);
 			setChannels(validChannels || []);
 		} catch (err) {
 			console.error("Error fetching channels:", err);
@@ -83,7 +84,7 @@ export function useChannels() {
 					table: "channel_members",
 					filter: `user_id=eq.${profile.id}`,
 				},
-				() => {
+				(payload) => {
 					console.log("Channel member added, refreshing channels");
 					fetchChannels();
 				}
@@ -96,7 +97,7 @@ export function useChannels() {
 					table: "channel_members",
 					filter: `user_id=eq.${profile.id}`,
 				},
-				() => {
+				(payload) => {
 					console.log("Channel member removed, refreshing channels");
 					fetchChannels();
 				}
@@ -105,19 +106,53 @@ export function useChannels() {
 				console.log("Channel members subscription status:", status);
 			});
 
-		// Subscribe to channel changes
+		// Subscribe to channel changes - UPDATE THIS PART TO SPECIFICALLY LISTEN FOR "UPDATE" EVENTS
 		const channelSubscription = supabase
 			.channel("public-channels")
 			.on(
 				"postgres_changes",
 				{
-					event: "*",
+					event: "UPDATE", // Specifically listen for UPDATE events
 					schema: "public",
-					table: "class_channels",
+					table: "class_channels"
 				},
 				(payload) => {
-					console.log("Channel changed:", payload);
-					fetchChannels();
+					console.log("Channel updated:", payload);
+					// Instead of full refresh, update the specific channel in state
+					const updatedChannel = payload.new as Channel;
+					setChannels(currentChannels => 
+						currentChannels.map(channel => 
+							channel.id === updatedChannel.id ? updatedChannel : channel
+						)
+					);
+				}
+			)
+			.on(
+				"postgres_changes", 
+				{
+					event: "INSERT",
+					schema: "public",
+					table: "class_channels"
+				},
+				(payload) => {
+					console.log("New channel created:", payload);
+					fetchChannels(); // Full refresh for new channels
+				}
+			)
+			.on(
+				"postgres_changes",
+				{
+					event: "DELETE",
+					schema: "public",
+					table: "class_channels"
+				},
+				(payload) => {
+					console.log("Channel deleted:", payload);
+					// Remove the deleted channel from state
+					const deletedChannelId = payload.old.id;
+					setChannels(currentChannels => 
+						currentChannels.filter(channel => channel.id !== deletedChannelId)
+					);
 				}
 			)
 			.subscribe((status) => {
