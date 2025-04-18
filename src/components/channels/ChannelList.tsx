@@ -1,9 +1,6 @@
-import { Plus, Hash } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import React, { Plus, Hash, useNavigate, useParams, useRef, useCallback, useState, useEffect } from "react";
 import { useChannels } from "../../hooks/useChannels";
 import { useAuth } from "../../contexts/AuthContext";
-import { useState, useEffect } from "react";
-import React, { Plus, Hash, useNavigate, useParams, useRef, useCallback } from "react";
 
 interface ChannelListProps {
 	onNewChannel: () => void;
@@ -20,6 +17,8 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 	const forceUpdate = useCallback(() => {
 		if (listRef.current && typeof listRef.current.forceUpdate === 'function') {
 			listRef.current.forceUpdate();
+		}
+	}, []);
 
 	// This effect will ensure the channel list updates when changes occur or when channelId changes
 	useEffect(() => {
@@ -80,16 +79,16 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 							title="Refresh Channels"
 							disabled={isRefreshing}
 						>
-							<svg 
-								xmlns="http://www.w3.org/2000/svg" 
-								width="16" 
-								height="16" 
-								viewBox="0 0 24 24" 
-								fill="none" 
-								stroke="currentColor" 
-								strokeWidth="2" 
-								strokeLinecap="round" 
-								strokeLinejoin="round" 
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								strokeWidth="2"
+								strokeLinecap="round"
+								strokeLinejoin="round"
 								className={`${isRefreshing ? 'animate-spin' : ''}`}
 							>
 								<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
