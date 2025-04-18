@@ -25,11 +25,14 @@ export function useChannels() {
 			setLoading(true);
 			setError(null);
 			
-			// Modify the query to only select fields that definitely exist
+			console.log("Fetching channels for user:", profile.id);
+			
+			// Fetch channels where user is a member
 			const { data, error: fetchError } = await supabase
 				.from("channel_members")
 				.select(
 					`
+          channel_id,
           channel:class_channels (
             id,
             name,
@@ -61,6 +64,16 @@ export function useChannels() {
 		}
 	}, [profile?.id]);
 
+	// Directly update a channel in state when it changes
+	const updateChannelInState = useCallback((updatedChannel: Channel) => {
+		console.log("Updating channel in state:", updatedChannel);
+		setChannels(prevChannels => 
+			prevChannels.map(channel => 
+				channel.id === updatedChannel.id ? updatedChannel : channel
+			)
+		);
+	}, []);
+
 	// Set up real-time subscriptions
 	useEffect(() => {
 		if (!profile?.id) return;
@@ -73,19 +86,68 @@ export function useChannels() {
 			subscriptionRef.current.subscription.unsubscribe();
 		}
 
-		// Subscribe to channel_members changes for this user
-		const memberSubscription = supabase
-			.channel("user-channels")
+		// Subscribe to channel changes
+		const combinedSubscription = supabase
+			.channel(`channels-${profile.id}`)
+			// Listen for changes to channel members
 			.on(
 				"postgres_changes",
 				{
-					event: "INSERT",
+					event: "*",
 					schema: "public",
 					table: "channel_members",
 					filter: `user_id=eq.${profile.id}`,
 				},
 				(payload) => {
-					console.log("Channel member added, refreshing channels");
+					console.log("Channel member change detected:", payload);
+					// Refresh channels completely
+					fetchChannels();
+				}
+			)
+			// Listen for changes to channels
+			.on(
+				"postgres_changes",
+				{
+					event: "UPDATE",
+					schema: "public",
+					table: "class_channels",
+				},
+				async (payload) => {
+					console.log("Channel update detected:", payload);
+					
+					// Get the user's channel memberships to check if we should show this channel
+					const { data } = await supabase
+						.from("channel_members")
+						.select("channel_id")
+						.eq("user_id", profile.id)
+						.eq("channel_id", payload.new.id);
+					
+					// If the user is a member of this channel
+					if (data && data.length > 0) {
+						// Fetch the full updated channel data
+						const { data: channelData } = await supabase
+							.from("class_channels")
+							.select("id, name, description, created_at, updated_at")
+							.eq("id", payload.new.id)
+							.single();
+						
+						if (channelData) {
+							// Update just this channel in state
+							updateChannelInState(channelData);
+						}
+					}
+				}
+			)
+			.on(
+				"postgres_changes",
+				{
+					event: "INSERT",
+					schema: "public",
+					table: "class_channels",
+				},
+				(payload) => {
+					console.log("New channel created:", payload);
+					// Refresh the entire list for new channels
 					fetchChannels();
 				}
 			)
@@ -94,78 +156,26 @@ export function useChannels() {
 				{
 					event: "DELETE",
 					schema: "public",
-					table: "channel_members",
-					filter: `user_id=eq.${profile.id}`,
+					table: "class_channels",
 				},
 				(payload) => {
-					console.log("Channel member removed, refreshing channels");
-					fetchChannels();
+					console.log("Channel deleted:", payload);
+					
+					// Remove the deleted channel from state
+					setChannels(currentChannels => 
+						currentChannels.filter(channel => channel.id !== payload.old.id)
+					);
 				}
 			)
-			.subscribe((status) => {
-				console.log("Channel members subscription status:", status);
+			.subscribe((status, err) => {
+				console.log("Channel subscription status:", status);
+				if (err) {
+					console.error("Subscription error:", err);
+				}
 			});
 
-		// Subscribe to channel changes - UPDATE THIS PART TO SPECIFICALLY LISTEN FOR "UPDATE" EVENTS
-		const channelSubscription = supabase
-		  .channel("public-channels")
-		  .on(
-		    "postgres_changes",
-		    {
-		      event: "UPDATE", // Specifically listen for UPDATE events
-		      schema: "public",
-		      table: "class_channels"
-		    },
-		    (payload) => {
-		      console.log("Channel updated:", payload);
-		      // Instead of full refresh, update the specific channel in state
-		      const updatedChannel = payload.new as Channel;
-		      setChannels(currentChannels => 
-		        currentChannels.map(channel => 
-		          channel.id === updatedChannel.id ? updatedChannel : channel
-		        )
-		      );
-		    }
-		  )
-		  .on(
-		    "postgres_changes", 
-		    {
-		      event: "INSERT",
-		      schema: "public",
-		      table: "class_channels"
-		    },
-		    (payload) => {
-		      console.log("New channel created:", payload);
-		      fetchChannels(); // Full refresh for new channels
-		    }
-		  )
-		  .on(
-		    "postgres_changes",
-		    {
-		      event: "DELETE",
-		      schema: "public",
-		      table: "class_channels"
-		    },
-		    (payload) => {
-		      console.log("Channel deleted:", payload);
-		      // Remove the deleted channel from state
-		      const deletedChannelId = payload.old.id;
-		      setChannels(currentChannels => 
-		        currentChannels.filter(channel => channel.id !== deletedChannelId)
-		      );
-		    }
-		  )
-		  .subscribe((status) => {
-		    console.log("Channels subscription status:", status);
-		  });
-
 		subscriptionRef.current = { 
-			subscription: {
-				unsubscribe: () => {
-					memberSubscription.unsubscribe();
-					channelSubscription.unsubscribe();
-				}
-			}
+			subscription: combinedSubscription
 		};
 
 		return () => {
@@ -174,7 +184,7 @@ export function useChannels() {
 				subscriptionRef.current = null;
 			}
 		};
-	}, [profile?.id, fetchChannels]);
+	}, [profile?.id, fetchChannels, updateChannelInState]);
 
 	return { 
 		channels, 
