@@ -51,7 +51,7 @@ export default function DocumentList() {
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: '*', // Listen for all events (UPDATE, INSERT, DELETE)
           schema: 'public',
           table: 'document_recipients',
           filter: profile.role === 'owner' 
@@ -184,35 +184,28 @@ export default function DocumentList() {
     return <File className="w-5 h-5 text-brand-primary" />;
   };
 
-  // Add a helper function to correctly check document status
-  const isDocumentSigned = (doc: Document) => {
-    return !!doc.signed_at;
-  };
-
+  // Fixed filter logic for owner documents
   const filteredDocuments = ownerDocuments.filter(doc => {
     if (filter === 'pending') {
-      // Properly check if any recipients haven't signed yet
-      const hasUnsignedRecipients = doc.recipients.some(r => 
-        doc.requires_signature && !r.signed_at && doc.status === 'active'
-      );
-      return hasUnsignedRecipients;
+      // Only include documents that require signature and have at least one unsigned recipient
+      return doc.requires_signature && doc.recipients.some(r => !r.signed_at) && doc.status === 'active';
     }
     if (filter === 'signed') {
-      // All recipients have signed
-      const allSigned = doc.recipients.every(r => 
-        !doc.requires_signature || !!r.signed_at
-      );
-      return allSigned;
+      // Only include documents that require signature and all recipients have signed
+      return doc.requires_signature && 
+             doc.recipients.length > 0 && 
+             doc.recipients.every(r => !!r.signed_at);
     }
-    return true;
+    return true; // Show all documents for 'all' filter
   });
   
+  // Filter logic for user documents
   const filteredUserDocuments = userDocuments.filter(doc => {
     if (filter === 'pending') {
-      return !doc.signed_at && doc.requires_signature && doc.status === 'active';
+      return doc.requires_signature && !doc.signed_at && doc.status === 'active';
     }
     if (filter === 'signed') {
-      return !!doc.signed_at;
+      return doc.signed_at !== null;
     }
     return true;
   });
