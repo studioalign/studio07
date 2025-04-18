@@ -67,9 +67,9 @@ export function useChannels() {
 	// Directly update a channel in state when it changes
 	const updateChannelInState = useCallback((updatedChannel: Channel) => {
 		console.log("Updating channel in state:", updatedChannel);
-		setChannels(prevChannels => 
-			prevChannels.map(channel => 
-				channel.id === updatedChannel.id ? updatedChannel : channel
+		setChannels(prevChannels =>
+			prevChannels.map(channel =>
+				channel.id === updatedChannel.id ? { ...updatedChannel } : channel
 			)
 		);
 	}, []);
