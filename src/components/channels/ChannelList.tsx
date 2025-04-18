@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useChannels } from "../../hooks/useChannels";
 import { useAuth } from "../../contexts/AuthContext";
 import { useState, useEffect } from "react";
+import React, { Plus, Hash, useNavigate, useParams, useRef, useCallback } from "react";
 
 interface ChannelListProps {
 	onNewChannel: () => void;
@@ -14,6 +15,11 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 	const navigate = useNavigate();
 	const { profile } = useAuth();
 	const [isRefreshing, setIsRefreshing] = useState(false);
+	const listRef = useRef(null); // Add a ref
+
+	const forceUpdate = useCallback(() => {
+		if (listRef.current && typeof listRef.current.forceUpdate === 'function') {
+			listRef.current.forceUpdate();
 
 	// This effect will ensure the channel list updates when changes occur or when channelId changes
 	useEffect(() => {
@@ -24,6 +30,7 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 		setIsRefreshing(true);
 		try {
 			await refresh();
+			forceUpdate(); // Try forcing an update after refresh
 		} catch (error) {
 			console.error("Error refreshing channels:", error);
 		} finally {
@@ -62,7 +69,7 @@ export default function ChannelList({ onNewChannel }: ChannelListProps) {
 	}
 
 	return (
-		<div className="h-full flex flex-col">
+		<div ref={listRef} className="h-full flex flex-col">
 			<div className="p-4 border-b">
 				<div className="flex items-center justify-between mb-4">
 					<h2 className="font-semibold text-brand-primary">Class Channels</h2>
