@@ -58,13 +58,18 @@ export default function ChannelSettingsModal({
         .from('class_channels')
         .update({
           name: name.trim(),
-          description: description.trim() || null
+          description: description.trim() || null,
+          updated_at: new Date().toISOString()
         })
         .eq('id', channel.id);
 
       if (updateError) throw updateError;
 
-      onChannelUpdated?.();
+      // Immediately call onChannelUpdated to refresh the channel list
+      if (onChannelUpdated) {
+        onChannelUpdated();
+      }
+      
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update channel');
@@ -109,32 +114,6 @@ export default function ChannelSettingsModal({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete channel');
       setIsDeleting(false);
-    }
-  };
-
-  const handleSaveSettings = async () => {
-    setIsSubmitting(true);
-    try {
-      // Update the channel
-      const { error: updateError } = await supabase
-        .from('class_channels')
-        .update({
-          name: channelName,
-          description: channelDescription,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', channel.id);
-        
-      if (updateError) throw updateError;
-      
-      // Call onChannelUpdated to refresh the channel list
-      onChannelUpdated();
-      onClose();
-    } catch (err) {
-      console.error('Error updating channel:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update channel');
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
