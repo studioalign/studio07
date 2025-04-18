@@ -1,20 +1,22 @@
 const sgMail = require('@sendgrid/mail');
 
 exports.handler = async function(event, context) {
-  if (process.env.DISABLE_EMAIL_NOTIFICATIONS === 'true') {
-  console.log('Emails disabled by environment variable. Would have sent to:', JSON.parse(event.body).to);
-  return {
-    statusCode: 200,
-    headers,
-    body: JSON.stringify({ success: true, disabled: true })
-  };
-}
   // Allow CORS from any origin
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS'
   };
+  
+  // Check if emails are disabled (moved after headers definition)
+  if (process.env.DISABLE_EMAIL_NOTIFICATIONS === 'true') {
+    console.log('Emails disabled by environment variable. Would have sent to:', JSON.parse(event.body).to);
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ success: true, disabled: true })
+    };
+  }
   
   // Handle preflight requests
   if (event.httpMethod === 'OPTIONS') {
