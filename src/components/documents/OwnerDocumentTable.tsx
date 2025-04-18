@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, PenSquare, Send, AlertCircle } from 'lucide-react';
+import { Eye, PenSquare, Send, AlertCircle, FileCheck, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { notificationService } from '../../services/notificationService';
@@ -92,6 +92,44 @@ export default function OwnerDocumentTable({ documents }: OwnerDocumentTableProp
     }
     return 'Not viewed';
   };
+  
+  // Check if all recipients have signed a document
+  const allRecipientsSigned = (doc: Document) => {
+    return doc.recipients && 
+           doc.recipients.length > 0 && 
+           doc.recipients.every(recipient => recipient.signed_at !== null);
+  };
+  
+  // Get document status text and styling
+  const getDocumentStatus = (doc: Document) => {
+    if (!doc.requires_signature) {
+      return {
+        text: 'View Only',
+        style: 'bg-green-100 text-green-800'
+      };
+    }
+    
+    // Check if all recipients have signed
+    if (allRecipientsSigned(doc)) {
+      return {
+        text: 'Signed',
+        style: 'bg-green-100 text-green-800'
+      };
+    }
+    
+    // Check if document is past deadline
+    if (doc.expires_at && new Date(doc.expires_at) < new Date()) {
+      return {
+        text: 'Overdue',
+        style: 'bg-red-100 text-red-800'
+      };
+    }
+    
+    return {
+      text: 'Signature Required',
+      style: 'bg-blue-100 text-blue-800'
+    };
+  };
 
   if (documents.length === 0) {
     return (
@@ -139,9 +177,9 @@ export default function OwnerDocumentTable({ documents }: OwnerDocumentTableProp
                 <td className="px-3 sm:px-6 py-4">
                   <div className="flex items-center space-x-2">
                     <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full justify-center w-full
-                      ${doc.requires_signature ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}
+                      ${getDocumentStatus(doc).style}`}
                     >
-                      {doc.requires_signature ? 'Signature Required' : 'View Only'}
+                      {getDocumentStatus(doc).text}
                     </span>
                   </div>
                 </td>
