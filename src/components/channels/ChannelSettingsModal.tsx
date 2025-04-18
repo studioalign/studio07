@@ -3,7 +3,7 @@ import { X, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { useChannels } from '../../hooks/useChannels'; // Import the hook directly
+import { useChannels } from '../../hooks/useChannels';
 
 interface ChannelSettingsModalProps {
   channel: {
@@ -56,6 +56,7 @@ export default function ChannelSettingsModal({
     setError(null);
 
     try {
+      // Update the channel in the database
       const { error: updateError } = await supabase
         .from('class_channels')
         .update({
@@ -67,18 +68,16 @@ export default function ChannelSettingsModal({
 
       if (updateError) throw updateError;
 
-      // Call both the provided callback and the refresh function to ensure the UI updates
+      // Refresh the channels list to update the UI immediately
+      await refresh();
+
+      // Also call the provided callback if it exists
       if (onChannelUpdated) {
         onChannelUpdated();
       }
       
-      // Always refresh the channels list to ensure the channel name is updated everywhere
-      refresh();
-      
-      // Force a slight delay before closing to ensure state updates properly
-      setTimeout(() => {
-        onClose();
-      }, 100);
+      // Close the modal
+      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update channel');
     } finally {
@@ -112,7 +111,7 @@ export default function ChannelSettingsModal({
         .eq('id', channel.id);
 
       // Refresh channel list before navigating
-      refresh();
+      await refresh();
       
       // Navigate to channels list
       navigate('/dashboard/channels');
