@@ -20,7 +20,7 @@ export default function MessagesLayout() {
   // Render loading state with more detailed UI
   if (loading.conversations && conversations.length === 0) {
     return (
-      <div className="h-[calc(100vh-4rem)] flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <div className="animate-pulse space-y-4">
             <div className="h-12 bg-gray-200 rounded w-64 mx-auto" />
@@ -35,7 +35,7 @@ export default function MessagesLayout() {
   // Handle error state
   if (error) {
     return (
-      <div className="h-[calc(100vh-4rem)] flex flex-col items-center justify-center text-red-500 p-8">
+      <div className="h-full flex flex-col items-center justify-center text-red-500 p-8">
         <MessageSquare className="w-16 h-16 mb-4 text-red-400" />
         <h2 className="text-xl font-semibold mb-2">Oops! Something went wrong</h2>
         <p className="text-center max-w-md mb-4">{error}</p>
@@ -50,7 +50,7 @@ export default function MessagesLayout() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex relative overflow-hidden">
+    <div className="flex h-full relative overflow-hidden">
       {/* Mobile back button when showing thread */}
       {!showList && activeConversation && (
         <button
@@ -72,7 +72,7 @@ export default function MessagesLayout() {
       )}
 
       <div
-        className={`absolute lg:relative w-full lg:w-80 border-r bg-white transition-transform duration-200 ease-in-out overflow-y-auto ${
+        className={`absolute lg:relative w-full lg:w-80 border-r bg-white transition-transform duration-200 ease-in-out h-full overflow-y-auto ${
           showList ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
