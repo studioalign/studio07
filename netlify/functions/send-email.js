@@ -1,6 +1,14 @@
 const sgMail = require('@sendgrid/mail');
 
 exports.handler = async function(event, context) {
+  if (process.env.DISABLE_EMAIL_NOTIFICATIONS === 'true') {
+  console.log('Emails disabled by environment variable. Would have sent to:', JSON.parse(event.body).to);
+  return {
+    statusCode: 200,
+    headers,
+    body: JSON.stringify({ success: true, disabled: true })
+  };
+}
   // Allow CORS from any origin
   const headers = {
     'Access-Control-Allow-Origin': '*',
