@@ -3,6 +3,7 @@ import { X, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useChannels } from '../../hooks/useChannels'; // Import the hook directly
 
 interface ChannelSettingsModalProps {
   channel: {
@@ -26,6 +27,7 @@ export default function ChannelSettingsModal({
 }: ChannelSettingsModalProps) {
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const { refresh } = useChannels(); // Get the refresh function from useChannels
   const [name, setName] = useState(channel.name);
   const [description, setDescription] = useState(channel.description || '');
   const [isDeleting, setIsDeleting] = useState(false);
@@ -65,12 +67,18 @@ export default function ChannelSettingsModal({
 
       if (updateError) throw updateError;
 
-      // Immediately call onChannelUpdated to refresh the channel list
+      // Call both the provided callback and the refresh function to ensure the UI updates
       if (onChannelUpdated) {
         onChannelUpdated();
       }
       
-      onClose();
+      // Always refresh the channels list to ensure the channel name is updated everywhere
+      refresh();
+      
+      // Force a slight delay before closing to ensure state updates properly
+      setTimeout(() => {
+        onClose();
+      }, 100);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update channel');
     } finally {
@@ -85,31 +93,28 @@ export default function ChannelSettingsModal({
     setError(null);
 
     try {
-      // Delete all channel members first
-      const { error: membersDeleteError } = await supabase
+      // First delete channel members
+      await supabase
         .from('channel_members')
         .delete()
         .eq('channel_id', channel.id);
 
-      if (membersDeleteError) throw membersDeleteError;
-
-      // Delete posts and their associated media
-      const { error: postsDeleteError } = await supabase
+      // Then delete channel posts
+      await supabase
         .from('channel_posts')
         .delete()
         .eq('channel_id', channel.id);
 
-      if (postsDeleteError) throw postsDeleteError;
-
       // Finally delete the channel
-      const { error: channelDeleteError } = await supabase
+      await supabase
         .from('class_channels')
         .delete()
         .eq('id', channel.id);
 
-      if (channelDeleteError) throw channelDeleteError;
-
-      // Redirect to channels list
+      // Refresh channel list before navigating
+      refresh();
+      
+      // Navigate to channels list
       navigate('/dashboard/channels');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete channel');
