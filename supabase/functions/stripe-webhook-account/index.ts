@@ -295,6 +295,10 @@ serve(async (req) => {
 					break;
 				}
 
+				// Get scheduled tier from metadata (for downgrades)
+				const scheduledTier = subscription.metadata?.scheduled_tier || null;
+				console.log("📋 Scheduled tier from metadata:", scheduledTier);
+
 				// Get tier details from shared mapping
 				const tierDetails = TIER_MAPPING[tierName];
 				if (!tierDetails) {
@@ -315,6 +319,7 @@ serve(async (req) => {
 					tier: tierName,
 					max_students: tierDetails.maxStudents,
 					price_gbp: tierDetails.price,
+					scheduled_tier: scheduledTier,
 					updated_at: new Date().toISOString(),
 				};
 
@@ -339,6 +344,18 @@ serve(async (req) => {
 					existingSubscription.tier !== tierName
 				) {
 					console.log("🔄 Updating studio tier");
+
+					// If the tier actually changed, clear any scheduled tier since the change has now taken effect
+					if (existingSubscription.tier !== tierName) {
+						console.log("🔄 Tier change detected - clearing scheduled_tier");
+						await supabaseClient
+							.from("studio_subscriptions")
+							.update({
+								scheduled_tier: null,
+								updated_at: new Date().toISOString(),
+							})
+							.eq("id", existingSubscription.id);
+					}
 
 					await supabaseClient
 						.from("studios")
@@ -391,64 +408,72 @@ serve(async (req) => {
 					break;
 				}
 
-				console.log("✅ Found subscription to delete:", existingSubscription);
+				// If this is a subscription being replaced (upgrade/downgrade), don't reset the studio tier
+				const isBeingReplaced =
+					subscription.metadata?.being_replaced === "true";
 
-				// Update subscription status to canceled
-				const { error: updateError } = await supabaseClient
-					.from("studio_subscriptions")
-					.update({
-						status: "canceled",
-						updated_at: new Date().toISOString(),
-					})
-					.eq("stripe_subscription_id", subscription.id);
+				if (!isBeingReplaced) {
+					console.log("✅ Found subscription to delete:", existingSubscription);
 
-				if (updateError) {
-					console.error(
-						"❌ Error updating canceled subscription:",
-						updateError
-					);
-					throw updateError;
-				}
-
-				console.log("✅ Subscription marked as canceled");
-
-				// Create billing history for cancellation
-				const { error: billingError } = await supabaseClient
-					.from("billing_history")
-					.insert([
-						{
-							studio_id: existingSubscription.studio_id,
-							amount_gbp: 0,
-							description: `${existingSubscription.tier} subscription canceled`,
+					// Update subscription status to canceled
+					const { error: updateError } = await supabaseClient
+						.from("studio_subscriptions")
+						.update({
 							status: "canceled",
-							stripe_subscription_id: subscription.id,
-							created_at: new Date().toISOString(),
-						},
-					]);
+							updated_at: new Date().toISOString(),
+						})
+						.eq("stripe_subscription_id", subscription.id);
 
-				if (billingError) {
-					console.error(
-						"❌ Error creating cancellation billing history:",
-						billingError
-					);
+					if (updateError) {
+						console.error(
+							"❌ Error updating canceled subscription:",
+							updateError
+						);
+						throw updateError;
+					}
+
+					console.log("✅ Subscription marked as canceled");
+
+					// Create billing history for cancellation
+					const { error: billingError } = await supabaseClient
+						.from("billing_history")
+						.insert([
+							{
+								studio_id: existingSubscription.studio_id,
+								amount_gbp: 0,
+								description: `${existingSubscription.tier} subscription canceled`,
+								status: "canceled",
+								stripe_subscription_id: subscription.id,
+								created_at: new Date().toISOString(),
+							},
+						]);
+
+					if (billingError) {
+						console.error(
+							"❌ Error creating cancellation billing history:",
+							billingError
+						);
+					} else {
+						console.log("✅ Cancellation billing history created");
+					}
+
+					// Reset studio to basic tier
+					const { error: studioResetError } = await supabaseClient
+						.from("studios")
+						.update({
+							subscription_tier: "Starter",
+							max_students: 100,
+							updated_at: new Date().toISOString(),
+						})
+						.eq("id", existingSubscription.studio_id);
+
+					if (studioResetError) {
+						console.error("❌ Error resetting studio tier:", studioResetError);
+					} else {
+						console.log("✅ Studio tier reset to Starter");
+					}
 				} else {
-					console.log("✅ Cancellation billing history created");
-				}
-
-				// Reset studio to basic tier
-				const { error: studioResetError } = await supabaseClient
-					.from("studios")
-					.update({
-						subscription_tier: "Starter",
-						max_students: 100,
-						updated_at: new Date().toISOString(),
-					})
-					.eq("id", existingSubscription.studio_id);
-
-				if (studioResetError) {
-					console.error("❌ Error resetting studio tier:", studioResetError);
-				} else {
-					console.log("✅ Studio tier reset to Starter");
+					console.log("⚠️ Subscription being replaced - skipping reset steps");
 				}
 
 				console.log("🎉 Subscription deletion processing completed");
@@ -491,7 +516,7 @@ serve(async (req) => {
 								studio_id: subscription.studio_id,
 								amount_gbp:
 									(stripeInvoice.amount_paid || stripeInvoice.total) / 100,
-								description: `${subscription.tier} subscription payment`,
+								description: `${subscription.tier} plan subscription payment`,
 								status: "paid",
 								stripe_invoice_id: stripeInvoice.id,
 								stripe_payment_intent_id: stripeInvoice.payment_intent,

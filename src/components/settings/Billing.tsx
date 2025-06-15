@@ -65,6 +65,12 @@ export default function BillingPage() {
 		(tier) => tier.price > (subscription?.price_gbp || currentTier?.price || 0)
 	);
 
+	// Check if there's a scheduled downgrade using the scheduled_tier field
+	const isScheduledDowngrade = subscription?.scheduled_tier;
+	const scheduledTier = isScheduledDowngrade
+		? pricingTiers.find((tier) => tier.name === subscription.scheduled_tier)
+		: null;
+
 	const progressPercentage = currentTier
 		? (currentStudents / currentTier.max) * 100
 		: 0;
@@ -191,11 +197,7 @@ export default function BillingPage() {
 			const currentPrice = subscription?.price_gbp || 0;
 			const newPrice = targetTier?.price || 0;
 
-			if (!subscription) {
-				setShowFeedback("new");
-			} else if (newPrice > currentPrice) {
-				setShowFeedback("upgrade");
-			} else {
+			if (newPrice < currentPrice) {
 				setShowFeedback("downgrade");
 			}
 
@@ -365,9 +367,15 @@ export default function BillingPage() {
 							<div className="pt-2 space-y-2 text-sm">
 								<div className="flex justify-between">
 									<span className="text-muted-foreground">
-										Next billing date:
+										{subscription.cancel_at_period_end
+											? "Cancels at:"
+											: "Next billing date:"}
 									</span>
-									<span>
+									<span
+										className={
+											subscription.cancel_at_period_end ? "text-yellow-600" : ""
+										}
+									>
 										{subscription.current_period_end
 											? new Date(
 													subscription.current_period_end
@@ -389,6 +397,65 @@ export default function BillingPage() {
 										</span>
 									</div>
 								)}
+							</div>
+						)}
+
+						{/* Scheduled Downgrade Information */}
+						{isScheduledDowngrade && scheduledTier && currentTier && (
+							<div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+								<div className="flex items-start gap-3">
+									<div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+									<div className="flex-1">
+										<h4 className="font-semibold text-blue-900 mb-2">
+											Plan Change Scheduled
+										</h4>
+										<div className="space-y-2 text-sm text-blue-800">
+											<div className="flex justify-between">
+												<span>Current plan:</span>
+												<span className="font-medium">
+													{currentTier.name} - £{currentTier.price}/month
+												</span>
+											</div>
+											<div className="flex justify-between">
+												<span>Changing to:</span>
+												<span className="font-medium">
+													{scheduledTier.name} - £{scheduledTier.price}/month
+												</span>
+											</div>
+											<div className="flex justify-between">
+												<span>Effective date:</span>
+												<span className="font-medium">
+													{subscription.current_period_end
+														? new Date(
+																subscription.current_period_end
+														  ).toLocaleDateString("en-GB")
+														: "N/A"}
+												</span>
+											</div>
+											<div className="flex justify-between">
+												<span>Next billing amount:</span>
+												<span className="font-medium text-green-600">
+													£{scheduledTier.price}/month
+												</span>
+											</div>
+										</div>
+										<div className="mt-3 p-3 bg-blue-100 rounded-md">
+											<p className="text-xs text-blue-700">
+												<strong>What happens next:</strong> You'll continue to
+												enjoy your current {currentTier.name} plan benefits
+												until{" "}
+												{subscription.current_period_end
+													? new Date(
+															subscription.current_period_end
+													  ).toLocaleDateString("en-GB")
+													: "the end of your billing period"}
+												. On that date, your plan will automatically change to{" "}
+												{scheduledTier.name} and you'll be charged £
+												{scheduledTier.price} for the next month.
+											</p>
+										</div>
+									</div>
+								</div>
 							</div>
 						)}
 
@@ -436,22 +503,21 @@ export default function BillingPage() {
 								</div>
 								<p className="text-2xl font-bold mb-1">£{tier.price}</p>
 								<p className="text-sm text-muted-foreground mb-3">
-									{tier.min}-{tier.max} students
+									Up to {tier.max} students
 								</p>
 								{subscription?.tier !== tier.name && (
 									<Button
 										size="sm"
-										className="w-full"
+										className="w-full bg-brand-primary text-white"
 										onClick={() => handleUpgradeSubscription(tier.name)}
 										disabled={loading || currentStudents > tier.max}
-										variant={
-											currentStudents > tier.max ? "destructive" : "default"
-										}
 									>
 										{currentStudents <= tier.max
 											? tier.price < (subscription?.price_gbp || 0)
-												? "Downgrade"
-												: "Upgrade"
+												? `Downgrade`
+												: subscription
+												? `Upgrade`
+												: `Subscribe`
 											: "Not Available"}
 									</Button>
 								)}

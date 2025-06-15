@@ -72,7 +72,7 @@ export default function OnboardingPage() {
 
 			if (updateError) throw updateError;
 
-			navigate("/dashboard");
+			navigate("/dashboard/billing");
 		} catch (err) {
 			console.error("Error in onboarding:", err);
 			setError(

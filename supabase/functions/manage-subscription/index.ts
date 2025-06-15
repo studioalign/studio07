@@ -27,26 +27,31 @@ const pricingTiers = [
 		name: "Starter",
 		price: 15,
 		maxStudents: 100,
-		stripeProductId: "prod_starter",
+		stripePriceId: "price_1Ra54yJf1ZFVuVTPDi3AJYIz", // Replace with actual Price ID from Stripe Dashboard
 	},
 	{
 		name: "Growth",
 		price: 20,
 		maxStudents: 200,
-		stripeProductId: "prod_growth",
+		stripePriceId: "price_1Ra58UJf1ZFVuVTPIjMXl7zC", // Replace with actual Price ID from Stripe Dashboard
 	},
 	{
 		name: "Professional",
 		price: 25,
 		maxStudents: 300,
-		stripeProductId: "prod_professional",
+		stripePriceId: "price_1Ra5AJJf1ZFVuVTP2S0CPlAl", // Replace with actual Price ID from Stripe Dashboard
 	},
-	{ name: "Scale", price: 35, maxStudents: 500, stripeProductId: "prod_scale" },
+	{
+		name: "Scale",
+		price: 35,
+		maxStudents: 500,
+		stripePriceId: "price_1Ra0hbJf1ZFVuVTPRvKS0VCg",
+	},
 	{
 		name: "Enterprise",
 		price: 50,
 		maxStudents: 1000,
-		stripeProductId: "prod_enterprise",
+		stripePriceId: "price_1Ra595Jf1ZFVuVTPRcLYRwGf", // Replace with actual Price ID from Stripe Dashboard
 	},
 ];
 
@@ -162,134 +167,6 @@ serve(async (req) => {
 
 				if (existingSubscription && existingSubscription.stripe_customer_id) {
 					customerId = existingSubscription.stripe_customer_id;
-
-					// If there's an existing subscription, update it instead of creating a new one
-					if (existingSubscription.stripe_subscription_id) {
-						try {
-							// Retrieve the subscription to get the current period end
-							const subscription = await stripe.subscriptions.retrieve(
-								existingSubscription.stripe_subscription_id
-							);
-
-							// First, create or retrieve the product
-							const productName = `${tier.name} Plan`;
-							console.log("Looking for product:", productName);
-							let product;
-							try {
-								// Try to find existing product
-								const products = await stripe.products.search({
-									query: `active:'true' AND name:'${productName}'`,
-								});
-								console.log("Found products:", products);
-								product = products.data[0];
-								console.log("Selected product:", product);
-
-								// If product doesn't exist, create it
-								if (!product) {
-									console.log("Creating new product");
-									product = await stripe.products.create({
-										name: productName,
-										description: `Up to ${tier.maxStudents} students`,
-										metadata: {
-											tier_name: tier.name,
-											max_students: tier.maxStudents.toString(),
-										},
-										default_price_data: {
-											currency: "gbp",
-											unit_amount: tier.price * 100,
-											recurring: {
-												interval: "month",
-											},
-										},
-									});
-									console.log("Created new product:", product);
-								}
-
-								// Get or create price
-								let price;
-								if (product.default_price) {
-									price = await stripe.prices.retrieve(
-										product.default_price as string
-									);
-									console.log("Using existing price:", price);
-								} else {
-									price = await stripe.prices.create({
-										product: product.id,
-										currency: "gbp",
-										unit_amount: tier.price * 100,
-										recurring: {
-											interval: "month",
-										},
-										metadata: {
-											tier_name: tier.name,
-											max_students: tier.maxStudents.toString(),
-										},
-									});
-									console.log("Created new price:", price);
-								}
-
-								// Update the subscription with proration
-								await stripe.subscriptions.update(
-									existingSubscription.stripe_subscription_id,
-									{
-										proration_behavior: "always_invoice",
-										items: [
-											{
-												id: subscription.items.data[0].id,
-												price: price.id,
-											},
-										],
-										metadata: {
-											studio_id: studioId,
-											tier_name: tierName,
-										},
-									}
-								);
-
-								return new Response(
-									JSON.stringify({
-										message: `Subscription updated to ${tier.name} plan. Changes will take effect at the start of the next billing period.`,
-									}),
-									{
-										headers: {
-											...corsHeaders,
-											"Content-Type": "application/json",
-										},
-									}
-								);
-							} catch (error) {
-								console.error("Error updating subscription:", error);
-								return new Response(
-									JSON.stringify({
-										error: "Failed to update subscription",
-										details: error.message,
-									}),
-									{
-										status: 500,
-										headers: {
-											...corsHeaders,
-											"Content-Type": "application/json",
-										},
-									}
-								);
-							}
-						} catch (error) {
-							console.error("Error updating subscription:", error);
-							return new Response(
-								JSON.stringify({
-									error: "Failed to update subscription",
-									details: error.message,
-								}),
-								{
-									status: 500,
-									headers: {
-										...corsHeaders,
-										"Content-Type": "application/json",
-									},
-								}
-							);
-						}
-					}
 				}
 
 				// Create customer if needed
@@ -305,28 +182,113 @@ serve(async (req) => {
 					customerId = customer.id;
 				}
 
-				// Create checkout session for new subscription
+				// Check if this is a downgrade
+				const currentTierPrice = existingSubscription?.tier
+					? pricingTiers.find((t) => t.name === existingSubscription.tier)
+							?.price ?? 0
+					: 0;
+				const isDowngrade =
+					existingSubscription?.tier && currentTierPrice > tier.price;
+
+				if (existingSubscription?.stripe_subscription_id) {
+					// For existing subscriptions, handle upgrades and downgrades differently
+					const subscription = await stripe.subscriptions.retrieve(
+						existingSubscription.stripe_subscription_id
+					);
+
+					if (isDowngrade) {
+						// For downgrades: Schedule change for end of billing period
+						// Use direct subscription update to avoid immediate charges
+						await stripe.subscriptions.update(
+							existingSubscription.stripe_subscription_id,
+							{
+								items: [
+									{
+										id: subscription.items.data[0].id,
+										price: tier.stripePriceId,
+									},
+								],
+								proration_behavior: "none", // No immediate charge
+								billing_cycle_anchor: "unchanged", // Keep current billing date
+								metadata: {
+									scheduled_tier: tierName,
+									is_downgrade: "true",
+									previous_tier: existingSubscription.tier,
+								},
+							}
+						);
+
+						// Update local subscription record to reflect scheduled change
+						await supabaseClient
+							.from("studio_subscriptions")
+							.update({
+								scheduled_tier: tierName,
+								updated_at: new Date().toISOString(),
+							})
+							.eq("studio_id", studioId);
+
+						return new Response(
+							JSON.stringify({
+								success: true,
+								message: "Downgrade scheduled for next billing period",
+							}),
+							{
+								headers: { ...corsHeaders, "Content-Type": "application/json" },
+							}
+						);
+					} else {
+						// For upgrades: Create checkout session for immediate payment
+						// Mark the old subscription for replacement
+						await stripe.subscriptions.update(
+							existingSubscription.stripe_subscription_id,
+							{
+								metadata: {
+									being_replaced: "true",
+									new_tier: tierName,
+								},
+								cancel_at_period_end: true,
+							}
+						);
+
+						// Create checkout session for the upgrade
+						const session = await stripe.checkout.sessions.create({
+							customer: customerId,
+							payment_method_types: ["card"],
+							mode: "subscription",
+							line_items: [
+								{
+									price: tier.stripePriceId,
+									quantity: 1,
+								},
+							],
+							success_url: `${req.headers.get("origin")}/dashboard/billing`,
+							cancel_url: `${req.headers.get("origin")}/dashboard/billing`,
+							subscription_data: {
+								metadata: {
+									studio_id: studioId,
+									tier_name: tierName,
+									replacing_subscription_id:
+										existingSubscription.stripe_subscription_id,
+									previous_tier: existingSubscription.tier,
+									is_upgrade: "true",
+								},
+							},
+						});
+
+						return new Response(JSON.stringify({ url: session.url }), {
+							headers: { ...corsHeaders, "Content-Type": "application/json" },
+						});
+					}
+				}
+
+				// For new subscriptions, create checkout session
 				const session = await stripe.checkout.sessions.create({
 					customer: customerId,
 					payment_method_types: ["card"],
 					mode: "subscription",
 					line_items: [
 						{
-							price_data: {
-								currency: "gbp",
-								product_data: {
-									name: `${tier.name} Plan`,
-									description: `Up to ${tier.maxStudents} students`,
-									metadata: {
-										tier_name: tier.name,
-										max_students: tier.maxStudents.toString(),
-									},
-								},
-								recurring: {
-									interval: "month",
-								},
-								unit_amount: tier.price * 100, // Convert to pence
-							},
+							price: tier.stripePriceId, // Use predefined price ID
 							quantity: 1,
 						},
 					],
