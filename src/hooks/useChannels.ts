@@ -24,41 +24,39 @@ export function useChannels() {
 		try {
 			setLoading(true);
 			setError(null);
-			
+
 			console.log("Fetching channels for user:", profile.id);
-			
+
 			// Fetch channels where user is a member
 			const { data, error: fetchError } = await supabase
 				.from("channel_members")
 				.select(
 					`
-          channel_id,
-          channel:class_channels (
-            id,
-            name,
-            description,
-            created_at,
-            updated_at
-          )
-        `
+					channel_id,
+					channel:class_channels (
+						id,
+						name,
+						description,
+						created_at,
+						updated_at
+					)
+					`
 				)
 				.eq("user_id", profile.id)
 				.order("joined_at", { ascending: false });
 
 			if (fetchError) throw fetchError;
-			
+
 			// Filter out any null channels (in case of deleted channels)
 			const validChannels = data
-				.filter(item => item.channel !== null)
-				.map(item => item.channel);
-			
-			console.log('Fetched channels:', validChannels);
+				.filter((item) => item.channel !== null)
+				.map((item) => item.channel);
+
+			console.log("Fetched channels:", validChannels);
 			setChannels(validChannels || []);
 		} catch (err) {
 			console.error("Error fetching channels:", err);
-			setError(
-				err instanceof Error ? err.message : "Failed to fetch channels"
-			);
+			setError(err instanceof Error ? err.message : "Failed to fetch channels");
 		} finally {
 			setLoading(false);
 		}
@@ -67,8 +65,8 @@ export function useChannels() {
 	// Directly update a channel in state when it changes
 	const updateChannelInState = useCallback((updatedChannel: Channel) => {
 		console.log("Updating channel in state:", updatedChannel);
-		setChannels(prevChannels =>
-			prevChannels.map(channel =>
+		setChannels((prevChannels) =>
+			prevChannels.map((channel) =>
 				channel.id === updatedChannel.id ? { ...updatedChannel } : channel
 			)
 		);
@@ -114,14 +112,14 @@ export function useChannels() {
 				},
 				async (payload) => {
 					console.log("Channel update detected:", payload);
-					
+
 					// Get the user's channel memberships to check if we should show this channel
 					const { data } = await supabase
 						.from("channel_members")
 						.select("channel_id")
 						.eq("user_id", profile.id)
 						.eq("channel_id", payload.new.id);
-					
+
 					// If the user is a member of this channel
 					if (data && data.length > 0) {
 						// Fetch the full updated channel data
@@ -130,7 +128,7 @@ export function useChannels() {
 							.select("id, name, description, created_at, updated_at")
 							.eq("id", payload.new.id)
 							.single();
-						
+
 						if (channelData) {
 							// Update just this channel in state
 							updateChannelInState(channelData);
@@ -160,10 +158,10 @@ export function useChannels() {
 				},
 				(payload) => {
 					console.log("Channel deleted:", payload);
-					
+
 					// Remove the deleted channel from state
-					setChannels(currentChannels => 
-						currentChannels.filter(channel => channel.id !== payload.old.id)
+					setChannels((currentChannels) =>
+						currentChannels.filter((channel) => channel.id !== payload.old.id)
 					);
 				}
 			)
@@ -174,8 +172,8 @@ export function useChannels() {
 				}
 			});
 
-		subscriptionRef.current = { 
-			subscription: combinedSubscription
+		subscriptionRef.current = {
+			subscription: combinedSubscription,
 		};
 
 		return () => {
@@ -186,10 +184,10 @@ export function useChannels() {
 		};
 	}, [profile?.id, fetchChannels, updateChannelInState]);
 
-	return { 
-		channels, 
-		loading, 
+	return {
+		channels,
+		loading,
 		error,
-		refresh: fetchChannels // Expose refresh function
+		refresh: fetchChannels, // Expose refresh function
 	};
 }
