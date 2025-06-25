@@ -1,23 +1,23 @@
-import { formatCurrency, formatDate } from './formatters';
+import { formatCurrency, formatDate } from "./formatters";
 
 // Base template interface
 interface BaseTemplateParams {
-  recipient: { name: string };
+	recipient: { name: string };
 }
 
 // Generic base template function
 export function generateBaseTemplate(params: {
-  recipient: { name: string },
-  content: string,
-  title?: string
+	recipient: { name: string };
+	content: string;
+	title?: string;
 }) {
-  return `
+	return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${params.title || 'StudioAlign Notification'}</title>
+      <title>${params.title || "StudioAlign Notification"}</title>
       <style>
         body { 
           font-family: 'Inter', Arial, sans-serif; 
@@ -101,142 +101,150 @@ export function generateBaseTemplate(params: {
 
 // Specific email template types
 export interface StudentEnrollmentParams extends BaseTemplateParams {
-  studentName: string;
-  className: string;
-  dashboardUrl: string;
+	studentName: string;
+	className: string;
+	dashboardUrl: string;
 }
 
 export interface ConsecutiveAbsencesParams extends BaseTemplateParams {
-  studentName: string;
-  className: string;
-  absenceCount: number;
-  dashboardUrl: string;
+	studentName: string;
+	className: string;
+	absenceCount: number;
+	dashboardUrl: string;
 }
 
 export interface PaymentOverdueParams extends BaseTemplateParams {
-  amount: number;
-  daysOverdue: number;
-  invoiceUrl: string;
-  currency: string;
+	amount: number;
+	daysOverdue: number;
+	invoiceUrl: string;
+	currency: string;
 }
 
 export interface MonthlyFinancialSummaryParams extends BaseTemplateParams {
-  month: string;
-  revenue: number;
-  expenses: number;
-  profit: number;
-  currency: string;
-  dashboardUrl: string;
+	month: string;
+	revenue: number;
+	expenses: number;
+	profit: number;
+	currency: string;
+	dashboardUrl: string;
 }
 
 export interface StaffRegistrationParams extends BaseTemplateParams {
-  staffName: string;
-  role: string;
-  dashboardUrl: string;
+	staffName: string;
+	role: string;
+	dashboardUrl: string;
 }
 
 export interface ParentAccountParams extends BaseTemplateParams {
-  parentName: string;
-  type: 'registration' | 'deletion';
-  dashboardUrl: string;
+	parentName: string;
+	type: "registration" | "deletion";
+	dashboardUrl: string;
 }
 
 export interface AttendanceNotFilledParams extends BaseTemplateParams {
-  className: string;
-  teacherName: string;
-  dashboardUrl: string;
+	className: string;
+	teacherName: string;
+	dashboardUrl: string;
 }
 
 export interface ClassCapacityParams extends BaseTemplateParams {
-  className: string;
-  dashboardUrl: string;
+	className: string;
+	dashboardUrl: string;
 }
 
 export interface ClassScheduleChangeParams extends BaseTemplateParams {
-  className: string;
-  changes: string;
-  dashboardUrl: string;
+	className: string;
+	changes: string;
+	dashboardUrl: string;
 }
 
 export interface NewMessageParams extends BaseTemplateParams {
-  senderName: string;
-  messagePreview: string;
-  conversationUrl: string;
+	senderName: string;
+	messagePreview: string;
+	conversationUrl: string;
 }
 
 export interface ChannelActivityParams extends BaseTemplateParams {
-  type: 'post' | 'comment';
-  channelName: string;
-  authorName: string;
-  content: string;
-  activityUrl: string;
+	type: "post" | "comment";
+	channelName: string;
+	authorName: string;
+	content: string;
+	activityUrl: string;
 }
 
 export interface PaymentConfirmationParams extends BaseTemplateParams {
-  amount: number;
-  invoiceId: string;
-  invoiceUrl: string;
-  currency: string;
+	amount: number;
+	invoiceId: string;
+	invoiceUrl: string;
+	currency: string;
 }
 
 export interface ClassCancellationParams extends BaseTemplateParams {
-  className: string;
-  date: string;
-  reason?: string;
-  dashboardUrl: string;
+	className: string;
+	date: string;
+	reason?: string;
+	dashboardUrl: string;
 }
 
 export interface DocumentAssignedParams extends BaseTemplateParams {
-  documentName: string;
-  requiresSignature: boolean;
-  description?: string;
-  dashboardUrl: string;
+	documentName: string;
+	requiresSignature: boolean;
+	description?: string;
+	dashboardUrl: string;
 }
 
 export interface DocumentReminderParams extends BaseTemplateParams {
-  documentName: string;
-  requiresSignature: boolean;
-  dashboardUrl: string;
+	documentName: string;
+	requiresSignature: boolean;
+	dashboardUrl: string;
 }
 
 export interface DocumentDeadlineParams extends BaseTemplateParams {
-  documentName: string;
-  requiresSignature: boolean;
-  unprocessedCount?: number;
-  dashboardUrl: string;
+	documentName: string;
+	requiresSignature: boolean;
+	unprocessedCount?: number;
+	dashboardUrl: string;
 }
 
 export interface ClassAssignedParams extends BaseTemplateParams {
-  className: string;
-  scheduleDetails: {
-    startTime: string;
-    endTime: string;
-    dayOfWeek?: string | null;
-    date?: string | null;
-    endDate?: string | null;
-    isRecurring: boolean;
-    location?: string;
-  };
-  dashboardUrl: string;
+	className: string;
+	scheduleDetails: {
+		startTime: string;
+		endTime: string;
+		dayOfWeek?: string | null;
+		date?: string | null;
+		endDate?: string | null;
+		isRecurring: boolean;
+		location?: string;
+	};
+	dashboardUrl: string;
+}
+
+export interface InvitationParams {
+	recipientEmail: string;
+	inviterName: string;
+	studioName: string;
+	role: string;
+	invitationUrl: string;
 }
 
 // Template generator functions
 export function studentEnrollmentTemplate(params: StudentEnrollmentParams) {
-  const content = `
+	const content = `
     <h2>New Student Enrollment</h2>
     <p>${params.studentName} has enrolled in ${params.className}.</p>
     <a href="${params.dashboardUrl}" class="btn">View Student Details</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'New Student Enrollment'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "New Student Enrollment",
+	});
 }
 
 export function consecutiveAbsencesTemplate(params: ConsecutiveAbsencesParams) {
-  const content = `
+	const content = `
     <div class="alert">
       <h2>Student Attendance Concern</h2>
       <p>${params.studentName} has missed ${params.absenceCount} consecutive classes in ${params.className}.</p>
@@ -244,17 +252,17 @@ export function consecutiveAbsencesTemplate(params: ConsecutiveAbsencesParams) {
     <a href="${params.dashboardUrl}" class="btn">View Attendance Details</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'Student Consecutive Absences'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "Student Consecutive Absences",
+	});
 }
 
 export function paymentOverdueTemplate(params: PaymentOverdueParams) {
-  const formattedAmount = formatCurrency(params.amount, params.currency);
-  
-  const content = `
+	const formattedAmount = formatCurrency(params.amount, params.currency);
+
+	const content = `
     <div class="alert">
       <h2>Payment Overdue</h2>
       <p>Your payment of ${formattedAmount} is ${params.daysOverdue} days overdue.</p>
@@ -263,17 +271,20 @@ export function paymentOverdueTemplate(params: PaymentOverdueParams) {
     <a href="${params.invoiceUrl}" class="btn">View Invoice</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'Payment Overdue'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "Payment Overdue",
+	});
 }
 
-export function monthlyFinancialSummaryTemplate(params: MonthlyFinancialSummaryParams) {
-  const formatCurrencyFn = (amount: number) => formatCurrency(amount, params.currency);
-  
-  const content = `
+export function monthlyFinancialSummaryTemplate(
+	params: MonthlyFinancialSummaryParams
+) {
+	const formatCurrencyFn = (amount: number) =>
+		formatCurrency(amount, params.currency);
+
+	const content = `
     <h2>Monthly Financial Summary - ${params.month}</h2>
     <table class="table">
       <tr>
@@ -292,43 +303,51 @@ export function monthlyFinancialSummaryTemplate(params: MonthlyFinancialSummaryP
     <a href="${params.dashboardUrl}" class="btn">View Full Report</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: `Financial Summary - ${params.month}`
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: `Financial Summary - ${params.month}`,
+	});
 }
 
 export function staffRegistrationTemplate(params: StaffRegistrationParams) {
-  const content = `
+	const content = `
     <h2>New Staff Registration</h2>
     <p>${params.staffName} has registered as a ${params.role}.</p>
     <a href="${params.dashboardUrl}" class="btn">View Staff Profile</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'New Staff Registration'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "New Staff Registration",
+	});
 }
 
 export function parentAccountTemplate(params: ParentAccountParams) {
-  const content = `
-    <h2>Parent Account ${params.type === 'registration' ? 'Registration' : 'Deletion'}</h2>
-    <p>${params.parentName} has ${params.type === 'registration' ? 'registered a new account' : 'deleted their account'}.</p>
+	const content = `
+    <h2>Parent Account ${
+			params.type === "registration" ? "Registration" : "Deletion"
+		}</h2>
+    <p>${params.parentName} has ${
+		params.type === "registration"
+			? "registered a new account"
+			: "deleted their account"
+	}.</p>
     <a href="${params.dashboardUrl}" class="btn">View Details</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: `Parent Account ${params.type === 'registration' ? 'Registration' : 'Deletion'}`
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: `Parent Account ${
+			params.type === "registration" ? "Registration" : "Deletion"
+		}`,
+	});
 }
 
 export function attendanceNotFilledTemplate(params: AttendanceNotFilledParams) {
-  const content = `
+	const content = `
     <div class="alert">
       <h2>Attendance Register Not Filled</h2>
       <p>${params.teacherName} has not filled the attendance register for ${params.className}.</p>
@@ -336,15 +355,15 @@ export function attendanceNotFilledTemplate(params: AttendanceNotFilledParams) {
     <a href="${params.dashboardUrl}" class="btn">Fill Attendance</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'Attendance Register Pending'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "Attendance Register Pending",
+	});
 }
 
 export function classCapacityTemplate(params: ClassCapacityParams) {
-  const content = `
+	const content = `
     <div class="alert">
       <h2>Class Capacity Reached</h2>
       <p>${params.className} has reached its maximum capacity.</p>
@@ -352,171 +371,198 @@ export function classCapacityTemplate(params: ClassCapacityParams) {
     <a href="${params.dashboardUrl}" class="btn">View Class Details</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'Class Capacity Reached'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "Class Capacity Reached",
+	});
 }
 
 export function classScheduleChangeTemplate(params: ClassScheduleChangeParams) {
-  const content = `
+	const content = `
     <h2>Class Schedule Updated</h2>
     <p>Schedule for ${params.className} has been updated:</p>
     <blockquote>${params.changes}</blockquote>
     <a href="${params.dashboardUrl}" class="btn">View Updated Schedule</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'Class Schedule Change'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "Class Schedule Change",
+	});
 }
 
 export function newMessageTemplate(params: NewMessageParams) {
-  const content = `
+	const content = `
     <h2>New Message</h2>
     <p>You have a new message from ${params.senderName}:</p>
     <blockquote>${params.messagePreview}</blockquote>
     <a href="${params.conversationUrl}" class="btn">View Message</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'New Message'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "New Message",
+	});
 }
 
 export function channelActivityTemplate(params: ChannelActivityParams) {
-  const typeText = params.type === 'post' ? 'Posted' : 'Commented';
-  const content = `
+	const typeText = params.type === "post" ? "Posted" : "Commented";
+	const content = `
     <h2>New Channel Activity</h2>
     <p>${params.authorName} ${typeText} in ${params.channelName}:</p>
     <blockquote>${params.content}</blockquote>
-    <a href="${params.activityUrl}" class="btn">View ${typeText === 'Posted' ? 'Post' : 'Comment'}</a>
+    <a href="${params.activityUrl}" class="btn">View ${
+		typeText === "Posted" ? "Post" : "Comment"
+	}</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: `New ${params.type === 'post' ? 'Post' : 'Comment'} in ${params.channelName}`
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: `New ${params.type === "post" ? "Post" : "Comment"} in ${
+			params.channelName
+		}`,
+	});
 }
 
 export function paymentConfirmationTemplate(params: PaymentConfirmationParams) {
-  const formattedAmount = formatCurrency(params.amount, params.currency);
-  
-  const content = `
+	const formattedAmount = formatCurrency(params.amount, params.currency);
+
+	const content = `
     <h2>Payment Confirmation</h2>
     <p>Your payment of ${formattedAmount} has been received. Thank you!</p>
     <a href="${params.invoiceUrl}" class="btn">View Invoice</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'Payment Confirmation'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "Payment Confirmation",
+	});
 }
 
 export function classCancellationTemplate(params: ClassCancellationParams) {
-  const content = `
+	const content = `
     <div class="alert">
       <h2>Class Cancellation</h2>
-      <p>${params.className} on ${formatDate(params.date)} has been cancelled.</p>
-      ${params.reason ? `<p>Reason: ${params.reason}</p>` : ''}
+      <p>${params.className} on ${formatDate(
+		params.date
+	)} has been cancelled.</p>
+      ${params.reason ? `<p>Reason: ${params.reason}</p>` : ""}
     </div>
     <a href="${params.dashboardUrl}" class="btn">View Details</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'Class Cancellation'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "Class Cancellation",
+	});
 }
 
 export function documentAssignedTemplate(params: DocumentAssignedParams) {
-  const action = params.requiresSignature ? 'sign' : 'view';
-  const content = `
+	const action = params.requiresSignature ? "sign" : "view";
+	const content = `
     <h2>New Document Assigned</h2>
-    <p>A new document "${params.documentName}" has been assigned to you for ${action}ing.</p>
-    ${params.description ? `<p>Description: ${params.description}</p>` : ''}
+    <p>A new document "${
+			params.documentName
+		}" has been assigned to you for ${action}ing.</p>
+    ${params.description ? `<p>Description: ${params.description}</p>` : ""}
     <a href="${params.dashboardUrl}" class="btn">Go to Document</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'New Document Assigned'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "New Document Assigned",
+	});
 }
 
 export function documentReminderTemplate(params: DocumentReminderParams) {
-  const action = params.requiresSignature ? 'sign' : 'view';
-  const content = `
+	const action = params.requiresSignature ? "sign" : "view";
+	const content = `
     <h2>Document Reminder</h2>
     <p>This is a reminder to ${action} the document "${params.documentName}".</p>
     <a href="${params.dashboardUrl}" class="btn">Go to Document</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'Document Reminder'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "Document Reminder",
+	});
 }
 
 export function documentDeadlineTemplate(params: DocumentDeadlineParams) {
-  const action = params.requiresSignature ? 'signed' : 'viewed';
-  const content = `
+	const action = params.requiresSignature ? "signed" : "viewed";
+	const content = `
     <div class="alert">
       <h2>Document Deadline Passed</h2>
-      ${params.unprocessedCount !== undefined 
-        ? `<p>${params.unprocessedCount} recipient(s) did not ${action} the document "${params.documentName}".</p>`
-        : `<p>The deadline for the document "${params.documentName}" has passed.</p>`
-      }
+      ${
+				params.unprocessedCount !== undefined
+					? `<p>${params.unprocessedCount} recipient(s) did not ${action} the document "${params.documentName}".</p>`
+					: `<p>The deadline for the document "${params.documentName}" has passed.</p>`
+			}
     </div>
     <a href="${params.dashboardUrl}" class="btn">Go to Document</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'Document Deadline Missed'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "Document Deadline Missed",
+	});
 }
 
 export function sendClassAssignedEmail(params: ClassAssignedParams) {
-  const formatTimeStr = (time: string) => {
-    return new Date(`2000-01-01T${time}`).toLocaleTimeString([], {
-      hour: 'numeric',
-      minute: '2-digit'
-    });
-  };
-  
-  // Format schedule information
-  let scheduleInfo = '';
-  if (params.scheduleDetails.isRecurring && params.scheduleDetails.dayOfWeek) {
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const dayName = days[parseInt(params.scheduleDetails.dayOfWeek)];
-    scheduleInfo = `Weekly on ${dayName}s from ${formatTimeStr(params.scheduleDetails.startTime)} to ${formatTimeStr(params.scheduleDetails.endTime)}`;
-    if (params.scheduleDetails.endDate) {
-      scheduleInfo += ` until ${new Date(params.scheduleDetails.endDate).toLocaleDateString()}`;
-    }
-  } else if (params.scheduleDetails.date) {
-    scheduleInfo = `On ${new Date(params.scheduleDetails.date).toLocaleDateString()} from ${formatTimeStr(params.scheduleDetails.startTime)} to ${formatTimeStr(params.scheduleDetails.endTime)}`;
-  } else {
-    scheduleInfo = `From ${formatTimeStr(params.scheduleDetails.startTime)} to ${formatTimeStr(params.scheduleDetails.endTime)}`;
-  }
-  
-  if (params.scheduleDetails.location) {
-    scheduleInfo += ` at ${params.scheduleDetails.location}`;
-  }
+	const formatTimeStr = (time: string) => {
+		return new Date(`2000-01-01T${time}`).toLocaleTimeString([], {
+			hour: "numeric",
+			minute: "2-digit",
+		});
+	};
 
-  const content = `
+	// Format schedule information
+	let scheduleInfo = "";
+	if (params.scheduleDetails.isRecurring && params.scheduleDetails.dayOfWeek) {
+		const days = [
+			"Sunday",
+			"Monday",
+			"Tuesday",
+			"Wednesday",
+			"Thursday",
+			"Friday",
+			"Saturday",
+		];
+		const dayName = days[parseInt(params.scheduleDetails.dayOfWeek)];
+		scheduleInfo = `Weekly on ${dayName}s from ${formatTimeStr(
+			params.scheduleDetails.startTime
+		)} to ${formatTimeStr(params.scheduleDetails.endTime)}`;
+		if (params.scheduleDetails.endDate) {
+			scheduleInfo += ` until ${new Date(
+				params.scheduleDetails.endDate
+			).toLocaleDateString()}`;
+		}
+	} else if (params.scheduleDetails.date) {
+		scheduleInfo = `On ${new Date(
+			params.scheduleDetails.date
+		).toLocaleDateString()} from ${formatTimeStr(
+			params.scheduleDetails.startTime
+		)} to ${formatTimeStr(params.scheduleDetails.endTime)}`;
+	} else {
+		scheduleInfo = `From ${formatTimeStr(
+			params.scheduleDetails.startTime
+		)} to ${formatTimeStr(params.scheduleDetails.endTime)}`;
+	}
+
+	if (params.scheduleDetails.location) {
+		scheduleInfo += ` at ${params.scheduleDetails.location}`;
+	}
+
+	const content = `
     <h2>Class Assignment</h2>
     <p>You have been assigned to teach the class "${params.className}".</p>
     <div style="background-color: #f8f9fa; padding: 15px; border-radius: 6px; margin: 15px 0;">
@@ -526,33 +572,61 @@ export function sendClassAssignedEmail(params: ClassAssignedParams) {
     <a href="${params.dashboardUrl}" class="btn">View Class Details</a>
   `;
 
-  return generateBaseTemplate({
-    recipient: params.recipient,
-    content,
-    title: 'Class Assignment'
-  });
+	return generateBaseTemplate({
+		recipient: params.recipient,
+		content,
+		title: "Class Assignment",
+	});
+}
+
+export function invitationTemplate(params: InvitationParams) {
+	const content = `
+    <div style="text-align: center; padding: 20px;">
+      <h1 style="color: #333; margin-bottom: 20px;">You're Invited!</h1>
+      <p style="font-size: 16px; color: #666; margin-bottom: 30px;">
+        ${params.inviterName} has invited you to join <strong>${params.studioName}</strong> as a <strong>${params.role}</strong>.
+      </p>
+      <div style="margin: 30px 0;">
+        <a href="${params.invitationUrl}" 
+           style="background-color: #4F46E5; color: white; padding: 12px 24px; 
+                  text-decoration: none; border-radius: 6px; font-weight: 500;">
+          Create Your Account
+        </a>
+      </div>
+      <p style="font-size: 14px; color: #666; margin-top: 30px;">
+        This invitation link will expire in 7 days.
+      </p>
+    </div>
+  `;
+
+	return generateBaseTemplate({
+		recipient: { name: params.recipientEmail.split("@")[0] },
+		content,
+		title: "Studio Invitation",
+	});
 }
 
 // Export all template functions and interfaces
 export const emailTemplates = {
-  generateBaseTemplate,
-  studentEnrollment: studentEnrollmentTemplate,
-  consecutiveAbsences: consecutiveAbsencesTemplate,
-  paymentOverdue: paymentOverdueTemplate,
-  monthlyFinancialSummary: monthlyFinancialSummaryTemplate,
-  staffRegistration: staffRegistrationTemplate,
-  parentAccount: parentAccountTemplate,
-  attendanceNotFilled: attendanceNotFilledTemplate,
-  classCapacity: classCapacityTemplate,
-  classScheduleChange: classScheduleChangeTemplate,
-  newMessage: newMessageTemplate,
-  channelActivity: channelActivityTemplate,
-  paymentConfirmation: paymentConfirmationTemplate,
-  classCancellation: classCancellationTemplate,
-  documentAssigned: documentAssignedTemplate,  // This was the issue - now it's correctly exported
-  documentReminder: documentReminderTemplate,
-  documentDeadline: documentDeadlineTemplate,
-  sendClassAssignedEmail
+	generateBaseTemplate,
+	studentEnrollment: studentEnrollmentTemplate,
+	consecutiveAbsences: consecutiveAbsencesTemplate,
+	paymentOverdue: paymentOverdueTemplate,
+	monthlyFinancialSummary: monthlyFinancialSummaryTemplate,
+	staffRegistration: staffRegistrationTemplate,
+	parentAccount: parentAccountTemplate,
+	attendanceNotFilled: attendanceNotFilledTemplate,
+	classCapacity: classCapacityTemplate,
+	classScheduleChange: classScheduleChangeTemplate,
+	newMessage: newMessageTemplate,
+	channelActivity: channelActivityTemplate,
+	paymentConfirmation: paymentConfirmationTemplate,
+	classCancellation: classCancellationTemplate,
+	documentAssigned: documentAssignedTemplate,
+	documentReminder: documentReminderTemplate,
+	documentDeadline: documentDeadlineTemplate,
+	sendClassAssignedEmail,
+	invitation: invitationTemplate,
 };
 
 export default emailTemplates;

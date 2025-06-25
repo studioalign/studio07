@@ -1,62 +1,70 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import * as sgMail from "npm:@sendgrid/mail";
 
-// Configure SendGrid
-sgMail.setApiKey(Deno.env.get('SENDGRID_API_KEY') || '');
-
+// Import SendGrid using dynamic import within the handler
 Deno.serve(async (req: Request) => {
-  // Comprehensive CORS headers
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*', // Try wildcard first for testing
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, X-Requested-With',
-    'Access-Control-Max-Age': '86400', // 24 hours
-    'Access-Control-Allow-Credentials': 'true'
-  };
+	// Import SendGrid inside the handler
+	const { default: sgMail } = await import("npm:@sendgrid/mail");
 
-  // Make sure OPTIONS requests are handled properly
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { 
-      headers: corsHeaders,
-      status: 200 
-    });
-  }
+	// Set API key
+	sgMail.setApiKey(Deno.env.get("SENDGRID_API_KEY") || "");
 
-  try {
-    const { to, subject, html } = await req.json();
+	// Comprehensive CORS headers
+	const corsHeaders = {
+		"Access-Control-Allow-Origin": "*", // Try wildcard first for testing
+		"Access-Control-Allow-Methods": "POST, OPTIONS",
+		"Access-Control-Allow-Headers":
+			"authorization, x-client-info, apikey, content-type, X-Requested-With",
+		"Access-Control-Max-Age": "86400", // 24 hours
+		"Access-Control-Allow-Credentials": "true",
+	};
 
-    // Input validation (add more as needed)
-    if (!to || !subject || !html) {
-      throw new Error('Missing required email parameters');
-    }
+	// Make sure OPTIONS requests are handled properly
+	if (req.method === "OPTIONS") {
+		return new Response("ok", {
+			headers: corsHeaders,
+			status: 200,
+		});
+	}
 
-    const msg = {
-      to,
-      from: {
-        email: 'noreply@studioalignpro.com',
-        name: 'Studio Align'
-      },
-      subject,
-      html
-    };
+	try {
+		const { to, subject, html } = await req.json();
 
-    // Log the attempt (without API key)
-    console.log('Attempting to send email to:', to);
+		// Input validation (add more as needed)
+		if (!to || !subject || !html) {
+			throw new Error("Missing required email parameters");
+		}
 
-    await sgMail.send(msg);
-    console.log('SendGrid API call successful');
+		const msg = {
+			to,
+			from: {
+				email: "noreply@studioalignpro.com",
+				name: "Studio Align",
+			},
+			subject,
+			html,
+		};
 
-    return new Response(JSON.stringify({ success: true, message: 'Email sent successfully!' }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    });
-  } catch (error) {
-    console.error('Email sending error:', error); // Log full error
+		// Log the attempt (without API key)
+		console.log("Attempting to send email to:", to);
 
-    // Generic error response
-    return new Response(JSON.stringify({ error: error.message }), { // Return specific error message
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
-    });
-  }
+		await sgMail.send(msg);
+		console.log("SendGrid API call successful");
+
+		return new Response(
+			JSON.stringify({ success: true, message: "Email sent successfully!" }),
+			{
+				headers: { ...corsHeaders, "Content-Type": "application/json" },
+				status: 200,
+			}
+		);
+	} catch (error) {
+		console.error("Email sending error:", error); // Log full error
+
+		// Generic error response
+		return new Response(JSON.stringify({ error: error.message }), {
+			// Return specific error message
+			headers: { ...corsHeaders, "Content-Type": "application/json" },
+			status: 400,
+		});
+	}
 });

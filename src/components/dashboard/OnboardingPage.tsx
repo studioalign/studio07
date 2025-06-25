@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../../lib/supabase";
+import { supabase, supabaseAdmin } from "../../lib/supabase";
 import FormInput from "../FormInput";
 
 export default function OnboardingPage() {
@@ -51,7 +51,7 @@ export default function OnboardingPage() {
 			if (!user) throw new Error("No authenticated user");
 
 			// Create the studio
-			const { data: studioData, error: studioError } = await supabase
+			const { data: studioData, error: studioError } = await supabaseAdmin
 				.from("studios")
 				.insert([
 					{
@@ -72,7 +72,7 @@ export default function OnboardingPage() {
 
 			if (updateError) throw updateError;
 
-			navigate("/dashboard/billing");
+			window.location.href = "/dashboard/billing";
 		} catch (err) {
 			console.error("Error in onboarding:", err);
 			setError(

@@ -7,25 +7,122 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import Stripe from "https://esm.sh/stripe@12.0.0";
-
-// Tier mapping for subscription plans
-const TIER_MAPPING = {
-	Starter: { maxStudents: 100, price: 15 },
-	Growth: { maxStudents: 200, price: 20 },
-	Professional: { maxStudents: 300, price: 25 },
-	Scale: { maxStudents: 500, price: 35 },
-	Enterprise: { maxStudents: 1000, price: 50 },
-} as const;
+import Stripe from "https://esm.sh/stripe@14.21.0";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
-	apiVersion: "2025-01-27.acacia",
+	apiVersion: "2024-06-20",
 	httpClient: Stripe.createFetchHttpClient(),
 });
 
 const cryptoProvider = Stripe.createSubtleCryptoProvider();
 
 console.log("Listening for Stripe webhooks...");
+
+// Helper function to get tier data from database
+async function getTierDataFromStripe(
+	supabaseClient: any,
+	stripeProductId: string,
+	stripePriceId: string
+) {
+	const { data: priceData, error } = await supabaseClient
+		.from("stripe_prices")
+		.select(
+			`
+			*,
+			stripe_products!inner(*)
+		`
+		)
+		.eq("stripe_price_id", stripePriceId)
+		.eq("stripe_product_id", stripeProductId)
+		.single();
+
+	if (error) {
+		console.error("❌ Error fetching tier data:", error);
+		return null;
+	}
+
+	return priceData;
+}
+
+// Helper function to get receipt URL and send receipt email
+async function getReceiptAndSendEmail(
+	paymentIntentId: string,
+	customerEmail: string
+): Promise<string | null> {
+	try {
+		if (!paymentIntentId) {
+			console.log("⚠️ No payment intent ID provided for receipt");
+			return null;
+		}
+
+		// Get the payment intent to find the latest charge
+		const paymentIntent = await stripe.paymentIntents.retrieve(
+			paymentIntentId,
+			{
+				expand: ["latest_charge"],
+			}
+		);
+
+		if (
+			!paymentIntent.latest_charge ||
+			typeof paymentIntent.latest_charge === "string"
+		) {
+			console.log("⚠️ No charge found for payment intent:", paymentIntentId);
+			return null;
+		}
+
+		const charge = paymentIntent.latest_charge;
+		const receiptUrl = charge.receipt_url;
+
+		if (receiptUrl) {
+			console.log("📧 Sending receipt email to customer:", customerEmail);
+
+			// Send receipt via email using Stripe's receipt feature
+			try {
+				await stripe.charges.update(charge.id, {
+					receipt_email: customerEmail,
+				});
+				console.log("✅ Receipt email sent successfully");
+			} catch (emailError) {
+				console.error("❌ Error sending receipt email:", emailError.message);
+				// Continue with receipt URL even if email fails
+			}
+
+			console.log("📄 Receipt URL obtained:", receiptUrl);
+			return receiptUrl;
+		} else {
+			console.log("⚠️ No receipt URL available for charge:", charge.id);
+			return null;
+		}
+	} catch (error) {
+		console.error("❌ Error getting receipt and sending email:", error.message);
+		return null;
+	}
+}
+
+// Helper function to get customer email from studio
+async function getCustomerEmail(
+	supabaseClient: any,
+	studioId: string
+): Promise<string | null> {
+	try {
+		const { data: studio, error } = await supabaseClient
+			.from("studios")
+			.select("email, name")
+			.eq("id", studioId)
+			.single();
+
+		if (error || !studio) {
+			console.error("❌ Error getting studio email:", error);
+			return null;
+		}
+
+		return studio.email;
+	} catch (error) {
+		console.error("❌ Error fetching customer email:", error);
+		return null;
+	}
+}
 
 serve(async (req) => {
 	const signature = req.headers.get("Stripe-Signature");
@@ -64,14 +161,20 @@ serve(async (req) => {
 					subscriptionId: subscription.id,
 					customerId: subscription.customer,
 					status: subscription.status,
+					items: subscription.items.data,
 					metadata: subscription.metadata,
 				});
 
 				// Extract metadata to find the studio
 				const studioId = subscription.metadata?.studio_id;
 				const tierName = subscription.metadata?.tier_name;
+				const billingInterval = subscription.metadata?.billing_interval;
 
-				console.log("📋 Extracted metadata:", { studioId, tierName });
+				console.log("📋 Extracted metadata:", {
+					studioId,
+					tierName,
+					billingInterval,
+				});
 
 				if (!studioId || !tierName) {
 					console.error(
@@ -85,19 +188,37 @@ serve(async (req) => {
 					break;
 				}
 
-				// Map tier name to details
-				const tierDetails = TIER_MAPPING[tierName];
-				if (!tierDetails) {
-					console.error(
-						"❌ Unknown tier name:",
-						tierName,
-						"Available tiers:",
-						Object.keys(TIER_MAPPING)
-					);
+				// Get the subscription item to find the price
+				const subscriptionItem = subscription.items.data[0];
+				if (!subscriptionItem) {
+					console.error("❌ No subscription items found");
 					break;
 				}
 
-				console.log("✅ Found tier details:", tierDetails);
+				const stripePrice = subscriptionItem.price;
+				console.log("💰 Stripe price details:", {
+					priceId: stripePrice.id,
+					productId: stripePrice.product,
+					unitAmount: stripePrice.unit_amount,
+					interval: stripePrice.recurring?.interval,
+				});
+
+				// Get tier data from our database
+				const tierData = await getTierDataFromStripe(
+					supabaseClient,
+					stripePrice.product,
+					stripePrice.id
+				);
+
+				if (!tierData) {
+					console.error("❌ Could not find tier data for:", {
+						productId: stripePrice.product,
+						priceId: stripePrice.id,
+					});
+					break;
+				}
+
+				console.log("✅ Found tier data:", tierData);
 
 				// Check if studio exists
 				const { data: studioCheck, error: studioCheckError } =
@@ -107,29 +228,39 @@ serve(async (req) => {
 						.eq("id", studioId)
 						.single();
 
-				if (studioCheckError) {
-					console.error(
-						"❌ Error checking studio existence:",
-						studioCheckError
-					);
-					break;
-				}
-
-				if (!studioCheck) {
-					console.error("❌ Studio not found with ID:", studioId);
+				if (studioCheckError || !studioCheck) {
+					console.error("❌ Studio not found:", {
+						studioId,
+						error: studioCheckError,
+					});
 					break;
 				}
 
 				console.log("✅ Studio found:", studioCheck);
 
-				// Create or update subscription in our database
+				// Determine if this is a lifetime subscription
+				const isLifetime = tierData.billing_interval === "lifetime";
+
+				// Calculate trial dates
+				let trialStart: string | null = null;
+				let trialEnd: string | null = null;
+				if (subscription.trial_start && subscription.trial_end) {
+					trialStart = new Date(subscription.trial_start * 1000).toISOString();
+					trialEnd = new Date(subscription.trial_end * 1000).toISOString();
+				}
+
+				// Create subscription record with enhanced fields
 				const subscriptionData = {
 					studio_id: studioId,
 					stripe_subscription_id: subscription.id,
 					stripe_customer_id: subscription.customer,
-					tier: tierName,
-					max_students: tierDetails.maxStudents,
-					price_gbp: tierDetails.price,
+					stripe_price_id: stripePrice.id,
+					stripe_product_id: stripePrice.product,
+					tier: tierData.stripe_products.tier_name,
+					max_students: tierData.stripe_products.max_students,
+					price_gbp: tierData.amount_gbp,
+					billing_interval: tierData.billing_interval,
+					is_lifetime: isLifetime,
 					status: subscription.status,
 					current_period_start: new Date(
 						subscription.current_period_start * 1000
@@ -137,6 +268,8 @@ serve(async (req) => {
 					current_period_end: new Date(
 						subscription.current_period_end * 1000
 					).toISOString(),
+					trial_start: trialStart,
+					trial_end: trialEnd,
 					cancel_at_period_end: subscription.cancel_at_period_end,
 					created_at: new Date().toISOString(),
 					updated_at: new Date().toISOString(),
@@ -152,19 +285,15 @@ serve(async (req) => {
 
 				if (upsertError) {
 					console.error("❌ Error upserting subscription:", upsertError);
-					console.error(
-						"❌ Full error details:",
-						JSON.stringify(upsertError, null, 2)
-					);
 					throw upsertError;
 				}
 
 				console.log("✅ Subscription upserted successfully");
 
-				// Update studio subscription tier
+				// Update studio with new subscription details
 				const studioUpdateData = {
-					subscription_tier: tierName,
-					max_students: tierDetails.maxStudents,
+					subscription_tier: tierData.stripe_products.tier_name,
+					max_students: tierData.stripe_products.max_students,
 					updated_at: new Date().toISOString(),
 				};
 
@@ -177,20 +306,16 @@ serve(async (req) => {
 
 				if (studioUpdateError) {
 					console.error("❌ Error updating studio:", studioUpdateError);
-					console.error(
-						"❌ Full studio update error:",
-						JSON.stringify(studioUpdateError, null, 2)
-					);
 				} else {
 					console.log("✅ Studio updated successfully");
 				}
 
-				// Only create billing history for successful subscriptions
+				// Create billing history for active/trialing subscriptions
 				if (
 					subscription.status === "active" ||
 					subscription.status === "trialing"
 				) {
-					// Check if we already have a billing history entry for this subscription
+					// Check if billing history already exists
 					const { data: existingBilling } = await supabaseClient
 						.from("billing_history")
 						.select("id")
@@ -199,59 +324,75 @@ serve(async (req) => {
 						.single();
 
 					if (!existingBilling) {
-						// Try to get the latest invoice for this subscription
-						let invoiceUrl = null;
-						let stripeInvoiceId = null;
-						try {
-							const invoices = await stripe.invoices.list({
-								subscription: subscription.id,
-								limit: 1,
-							});
-
-							if (invoices.data.length > 0) {
-								const latestInvoice = invoices.data[0];
-								invoiceUrl = latestInvoice.invoice_pdf;
-								stripeInvoiceId = latestInvoice.id;
-								console.log("📄 Found invoice URL:", invoiceUrl);
-							}
-						} catch (invoiceError) {
-							console.log(
-								"⚠️ No invoice found for new subscription:",
-								invoiceError.message
-							);
-						}
-
-						// Create billing history record for subscription creation
-						const billingData = {
-							studio_id: studioId,
-							amount_gbp: tierDetails.price,
-							description: `${tierName} subscription activated`,
-							status: subscription.status === "active" ? "paid" : "pending",
-							stripe_subscription_id: subscription.id,
-							stripe_invoice_id: stripeInvoiceId,
-							invoice_url: invoiceUrl,
-							created_at: new Date().toISOString(),
-						};
-
-						console.log("💾 Creating billing history:", billingData);
-
-						const { error: billingError } = await supabaseClient
-							.from("billing_history")
-							.insert([billingData]);
-
-						if (billingError) {
-							console.error("❌ Error creating billing history:", billingError);
-							console.error(
-								"❌ Full billing error details:",
-								JSON.stringify(billingError, null, 2)
-							);
-						} else {
-							console.log("✅ Billing history created successfully");
-						}
-					} else {
-						console.log(
-							"⚠️ Billing history entry already exists for this subscription"
+						// Get customer email for receipt
+						const customerEmail = await getCustomerEmail(
+							supabaseClient,
+							studioId
 						);
+						let receiptUrl: string | null = null;
+						let stripeInvoiceId = null;
+
+						// Only create billing history for active subscriptions, not trials
+						// Trials will get billing history when they convert to paid via invoice.payment_succeeded
+						if (subscription.status === "active") {
+							// Try to get receipt URL and send email for active subscriptions
+							try {
+								const invoices = await stripe.invoices.list({
+									subscription: subscription.id,
+									limit: 1,
+								});
+
+								if (invoices.data.length > 0) {
+									const latestInvoice = invoices.data[0];
+									stripeInvoiceId = latestInvoice.id;
+									if (latestInvoice.payment_intent && customerEmail) {
+										receiptUrl = await getReceiptAndSendEmail(
+											latestInvoice.payment_intent as string,
+											customerEmail
+										);
+									}
+									console.log("📄 Receipt handling completed:", { receiptUrl });
+								}
+							} catch (receiptError) {
+								console.log(
+									"⚠️ Could not process receipt:",
+									receiptError.message
+								);
+							}
+
+							// Create enhanced billing history record
+							const billingData = {
+								studio_id: studioId,
+								amount_gbp: tierData.amount_gbp,
+								description: `${tierData.stripe_products.tier_name} subscription activated (${tierData.billing_interval})`,
+								status: "paid",
+								transaction_type: isLifetime ? "lifetime" : "subscription",
+								billing_interval: tierData.billing_interval,
+								stripe_subscription_id: subscription.id,
+								stripe_invoice_id: stripeInvoiceId,
+								invoice_url: receiptUrl || null, // Store receipt URL in invoice_url field for now
+								created_at: new Date().toISOString(),
+							};
+
+							console.log("💾 Creating enhanced billing history:", billingData);
+
+							const { error: billingError } = await supabaseClient
+								.from("billing_history")
+								.insert([billingData]);
+
+							if (billingError) {
+								console.error(
+									"❌ Error creating billing history:",
+									billingError
+								);
+							} else {
+								console.log("✅ Enhanced billing history created successfully");
+							}
+						} else {
+							console.log(
+								"⚠️ Skipping billing history for trial subscription - will create when trial converts to paid"
+							);
+						}
 					}
 				}
 
@@ -263,12 +404,7 @@ serve(async (req) => {
 
 			case "customer.subscription.updated": {
 				const subscription = event.data.object;
-				console.log("🔄 Processing subscription.updated:", {
-					subscriptionId: subscription.id,
-					status: subscription.status,
-					cancelAtPeriodEnd: subscription.cancel_at_period_end,
-					metadata: subscription.metadata,
-				});
+				console.log("🔄 Processing subscription.updated:", subscription);
 
 				// Find the subscription in our database
 				const { data: existingSubscription, error: findError } =
@@ -279,35 +415,56 @@ serve(async (req) => {
 						.single();
 
 				if (findError || !existingSubscription) {
-					console.error("❌ Subscription not found in database:", {
+					console.error("❌ Subscription not found:", {
 						stripeSubscriptionId: subscription.id,
 						error: findError,
 					});
 					break;
 				}
 
-				console.log("✅ Found existing subscription:", existingSubscription);
-
-				// Get the tier details from metadata
-				const tierName = subscription.metadata?.tier_name;
-				if (!tierName) {
-					console.error("❌ Missing tier_name in subscription metadata");
+				// Get current subscription item and price
+				const subscriptionItem = subscription.items.data[0];
+				if (!subscriptionItem) {
+					console.error("❌ No subscription items found in update");
 					break;
 				}
 
-				// Get scheduled tier from metadata (for downgrades)
-				const scheduledTier = subscription.metadata?.scheduled_tier || null;
-				console.log("📋 Scheduled tier from metadata:", scheduledTier);
+				const stripePrice = subscriptionItem.price;
+				console.log("💰 Updated price details:", {
+					priceId: stripePrice.id,
+					productId: stripePrice.product,
+					unitAmount: stripePrice.unit_amount,
+				});
 
-				// Get tier details from shared mapping
-				const tierDetails = TIER_MAPPING[tierName];
-				if (!tierDetails) {
-					console.error("❌ Invalid tier name:", tierName);
+				// Get updated tier data
+				const tierData = await getTierDataFromStripe(
+					supabaseClient,
+					stripePrice.product,
+					stripePrice.id
+				);
+
+				if (!tierData) {
+					console.error("❌ Could not find updated tier data");
 					break;
 				}
 
-				// Update subscription details
+				// Calculate trial dates for update
+				let trialStart: string | null = null;
+				let trialEnd: string | null = null;
+				if (subscription.trial_start && subscription.trial_end) {
+					trialStart = new Date(subscription.trial_start * 1000).toISOString();
+					trialEnd = new Date(subscription.trial_end * 1000).toISOString();
+				}
+
+				// Update subscription with enhanced fields
 				const updateData = {
+					stripe_price_id: stripePrice.id,
+					stripe_product_id: stripePrice.product,
+					tier: tierData.stripe_products.tier_name,
+					max_students: tierData.stripe_products.max_students,
+					price_gbp: tierData.amount_gbp,
+					billing_interval: tierData.billing_interval,
+					is_lifetime: tierData.billing_interval === "lifetime",
 					status: subscription.status,
 					current_period_start: new Date(
 						subscription.current_period_start * 1000
@@ -315,15 +472,13 @@ serve(async (req) => {
 					current_period_end: new Date(
 						subscription.current_period_end * 1000
 					).toISOString(),
+					trial_start: trialStart,
+					trial_end: trialEnd,
 					cancel_at_period_end: subscription.cancel_at_period_end,
-					tier: tierName,
-					max_students: tierDetails.maxStudents,
-					price_gbp: tierDetails.price,
-					scheduled_tier: scheduledTier,
 					updated_at: new Date().toISOString(),
 				};
 
-				console.log("💾 Updating subscription with:", updateData);
+				console.log("💾 Updating subscription with enhanced data:", updateData);
 
 				const { error: updateError } = await supabaseClient
 					.from("studio_subscriptions")
@@ -335,53 +490,50 @@ serve(async (req) => {
 					throw updateError;
 				}
 
-				console.log("✅ Subscription updated successfully");
-
-				// If subscription was reactivated or tier changed, update studio tier
+				// Update studio if tier changed or subscription reactivated
 				if (
-					(subscription.status === "active" &&
-						existingSubscription.status !== "active") ||
-					existingSubscription.tier !== tierName
+					subscription.status === "active" &&
+					(existingSubscription.status !== "active" ||
+						existingSubscription.tier !== tierData.stripe_products.tier_name)
 				) {
-					console.log("🔄 Updating studio tier");
-
-					// If the tier actually changed, clear any scheduled tier since the change has now taken effect
-					if (existingSubscription.tier !== tierName) {
-						console.log("🔄 Tier change detected - clearing scheduled_tier");
-						await supabaseClient
-							.from("studio_subscriptions")
-							.update({
-								scheduled_tier: null,
-								updated_at: new Date().toISOString(),
-							})
-							.eq("id", existingSubscription.id);
-					}
-
 					await supabaseClient
 						.from("studios")
 						.update({
-							subscription_tier: tierName,
-							max_students: tierDetails.maxStudents,
+							subscription_tier: tierData.stripe_products.tier_name,
+							max_students: tierData.stripe_products.max_students,
 							updated_at: new Date().toISOString(),
 						})
 						.eq("id", existingSubscription.studio_id);
 
-					// Create billing history for tier change
+					// Create billing history for the change
+					const changeType =
+						existingSubscription.tier !== tierData.stripe_products.tier_name
+							? "upgrade"
+							: "reactivation";
+
 					await supabaseClient.from("billing_history").insert([
 						{
 							studio_id: existingSubscription.studio_id,
-							amount_gbp: tierDetails.price,
+							amount_gbp: tierData.amount_gbp,
 							description:
-								existingSubscription.tier !== tierName
-									? `Subscription changed from ${existingSubscription.tier} to ${tierName}`
-									: `${tierName} subscription reactivated`,
+								changeType === "upgrade"
+									? `Subscription updated from ${existingSubscription.tier} to ${tierData.stripe_products.tier_name}`
+									: `${tierData.stripe_products.tier_name} subscription reactivated`,
 							status: "active",
+							transaction_type: "upgrade",
+							billing_interval: tierData.billing_interval,
+							upgrade_from_tier:
+								changeType === "upgrade" ? existingSubscription.tier : null,
+							upgrade_to_tier:
+								changeType === "upgrade"
+									? tierData.stripe_products.tier_name
+									: null,
 							stripe_subscription_id: subscription.id,
 							created_at: new Date().toISOString(),
 						},
 					]);
 
-					console.log("✅ Studio tier updated");
+					console.log("✅ Studio and billing history updated for change");
 				}
 
 				console.log("🎉 Subscription update processing completed");
@@ -408,14 +560,73 @@ serve(async (req) => {
 					break;
 				}
 
-				// If this is a subscription being replaced (upgrade/downgrade), don't reset the studio tier
-				const isBeingReplaced =
-					subscription.metadata?.being_replaced === "true";
+				// Check if this subscription is being superseded/replaced
+				const isBeingSuperseded =
+					subscription.metadata?.superseded_by === "lifetime_purchase" ||
+					subscription.metadata?.being_replaced === "true" ||
+					subscription.metadata?.superseded_at;
 
-				if (!isBeingReplaced) {
-					console.log("✅ Found subscription to delete:", existingSubscription);
+				console.log("🔍 Subscription deletion context:", {
+					subscriptionId: subscription.id,
+					isBeingSuperseded,
+					metadata: subscription.metadata,
+					existingStatus: existingSubscription.status,
+				});
 
-					// Update subscription status to canceled
+				if (isBeingSuperseded) {
+					console.log(
+						"🔄 Subscription is being superseded - marking as superseded instead of canceled"
+					);
+
+					// Update subscription status to superseded instead of canceled
+					const { error: updateError } = await supabaseClient
+						.from("studio_subscriptions")
+						.update({
+							status: "superseded",
+							superseded_by: subscription.metadata?.superseded_by || "upgrade",
+							superseded_at:
+								subscription.metadata?.superseded_at ||
+								new Date().toISOString(),
+							updated_at: new Date().toISOString(),
+						})
+						.eq("stripe_subscription_id", subscription.id);
+
+					if (updateError) {
+						console.error(
+							"❌ Error updating superseded subscription:",
+							updateError
+						);
+						throw updateError;
+					}
+
+					// Create billing history for supersession (not cancellation)
+					const supersessionDescription =
+						subscription.metadata?.superseded_by === "lifetime_purchase"
+							? `${existingSubscription.tier} subscription superseded by lifetime purchase`
+							: `${existingSubscription.tier} subscription superseded by upgrade`;
+
+					await supabaseClient.from("billing_history").insert([
+						{
+							studio_id: existingSubscription.studio_id,
+							amount_gbp: 0,
+							description: supersessionDescription,
+							status: "superseded",
+							transaction_type: "upgrade",
+							billing_interval: existingSubscription.billing_interval,
+							stripe_subscription_id: subscription.id,
+							upgrade_from_tier: existingSubscription.tier,
+							superseded_by: subscription.metadata?.superseded_by || "upgrade",
+							created_at: new Date().toISOString(),
+						},
+					]);
+
+					console.log(
+						"✅ Subscription marked as superseded - studio tier will be maintained by new subscription"
+					);
+				} else {
+					console.log("🔄 Processing genuine subscription cancellation");
+
+					// This is a genuine cancellation (not replacement) - mark as canceled
 					const { error: updateError } = await supabaseClient
 						.from("studio_subscriptions")
 						.update({
@@ -432,33 +643,22 @@ serve(async (req) => {
 						throw updateError;
 					}
 
-					console.log("✅ Subscription marked as canceled");
-
 					// Create billing history for cancellation
-					const { error: billingError } = await supabaseClient
-						.from("billing_history")
-						.insert([
-							{
-								studio_id: existingSubscription.studio_id,
-								amount_gbp: 0,
-								description: `${existingSubscription.tier} subscription canceled`,
-								status: "canceled",
-								stripe_subscription_id: subscription.id,
-								created_at: new Date().toISOString(),
-							},
-						]);
+					await supabaseClient.from("billing_history").insert([
+						{
+							studio_id: existingSubscription.studio_id,
+							amount_gbp: 0,
+							description: `${existingSubscription.tier} subscription canceled`,
+							status: "canceled",
+							transaction_type: "downgrade",
+							billing_interval: existingSubscription.billing_interval,
+							stripe_subscription_id: subscription.id,
+							created_at: new Date().toISOString(),
+						},
+					]);
 
-					if (billingError) {
-						console.error(
-							"❌ Error creating cancellation billing history:",
-							billingError
-						);
-					} else {
-						console.log("✅ Cancellation billing history created");
-					}
-
-					// Reset studio to basic tier
-					const { error: studioResetError } = await supabaseClient
+					// Reset studio to default tier for genuine cancellations
+					await supabaseClient
 						.from("studios")
 						.update({
 							subscription_tier: "Starter",
@@ -467,110 +667,10 @@ serve(async (req) => {
 						})
 						.eq("id", existingSubscription.studio_id);
 
-					if (studioResetError) {
-						console.error("❌ Error resetting studio tier:", studioResetError);
-					} else {
-						console.log("✅ Studio tier reset to Starter");
-					}
-				} else {
-					console.log("⚠️ Subscription being replaced - skipping reset steps");
+					console.log("✅ Studio reset to default tier due to cancellation");
 				}
 
 				console.log("🎉 Subscription deletion processing completed");
-				break;
-			}
-
-			case "invoice.payment_succeeded": {
-				const stripeInvoice = event.data.object;
-				console.log("🔄 Processing invoice.payment_succeeded:", {
-					invoiceId: stripeInvoice.id,
-					subscriptionId: stripeInvoice.subscription,
-					amountPaid: stripeInvoice.amount_paid,
-					invoiceUrl: stripeInvoice.invoice_pdf,
-				});
-
-				// Check if this is a subscription invoice
-				if (stripeInvoice.subscription) {
-					console.log("💳 Processing subscription payment");
-
-					// Find subscription in our database
-					const { data: subscription, error: subError } = await supabaseClient
-						.from("studio_subscriptions")
-						.select("*")
-						.eq("stripe_subscription_id", stripeInvoice.subscription)
-						.single();
-
-					if (subscription && !subError) {
-						console.log("✅ Found subscription for payment:", subscription);
-
-						// Check if we already have a billing history entry for this invoice
-						const { data: existingBilling } = await supabaseClient
-							.from("billing_history")
-							.select("id")
-							.eq("stripe_invoice_id", stripeInvoice.id)
-							.single();
-
-						if (!existingBilling) {
-							// Create billing history for successful payment
-							const billingData = {
-								studio_id: subscription.studio_id,
-								amount_gbp:
-									(stripeInvoice.amount_paid || stripeInvoice.total) / 100,
-								description: `${subscription.tier} plan subscription payment`,
-								status: "paid",
-								stripe_invoice_id: stripeInvoice.id,
-								stripe_payment_intent_id: stripeInvoice.payment_intent,
-								stripe_subscription_id: stripeInvoice.subscription,
-								invoice_url: stripeInvoice.invoice_pdf,
-								created_at: new Date().toISOString(),
-							};
-
-							console.log(
-								"💾 Creating billing history for payment:",
-								billingData
-							);
-
-							const { error: billingError } = await supabaseClient
-								.from("billing_history")
-								.insert([billingData]);
-
-							if (billingError) {
-								console.error(
-									"❌ Error creating billing history for subscription payment:",
-									billingError
-								);
-							} else {
-								console.log("✅ Billing history created for payment");
-							}
-						} else {
-							console.log(
-								"⚠️ Billing history entry already exists for this invoice"
-							);
-						}
-
-						// Update subscription status if needed
-						if (subscription.status !== "active") {
-							console.log("🔄 Updating subscription status to active");
-
-							await supabaseClient
-								.from("studio_subscriptions")
-								.update({
-									status: "active",
-									updated_at: new Date().toISOString(),
-								})
-								.eq("id", subscription.id);
-
-							console.log("✅ Subscription status updated to active");
-						}
-					} else {
-						console.error("❌ Subscription not found for payment:", {
-							stripeSubscriptionId: stripeInvoice.subscription,
-							error: subError,
-						});
-					}
-				}
-
-				console.log("🎉 Invoice payment processing completed");
 				break;
 			}
 
@@ -580,90 +680,424 @@ serve(async (req) => {
 					sessionId: session.id,
 					mode: session.mode,
 					subscriptionId: session.subscription,
+					paymentIntentId: session.payment_intent,
 					metadata: session.metadata,
 				});
 
-				// Check if this is a subscription checkout
-				if (session.mode === "subscription" && session.subscription) {
-					console.log("💳 Processing subscription checkout completion");
+				const studioId = session.metadata?.studio_id;
 
-					// Handle subscription checkout success
-					const subscription = await stripe.subscriptions.retrieve(
-						session.subscription
-					);
-					const studioId = session.metadata?.studio_id;
+				if (session.mode === "payment" && studioId) {
+					// Handle lifetime subscription payment
+					console.log("💳 Processing lifetime subscription payment");
 
-					console.log("✅ Retrieved Stripe subscription:", {
-						subscriptionId: subscription.id,
-						status: subscription.status,
-						studioId,
-					});
+					const tierName = session.metadata?.tier_name;
+					const billingInterval = session.metadata?.billing_interval;
 
-					if (studioId && subscription) {
-						// Try to get the invoice for this session
-						let invoiceUrl = null;
-						try {
-							if (session.invoice) {
-								const invoice = await stripe.invoices.retrieve(session.invoice);
-								invoiceUrl = invoice.invoice_pdf;
-								console.log("📄 Found checkout invoice URL:", invoiceUrl);
-							} else {
-								// Fallback: get latest invoice for subscription
-								const invoices = await stripe.invoices.list({
-									subscription: subscription.id,
-									limit: 1,
-								});
+					if (tierName && billingInterval === "lifetime") {
+						// Check if user has an existing active subscription that needs to be superseded
+						const { data: existingSubscription, error: existingSubError } =
+							await supabaseClient
+								.from("studio_subscriptions")
+								.select("*")
+								.eq("studio_id", studioId)
+								.in("status", ["active", "trialing"])
+								.single();
 
-								if (invoices.data.length > 0) {
-									invoiceUrl = invoices.data[0].invoice_pdf;
-									console.log("📄 Found subscription invoice URL:", invoiceUrl);
+						if (existingSubscription && !existingSubError) {
+							console.log("🔄 Found existing subscription to supersede:", {
+								subscriptionId: existingSubscription.stripe_subscription_id,
+								tier: existingSubscription.tier,
+								billingInterval: existingSubscription.billing_interval,
+								isLifetime: existingSubscription.is_lifetime,
+							});
+
+							// Only cancel Stripe subscription if it's a recurring subscription
+							if (
+								existingSubscription.stripe_subscription_id &&
+								!existingSubscription.is_lifetime
+							) {
+								try {
+									await stripe.subscriptions.update(
+										existingSubscription.stripe_subscription_id,
+										{
+											cancel_at_period_end: false, // Cancel immediately
+											metadata: {
+												superseded_by: "lifetime_purchase",
+												superseded_at: new Date().toISOString(),
+												superseded_session_id: session.id,
+											},
+										}
+									);
+
+									// Actually cancel the subscription immediately
+									await stripe.subscriptions.cancel(
+										existingSubscription.stripe_subscription_id
+									);
+
+									console.log(
+										"✅ Existing recurring subscription canceled in Stripe"
+									);
+								} catch (stripeError) {
+									console.error(
+										"❌ Error canceling existing subscription in Stripe:",
+										stripeError
+									);
+									// Continue with the process even if Stripe cancellation fails
 								}
+							} else if (existingSubscription.is_lifetime) {
+								console.log(
+									"⚠️ Existing subscription is already lifetime - no Stripe cancellation needed"
+								);
+							} else {
+								console.log(
+									"⚠️ No Stripe subscription ID found - skipping Stripe cancellation"
+								);
 							}
-						} catch (invoiceError) {
-							console.log(
-								"⚠️ Could not fetch invoice for checkout:",
-								invoiceError.message
-							);
+
+							// Mark existing subscription as superseded in our database
+							await supabaseClient
+								.from("studio_subscriptions")
+								.update({
+									status: "superseded",
+									superseded_by: "lifetime_purchase",
+									superseded_at: new Date().toISOString(),
+									updated_at: new Date().toISOString(),
+								})
+								.eq("id", existingSubscription.id);
+
+							// Create billing history for the superseded subscription
+							const supersededDescription = existingSubscription.is_lifetime
+								? `${existingSubscription.tier} lifetime plan replaced by ${tierName} lifetime`
+								: `${existingSubscription.tier} ${existingSubscription.billing_interval} subscription superseded by lifetime purchase`;
+
+							await supabaseClient.from("billing_history").insert([
+								{
+									studio_id: studioId,
+									amount_gbp: 0,
+									description: supersededDescription,
+									status: "canceled",
+									transaction_type: "downgrade",
+									billing_interval: existingSubscription.billing_interval,
+									stripe_subscription_id:
+										existingSubscription.stripe_subscription_id,
+									upgrade_from_tier: existingSubscription.tier,
+									upgrade_to_tier: tierName,
+									created_at: new Date().toISOString(),
+								},
+							]);
+
+							console.log("✅ Existing subscription marked as superseded");
 						}
 
-						// Create billing history for subscription checkout
-						const billingData = {
+						// Get tier data for the lifetime subscription
+						const { data: tierData, error: tierError } = await supabaseClient
+							.from("stripe_products")
+							.select("*")
+							.eq("tier_name", tierName)
+							.single();
+
+						if (tierError || !tierData) {
+							console.error(
+								"❌ Could not find tier data for lifetime subscription:",
+								tierName
+							);
+							break;
+						}
+
+						// Create new lifetime subscription record
+						const lifetimeSubscriptionData = {
 							studio_id: studioId,
-							amount_gbp: (session.amount_total || 0) / 100,
-							description: `Subscription checkout completed`,
-							status: "paid",
-							stripe_payment_intent_id: session.payment_intent,
-							stripe_subscription_id: subscription.id,
-							invoice_url: invoiceUrl,
+							stripe_customer_id: session.customer,
+							tier: tierName,
+							max_students: tierData.max_students,
+							price_gbp: (session.amount_total || 0) / 100,
+							billing_interval: "lifetime",
+							is_lifetime: true,
+							status: "active",
 							created_at: new Date().toISOString(),
+							updated_at: new Date().toISOString(),
 						};
 
 						console.log(
-							"💾 Creating checkout completion billing history:",
-							billingData
+							"💾 Creating lifetime subscription record:",
+							lifetimeSubscriptionData
 						);
 
-						const { error: billingError } = await supabaseClient
-							.from("billing_history")
-							.insert([billingData]);
+						const { error: lifetimeSubError } = await supabaseClient
+							.from("studio_subscriptions")
+							.upsert(lifetimeSubscriptionData, { onConflict: "studio_id" });
 
-						if (billingError) {
+						if (lifetimeSubError) {
 							console.error(
-								"❌ Error creating checkout billing history:",
-								billingError
+								"❌ Error creating lifetime subscription:",
+								lifetimeSubError
+							);
+							throw lifetimeSubError;
+						}
+
+						// Update studio with new lifetime tier
+						await supabaseClient
+							.from("studios")
+							.update({
+								subscription_tier: tierName,
+								max_students: tierData.max_students,
+								updated_at: new Date().toISOString(),
+							})
+							.eq("id", studioId);
+
+						// Create billing history for the lifetime purchase
+						const lifetimeBillingData = {
+							studio_id: studioId,
+							amount_gbp: (session.amount_total || 0) / 100,
+							description: existingSubscription
+								? `Upgraded from ${existingSubscription.tier} ${existingSubscription.billing_interval} to ${tierName} lifetime`
+								: `${tierName} lifetime subscription purchased`,
+							status: "paid",
+							transaction_type: "lifetime",
+							billing_interval: "lifetime",
+							stripe_payment_intent_id: session.payment_intent,
+							upgrade_from_tier: existingSubscription?.tier || null,
+							upgrade_to_tier: tierName,
+							invoice_url: null as string | null, // Initialize for receipt URL
+							created_at: new Date().toISOString(),
+						};
+
+						// Get customer email and receipt URL for lifetime purchase
+						const customerEmail = await getCustomerEmail(
+							supabaseClient,
+							studioId
+						);
+						if (session.payment_intent && customerEmail) {
+							try {
+								const receiptUrl = await getReceiptAndSendEmail(
+									session.payment_intent as string,
+									customerEmail
+								);
+								if (receiptUrl) {
+									lifetimeBillingData.invoice_url = receiptUrl;
+								}
+								console.log("📧 Receipt processed for lifetime purchase:", {
+									receiptUrl,
+								});
+							} catch (receiptError) {
+								console.error(
+									"❌ Error processing lifetime receipt:",
+									receiptError.message
+								);
+							}
+						}
+
+						const { error: lifetimeBillingError } = await supabaseClient
+							.from("billing_history")
+							.insert([lifetimeBillingData]);
+
+						if (lifetimeBillingError) {
+							console.error(
+								"❌ Error creating lifetime billing history:",
+								lifetimeBillingError
 							);
 						} else {
-							console.log("✅ Checkout billing history created");
+							console.log("✅ Lifetime subscription processed successfully", {
+								previousSubscription: existingSubscription
+									? {
+											tier: existingSubscription.tier,
+											interval: existingSubscription.billing_interval,
+									  }
+									: null,
+								newSubscription: {
+									tier: tierName,
+									interval: "lifetime",
+									amount: (session.amount_total || 0) / 100,
+								},
+							});
+						}
+					}
+				} else if (
+					session.mode === "subscription" &&
+					session.subscription &&
+					studioId
+				) {
+					// Handle recurring subscription checkout
+					console.log("💳 Processing recurring subscription checkout");
+
+					// Create billing history for subscription checkout
+					await supabaseClient.from("billing_history").insert([
+						{
+							studio_id: studioId,
+							amount_gbp: (session.amount_total || 0) / 100,
+							description: "Subscription checkout completed",
+							status: "paid",
+							transaction_type: "subscription",
+							stripe_payment_intent_id: session.payment_intent,
+							stripe_subscription_id: session.subscription,
+							created_at: new Date().toISOString(),
+						},
+					]);
+
+					console.log("✅ Subscription checkout billing history created");
+				}
+
+				console.log("🎉 Checkout session processing completed");
+				break;
+			}
+
+			case "invoice.payment_succeeded": {
+				const stripeInvoice = event.data.object;
+				console.log("🔄 Processing invoice.payment_succeeded:", {
+					invoiceId: stripeInvoice.id,
+					subscriptionId: stripeInvoice.subscription,
+					amountPaid: stripeInvoice.amount_paid,
+					amountTotal: stripeInvoice.total,
+					customerId: stripeInvoice.customer,
+					metadata: stripeInvoice.metadata,
+				});
+
+				if (stripeInvoice.subscription) {
+					// Handle subscription-based invoices
+					console.log(
+						"📋 Processing subscription invoice:",
+						stripeInvoice.subscription
+					);
+
+					// Find subscription and create billing history
+					const { data: subscription, error: subError } = await supabaseClient
+						.from("studio_subscriptions")
+						.select("*")
+						.eq("stripe_subscription_id", stripeInvoice.subscription)
+						.single();
+
+					if (subError) {
+						console.error("❌ Error finding subscription for invoice:", {
+							subscriptionId: stripeInvoice.subscription,
+							error: subError,
+						});
+					}
+
+					if (subscription && !subError) {
+						console.log("✅ Found subscription for invoice:", {
+							studioId: subscription.studio_id,
+							tier: subscription.tier,
+							billingInterval: subscription.billing_interval,
+						});
+
+						// Check if billing history already exists
+						const { data: existingBilling, error: existingError } =
+							await supabaseClient
+								.from("billing_history")
+								.select("id")
+								.eq("stripe_invoice_id", stripeInvoice.id)
+								.single();
+
+						if (existingError && existingError.code !== "PGRST116") {
+							console.error(
+								"❌ Error checking existing billing history:",
+								existingError
+							);
+						}
+
+						if (!existingBilling) {
+							console.log(
+								"💾 Creating billing history for subscription invoice"
+							);
+
+							// Get customer email and receipt URL
+							const customerEmail = await getCustomerEmail(
+								supabaseClient,
+								subscription.studio_id
+							);
+							let receiptUrl: string | null = null;
+
+							// Get receipt URL and send email if payment intent exists
+							if (stripeInvoice.payment_intent && customerEmail) {
+								try {
+									receiptUrl = await getReceiptAndSendEmail(
+										stripeInvoice.payment_intent as string,
+										customerEmail
+									);
+									console.log(
+										"📧 Receipt processed for subscription payment:",
+										{ receiptUrl }
+									);
+								} catch (receiptError) {
+									console.error(
+										"❌ Error processing receipt:",
+										receiptError.message
+									);
+								}
+							}
+
+							// Create billing history with enhanced fields
+							const billingData = {
+								studio_id: subscription.studio_id,
+								amount_gbp:
+									(stripeInvoice.amount_paid || stripeInvoice.total) / 100,
+								description: `${subscription.tier} subscription payment`,
+								status: "paid",
+								transaction_type: subscription.is_lifetime
+									? "lifetime"
+									: "subscription",
+								billing_interval: subscription.billing_interval,
+								stripe_invoice_id: stripeInvoice.id,
+								stripe_payment_intent_id: stripeInvoice.payment_intent,
+								stripe_subscription_id: stripeInvoice.subscription,
+								invoice_url: receiptUrl || null, // Store receipt URL in invoice_url field
+								created_at: new Date().toISOString(),
+							};
+
+							console.log("💾 Billing data to insert:", billingData);
+
+							const { error: billingError } = await supabaseClient
+								.from("billing_history")
+								.insert([billingData]);
+
+							if (billingError) {
+								console.error(
+									"❌ Error creating billing history for invoice payment:",
+									{
+										invoiceId: stripeInvoice.id,
+										error: billingError,
+										billingData,
+									}
+								);
+							} else {
+								console.log(
+									"✅ Enhanced billing history created for invoice payment with receipt"
+								);
+							}
+						} else {
+							console.log(
+								"⚠️ Billing history already exists for invoice:",
+								stripeInvoice.id
+							);
+						}
+
+						// Update subscription status if needed
+						if (subscription.status !== "active") {
+							console.log("🔄 Updating subscription status to active");
+							const { error: statusError } = await supabaseClient
+								.from("studio_subscriptions")
+								.update({
+									status: "active",
+									updated_at: new Date().toISOString(),
+								})
+								.eq("id", subscription.id);
+
+							if (statusError) {
+								console.error(
+									"❌ Error updating subscription status:",
+									statusError
+								);
+							}
 						}
 					} else {
-						console.error("❌ Missing studioId or subscription for checkout:", {
-							studioId,
-							subscriptionExists: !!subscription,
+						console.error("❌ No subscription found for invoice:", {
+							invoiceId: stripeInvoice.id,
+							subscriptionId: stripeInvoice.subscription,
 						});
 					}
 				}
 
-				console.log("🎉 Checkout session processing completed");
+				console.log("🎉 Invoice payment processing completed");
 				break;
 			}
 
@@ -671,24 +1105,10 @@ serve(async (req) => {
 				console.log("Unhandled event type:", event.type);
 				break;
 		}
+
 		return new Response(JSON.stringify({ ok: true }), { status: 200 });
 	} catch (err) {
 		console.error("Webhook error:", err.message);
-
-		// Detailed error logging for debugging
-		if (err.type === "StripeSignatureVerificationError") {
-			console.error("⚠️ Signature verification failed!");
-			console.error("Header present:", !!signature);
-			if (signature) {
-				console.error("Signature preview:", signature.substring(0, 20) + "...");
-			}
-			console.error("Timestamp issue:", err.message.includes("timestamp"));
-			console.error("Signature issue:", err.message.includes("signature"));
-		} else {
-			console.error("Other error type:", err.type);
-		}
-
-		// Log event processing details
 		console.error(
 			"Full error:",
 			JSON.stringify(

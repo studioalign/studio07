@@ -1,77 +1,123 @@
 import React, { useState, useEffect } from "react";
-import { UserPlus, AlertCircle, Clock } from "lucide-react";
-import { Role } from "../types/auth";
-import { roles } from "../data/roles";
-import RoleCard from "./RoleCard";
-import SearchableDropdown from "./SearchableDropdown";
-import FormInput from "./FormInput";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { AlertCircle, UserPlus } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import { useStudios } from "../hooks/useStudios";
+import { Role } from "../types/auth";
+import FormInput from "./FormInput";
 import { notificationService } from "../services/notificationService";
+import { Database } from "../types/database-types";
 
-// Store the last signup attempt timestamp in localStorage
-const SIGNUP_COOLDOWN_KEY = "studioalign_signup_cooldown";
-const COOLDOWN_PERIOD_MS = 60000; // 1 minute cooldown
+// Cooldown constants
+const SIGNUP_COOLDOWN_KEY = "signup_cooldown";
+const COOLDOWN_PERIOD_MS = 60000; // 1 minute
+
+type ValidateInvitationResponse = {
+	studio_id: string;
+	email: string;
+	role: Role;
+	studio_name: string;
+};
 
 export default function SignupForm() {
+	const [searchParams] = useSearchParams();
+	const invitationToken = searchParams.get("token");
 	const [selectedRole, setSelectedRole] = useState<Role | null>(null);
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
-	const [selectedStudio, setSelectedStudio] = useState<{
-		id: string;
-		label: string;
-	} | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
-	const [cooldownRemaining, setCooldownRemaining] = useState(0);
 	const [confirmationSent, setConfirmationSent] = useState(false);
-	const navigate = useNavigate();
-	const {
-		studios,
-		isLoading: loadingStudios,
-		error: studiosError,
-	} = useStudios();
+	const [cooldownRemaining, setCooldownRemaining] = useState(0);
+	const [invitationRole, setInvitationRole] = useState<Role | null>(null);
+	const [invitationDetails, setInvitationDetails] = useState<{
+		studio_name: string;
+		role: Role;
+		email: string;
+		studio_id: string;
+	} | null>(null);
+	const [showSignupForm, setShowSignupForm] = useState(false);
 
-	// Check for existing cooldown on component mount
+	// Check cooldown on component mount
 	useEffect(() => {
-		const lastSignupAttempt = localStorage.getItem(SIGNUP_COOLDOWN_KEY);
-		if (lastSignupAttempt) {
-			const lastAttemptTime = parseInt(lastSignupAttempt, 10);
-			const now = Date.now();
-			const elapsed = now - lastAttemptTime;
-			
-			if (elapsed < COOLDOWN_PERIOD_MS) {
-				const remaining = Math.ceil((COOLDOWN_PERIOD_MS - elapsed) / 1000);
-				setCooldownRemaining(remaining);
-				
-				// Start countdown timer
+		const cooldownEnd = localStorage.getItem(SIGNUP_COOLDOWN_KEY);
+		if (cooldownEnd) {
+			const remaining = Math.max(
+				0,
+				parseInt(cooldownEnd) + COOLDOWN_PERIOD_MS - Date.now()
+			);
+			if (remaining > 0) {
+				setCooldownRemaining(Math.ceil(remaining / 1000));
 				const timer = setInterval(() => {
-					setCooldownRemaining(prev => {
+					setCooldownRemaining((prev) => {
 						if (prev <= 1) {
 							clearInterval(timer);
+							localStorage.removeItem(SIGNUP_COOLDOWN_KEY);
 							return 0;
 						}
 						return prev - 1;
 					});
 				}, 1000);
-				
-				return () => clearInterval(timer);
 			}
 		}
 	}, []);
 
+	// Validate invitation token on component mount
+	useEffect(() => {
+		if (invitationToken) {
+			validateInvitationToken();
+		} else {
+			// If no invitation token, this is a direct owner signup
+			setSelectedRole("owner");
+			setShowSignupForm(true);
+		}
+	}, [invitationToken]);
+
+	const validateInvitationToken = async () => {
+		try {
+			// Validate invitation token using the database function
+			const { data, error: validationError } = await (supabase.rpc(
+				"validate_invitation_token" as keyof Database["public"]["Functions"],
+				{
+					p_token: invitationToken || "",
+				}
+			) as unknown as Promise<{
+				data: ValidateInvitationResponse[] | null;
+				error: Error | null;
+			}>);
+
+			if (validationError) {
+				throw validationError;
+			}
+
+			if (!data || data.length === 0) {
+				setError("Invalid or expired invitation token");
+				return;
+			}
+
+			const invitation = data[0];
+			const role = invitation.role as Role;
+			setInvitationDetails({
+				studio_name: invitation.studio_name,
+				role,
+				email: invitation.email,
+				studio_id: invitation.studio_id,
+			});
+			setEmail(invitation.email);
+			setSelectedRole(role);
+			setInvitationRole(role);
+			setShowSignupForm(true);
+
+			console.log("Valid invitation found for studio:", invitation.studio_name);
+		} catch (err) {
+			console.error("Error validating invitation:", err);
+			setError("Invalid invitation token");
+		}
+	};
+
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError(null);
-		
-		// Check if we're in a cooldown period
-		if (cooldownRemaining > 0) {
-			setError(`Please wait ${cooldownRemaining} seconds before trying again.`);
-			return;
-		}
-		
 		setIsSubmitting(true);
 
 		try {
@@ -79,94 +125,100 @@ export default function SignupForm() {
 				throw new Error("Please select a role");
 			}
 
-			if (
-				(selectedRole === "teacher" || selectedRole === "parent") &&
-				!selectedStudio
-			) {
-				throw new Error("Please select a studio");
+			// Sign up the user with metadata
+			const signUpData: {
+				email: string;
+				password: string;
+				options: {
+					data: {
+						name: string;
+						role: Role;
+						studio_id?: string;
+						invitation_token?: string;
+					};
+					emailRedirectTo: string;
+				};
+			} = {
+				email,
+				password,
+				options: {
+					data: {
+						name,
+						role: selectedRole,
+						studio_id: invitationDetails?.studio_id,
+					},
+					emailRedirectTo: `${window.location.origin}/auth/callback`,
+				},
+			};
+
+			// Add invitation token if present
+			if (invitationToken) {
+				signUpData.options.data.invitation_token = invitationToken;
 			}
 
-			// Sign up the user with metadata
 			const { data: authData, error: signUpError } = await supabase.auth.signUp(
-				{
-					email,
-					password,
-					options: {
-						data: {
-							name,
-							role: selectedRole,
-							studio_id: selectedStudio?.id,
-						},
-						emailRedirectTo: `${window.location.origin}/auth/callback`,
-					},
-				}
+				signUpData
 			);
 
-			// Important: When an email already exists, Supabase might not return an error
-			// Instead, it may return a user object without creating a new account
-			// Let's check for this specific condition
-			
 			if (signUpError) {
 				console.error("Signup error:", signUpError);
-				
+
 				// Check specifically for email already registered error
-				if (signUpError.message.includes("User already registered") || 
+				if (
+					signUpError.message.includes("User already registered") ||
 					signUpError.message.includes("already in use") ||
-					signUpError.message.includes("already exists")) {
-					throw new Error("This email address is already registered. Please use a different email or try signing in.");
+					signUpError.message.includes("already exists")
+				) {
+					throw new Error(
+						"This email address is already registered. Please use a different email or try signing in."
+					);
 				}
-				
+
 				throw signUpError;
 			}
-			
-			// Check Supabase response for indicators that the email exists
-			// When email exists, Supabase often returns something like { identities: [] }
-			// or it may set a specific flag
-			if (!authData.user || 
-				(authData.user.identities && authData.user.identities.length === 0) ||
-				authData.user.email_confirmed_at) {
-				console.log("Email likely already exists:", authData);
-				throw new Error("This email address is already registered. Please use a different email or try signing in.");
+
+			// Remove the problematic check - if we get here, signup was successful
+			if (!authData.user) {
+				throw new Error("Failed to create user account. Please try again.");
 			}
 
 			// Send appropriate notifications based on role
 			try {
-				if (selectedRole === "parent" && selectedStudio) {
+				if (selectedRole === "parent" && invitationDetails?.studio_id) {
 					await notificationService.notifyParentRegistration(
-						selectedStudio.id,
+						invitationDetails.studio_id,
 						name,
 						authData.user.id
 					);
 					console.log("Parent registration notification sent");
-				} else if (selectedRole === "teacher" && selectedStudio) {
+				} else if (selectedRole === "teacher" && invitationDetails?.studio_id) {
 					await notificationService.notifyStaffRegistration(
-						selectedStudio.id,
+						invitationDetails.studio_id,
 						name,
 						authData.user.id,
-						"teacher" // Using "teacher" role since staff doesn't exist
+						"teacher"
 					);
 					console.log("Teacher registration notification sent");
 				}
 			} catch (notificationError) {
 				// Log but don't fail the registration if notification fails
-				console.error("Failed to send registration notification:", notificationError);
+				console.error(
+					"Failed to send registration notification:",
+					notificationError
+				);
 			}
 
-			// Always show confirmation message after signup, regardless of role
-			// This ensures users confirm their email before proceeding
 			setConfirmationSent(true);
 		} catch (err) {
 			console.error("Error in signup:", err);
-			
+
 			// Check for rate limit error
 			if (err instanceof Error && err.message.includes("rate limit exceeded")) {
-				// Set a cooldown period
 				localStorage.setItem(SIGNUP_COOLDOWN_KEY, Date.now().toString());
 				setCooldownRemaining(COOLDOWN_PERIOD_MS / 1000);
-				
-				// Start cooldown timer
+
 				const timer = setInterval(() => {
-					setCooldownRemaining(prev => {
+					setCooldownRemaining((prev) => {
 						if (prev <= 1) {
 							clearInterval(timer);
 							return 0;
@@ -174,7 +226,7 @@ export default function SignupForm() {
 						return prev - 1;
 					});
 				}, 1000);
-				
+
 				setError(
 					"Too many signup attempts. Please wait a minute before trying again."
 				);
@@ -215,10 +267,11 @@ export default function SignupForm() {
 						We've sent a confirmation email to <strong>{email}</strong>
 					</p>
 					<p className="text-sm text-gray-600 mb-6">
-						Please check your email and click the confirmation link to activate your account.
-						{selectedRole === "owner" && 
-							" After confirming, you'll be taken to the studio setup page to complete your registration."
-						}
+						Please check your email and click the confirmation link to activate
+						your account.
+						{selectedRole === "owner" &&
+							" After confirming, you'll be taken to the studio setup page and then need to choose a subscription plan to access your dashboard."}
+						{invitationToken && ` You'll then be able to access the studio.`}
 					</p>
 					<Link
 						to="/"
@@ -231,35 +284,59 @@ export default function SignupForm() {
 		);
 	}
 
+	// Show welcome screen for invited users
+	if (invitationToken && invitationDetails && !showSignupForm) {
+		return (
+			<div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl">
+				<div className="text-center mb-8">
+					<div className="w-16 h-16 bg-brand-primary rounded-full flex items-center justify-center mx-auto mb-4">
+						<UserPlus className="h-8 w-8 text-white" />
+					</div>
+					<h1 className="text-2xl font-bold text-brand-primary mb-2">
+						Welcome to {invitationDetails.studio_name}!
+					</h1>
+					<p className="text-brand-secondary-400 mb-6">
+						You've been invited to join as a{" "}
+						<strong>{invitationDetails.role}</strong>
+					</p>
+					<div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6 text-left">
+						<h3 className="font-medium text-blue-900 mb-2">What's next?</h3>
+						<ul className="text-sm text-blue-800 space-y-2">
+							<li>• Create your account with a secure password</li>
+							<li>• Access your {invitationDetails.role} dashboard</li>
+							<li>• Start managing your activities in the studio</li>
+						</ul>
+					</div>
+					<button
+						onClick={() => setShowSignupForm(true)}
+						className="w-full px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 transition-colors"
+					>
+						Create Your Account
+					</button>
+				</div>
+			</div>
+		);
+	}
+
 	return (
-		<div className="w-full max-w-4xl p-8 bg-white rounded-2xl shadow-xl">
+		<div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl">
 			<div className="text-center mb-8">
 				<h1 className="text-3xl font-bold text-brand-primary mb-2">
-					Create your StudioAlign account
+					{invitationToken ? "Create your account" : "Sign up as Studio Owner"}
 				</h1>
 				<p className="text-brand-secondary-400">
-					Choose your role to get started
+					{invitationToken
+						? `Join ${invitationDetails?.studio_name || "the studio"}`
+						: "Start your dance studio management journey"}
 				</p>
 			</div>
 
-			<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-				{roles.map((role) => (
-					<RoleCard
-						key={role.id}
-						role={role}
-						isSelected={selectedRole === role.id}
-						onSelect={setSelectedRole}
-					/>
-				))}
-			</div>
-
-			{cooldownRemaining > 0 && (
-				<div className="mb-6 bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-md flex items-start">
-					<Clock className="w-5 h-5 mr-2 mt-0.5" />
-					<div>
-						<p className="font-medium">Signup attempt rate limited</p>
-						<p>Please wait {cooldownRemaining} seconds before trying again.</p>
-					</div>
+			{invitationToken && invitationRole && (
+				<div className="my-4 p-4 bg-green-50 border border-green-200 rounded-md">
+					<p className="text-sm text-green-800">
+						You've been invited to join as a <strong>{invitationRole}</strong>.
+						Complete the form below to create your account.
+					</p>
 				</div>
 			)}
 
@@ -280,6 +357,7 @@ export default function SignupForm() {
 					value={email}
 					onChange={(e) => setEmail(e.target.value)}
 					required
+					readOnly={!!invitationToken}
 				/>
 
 				<FormInput
@@ -291,21 +369,6 @@ export default function SignupForm() {
 					required
 				/>
 
-				{(selectedRole === "teacher" || selectedRole === "parent") && (
-					<SearchableDropdown
-						id="studio"
-						label="Select Studio"
-						value={selectedStudio}
-						onChange={setSelectedStudio}
-						options={studios.map((studio) => ({
-							id: studio.id,
-							label: studio.name,
-						}))}
-						isLoading={loadingStudios}
-						error={studiosError}
-					/>
-				)}
-				
 				{error && (
 					<div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md flex items-start">
 						<AlertCircle className="w-5 h-5 mr-2 mt-0.5" />
@@ -321,17 +384,28 @@ export default function SignupForm() {
 					{isSubmitting ? (
 						<>
 							<div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-							Signing up...
+							Creating account...
 						</>
+					) : cooldownRemaining > 0 ? (
+						`Please wait ${cooldownRemaining}s`
 					) : (
 						<>
 							<UserPlus className="w-5 h-5 mr-2" />
-							Sign up
+							Create Account
 						</>
 					)}
 				</button>
 
-				<p className="text-center text-sm text-brand-secondary-400">
+				{cooldownRemaining > 0 && (
+					<p className="text-center text-sm text-gray-600">
+						Too many attempts. Please wait {cooldownRemaining} seconds before
+						trying again.
+					</p>
+				)}
+			</form>
+
+			<div className="mt-8 text-center">
+				<p className="text-brand-secondary-400">
 					Already have an account?{" "}
 					<Link
 						to="/"
@@ -340,7 +414,7 @@ export default function SignupForm() {
 						Sign in
 					</Link>
 				</p>
-			</form>
+			</div>
 		</div>
 	);
 }
