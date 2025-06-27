@@ -107,8 +107,6 @@ export default function SignupForm() {
 			setSelectedRole(role);
 			setInvitationRole(role);
 			setShowSignupForm(true);
-
-			console.log("Valid invitation found for studio:", invitation.studio_name);
 		} catch (err) {
 			console.error("Error validating invitation:", err);
 			setError("Invalid invitation token");
@@ -190,7 +188,6 @@ export default function SignupForm() {
 						name,
 						authData.user.id
 					);
-					console.log("Parent registration notification sent");
 				} else if (selectedRole === "teacher" && invitationDetails?.studio_id) {
 					await notificationService.notifyStaffRegistration(
 						invitationDetails.studio_id,
@@ -198,7 +195,6 @@ export default function SignupForm() {
 						authData.user.id,
 						"teacher"
 					);
-					console.log("Teacher registration notification sent");
 				}
 			} catch (notificationError) {
 				// Log but don't fail the registration if notification fails

@@ -79,12 +79,10 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 	// Cleanup function to unsubscribe from all channels
 	const cleanupChannels = useCallback(() => {
 		if (conversationChannelRef.current) {
-			console.log("Removing conversation channel");
 			supabase.removeChannel(conversationChannelRef.current);
 			conversationChannelRef.current = null;
 		}
 		if (messagesChannelRef.current) {
-			console.log("Removing messages channel");
 			supabase.removeChannel(messagesChannelRef.current);
 			messagesChannelRef.current = null;
 		}
@@ -97,7 +95,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 		setLoading((prev) => ({ ...prev, conversations: true }));
 
 		try {
-			console.log("Fetching conversations for user", profile.id);
 			const { data, error: fetchError } = await supabase
 				.from("conversation_participants")
 				.select(
@@ -148,7 +145,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 				})
 			);
 
-			console.log("Fetched conversations:", mappedConversations.length);
 			setConversations(mappedConversations);
 
 			// Auto-mark as read if there's an active conversation
@@ -197,7 +193,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 			setLoading((prev) => ({ ...prev, messages: true }));
 
 			try {
-				console.log("Fetching messages for conversation", conversationId);
 				const { data, error: fetchError } = await supabase
 					.from("messages")
 					.select(
@@ -217,8 +212,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 
 				// Only set messages if this is still the current conversation
 				if (currentConversationIdRef.current === conversationId) {
-					console.log("Setting", data?.length || 0, "messages");
-
 					// Store processed message IDs to avoid duplicates from real-time events
 					data?.forEach((msg) => processedMessageIdsRef.current.add(msg.id));
 
@@ -260,8 +253,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 			if (!activeConversation || !profile?.id) return;
 
 			try {
-				console.log("Sending message to conversation", activeConversation);
-
 				// Create optimistic message with distinctive ID format
 				const optimisticId = `temp-${Date.now()}-${Math.random()
 					.toString(36)
@@ -337,7 +328,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 					throw new Error("At least two participants are required");
 				}
 
-				console.log("Creating conversation with participants:", participantIds);
 				const { data, error } = await supabase.rpc("create_conversation", {
 					created_by: createdBy,
 					participant_ids: participantIds,
@@ -383,8 +373,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 			conversationChannelRef.current = null;
 		}
 
-		console.log("Setting up conversation subscription for user", profile.id);
-
 		// Create new subscription for conversations
 		const channel = supabase
 			.channel(`conversations-${profile.id}`)
@@ -397,7 +385,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 					filter: `user_id=eq.${profile.id}`,
 				},
 				(payload) => {
-					console.log("Conversation participants change detected:", payload);
 					fetchConversations();
 				}
 			)
@@ -409,17 +396,10 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 					table: "conversations",
 				},
 				(payload) => {
-					console.log("Conversation update detected:", payload);
 					fetchConversations();
 				}
 			)
-			.subscribe((status, err) => {
-				console.log(
-					"Conversation subscription status:",
-					status,
-					err ? err.message : "OK"
-				);
-			});
+			.subscribe((status, err) => {});
 
 		conversationChannelRef.current = channel;
 
@@ -448,11 +428,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 			messagesChannelRef.current = null;
 		}
 
-		console.log(
-			"Setting up messages subscription for conversation",
-			activeConversation
-		);
-
 		// Create new subscription for messages with better duplicate prevention
 		const channel = supabase
 			.channel(`messages-${activeConversation}`)
@@ -465,14 +440,11 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 					filter: `conversation_id=eq.${activeConversation}`,
 				},
 				(payload) => {
-					console.log("New message received from subscription:", payload.new);
-
 					// Extract the new message
 					const newMessage = payload.new as Message;
 
 					// Check if we've already processed this message
 					if (processedMessageIdsRef.current.has(newMessage.id)) {
-						console.log("Message already processed, skipping:", newMessage.id);
 						return;
 					}
 
@@ -490,9 +462,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 					);
 
 					if (isMessageDuplicate) {
-						console.log(
-							"Message appears to be a duplicate of an existing message, skipping"
-						);
 						return;
 					}
 
@@ -504,7 +473,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 
 					// If it's not from the current user, mark as read
 					if (newMessage.sender_id !== profile.id) {
-						console.log("Marking message as read");
 						// Call RPC to mark messages as read (without waiting)
 						supabase
 							.rpc("mark_messages_as_read", {
@@ -524,13 +492,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 					}
 				}
 			)
-			.subscribe((status, err) => {
-				console.log(
-					"Messages subscription status:",
-					status,
-					err ? `Error: ${err.message}` : "OK"
-				);
-			});
+			.subscribe((status, err) => {});
 
 		messagesChannelRef.current = channel;
 

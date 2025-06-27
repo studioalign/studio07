@@ -164,7 +164,6 @@ export default React.memo(function Classes() {
 					filter: `studio_id=eq.${profile.studio.id}`,
 				},
 				(payload) => {
-					console.log("Class change detected:", payload);
 					fetchClassInstances();
 				}
 			)

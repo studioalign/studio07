@@ -170,8 +170,6 @@ async function createNotification(data: NotificationData) {
 		// Only attempt to send email if it's required
 		if (data.email_required) {
 			try {
-				console.log("Email notification required, fetching user details...");
-
 				// Get user email and name for email sending
 				const { data: userData, error: userError } = await supabaseAdmin
 					.from("users")
@@ -189,8 +187,6 @@ async function createNotification(data: NotificationData) {
 
 				// Send the appropriate email based on notification type
 				let emailResult = false;
-
-				console.log("Sending email notification of type:", data.type);
 
 				const details = data.details as Record<string, any>;
 
@@ -378,10 +374,6 @@ async function createNotification(data: NotificationData) {
 
 					default:
 						// Generic email for types without specific templates
-						console.log(
-							"No specific email template for notification type:",
-							data.type
-						);
 						break;
 				}
 
@@ -395,8 +387,6 @@ async function createNotification(data: NotificationData) {
 							email_success: emailResult,
 						})
 						.eq("id", notificationData.id);
-
-					console.log("Notification updated with email status:", emailResult);
 				}
 
 				return { success: true, emailSent: emailResult };
@@ -1295,9 +1285,6 @@ async function notifyUpgradeRequired(studioId: string, message: string) {
 	}
 
 	if (existingNotifications && existingNotifications.length > 0) {
-		console.log(
-			"Skipping upgrade notification, a similar one was sent recently."
-		);
 		return;
 	}
 

@@ -35,7 +35,6 @@ export default function AddRoomForm({
 				},
 			]);
 
-			console.log(insertError);
 			if (insertError) throw insertError;
 
 			onSuccess();

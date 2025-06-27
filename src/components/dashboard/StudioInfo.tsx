@@ -72,57 +72,56 @@ export default function StudioInfo() {
 	}, [profile?.studio, localStudioInfo]);
 
 	useEffect(() => {
-	  if (!profile?.studio?.id) return;
-	  
-	  // Subscribe to location changes for this studio
-	  const subscription = supabase
-	    .channel('locations-changes')
-	    .on(
-	      'postgres_changes',
-	      {
-	        event: '*', // Listen for all events (INSERT, UPDATE, DELETE)
-	        schema: 'public',
-	        table: 'locations',
-	        filter: `studio_id=eq.${profile.studio.id}`
-	      },
-	      (payload) => {
-	        console.log('Location change detected:', payload);
-	        // Refresh locations when something changes
-	        fetchLocations();
-	      }
-	    )
-	    .subscribe();
-	  
-	  // Clean up subscription on unmount
-	  return () => {
-	    supabase.removeChannel(subscription);
-	  };
+		if (!profile?.studio?.id) return;
+
+		// Subscribe to location changes for this studio
+		const subscription = supabase
+			.channel("locations-changes")
+			.on(
+				"postgres_changes",
+				{
+					event: "*", // Listen for all events (INSERT, UPDATE, DELETE)
+					schema: "public",
+					table: "locations",
+					filter: `studio_id=eq.${profile.studio.id}`,
+				},
+				(payload) => {
+					// Refresh locations when something changes
+					fetchLocations();
+				}
+			)
+			.subscribe();
+
+		// Clean up subscription on unmount
+		return () => {
+			supabase.removeChannel(subscription);
+		};
 	}, [profile?.studio?.id]);
 
 	const fetchLocations = async () => {
-	  if (!profile?.studio?.id) return;
-	  try {
-	    setLoadingLocations(true);
-	    const { data, error: fetchError } = await supabase
-	      .from("locations")
-	      .select("*")
-	      .eq("studio_id", profile?.studio.id)
-	      .order("name");
-	
-	    if (fetchError) throw fetchError;
-	    setLocations(data || []);
-	  } catch (err) {
-	    console.error("Error fetching locations:", err);
-	  } finally {
-	    setLoadingLocations(false);
-	  }
+		if (!profile?.studio?.id) return;
+		try {
+			setLoadingLocations(true);
+			const { data, error: fetchError } = await supabase
+				.from("locations")
+				.select("*")
+				.eq("studio_id", profile?.studio.id)
+				.order("name");
+
+			if (fetchError) throw fetchError;
+			setLocations(data || []);
+		} catch (err) {
+			console.error("Error fetching locations:", err);
+		} finally {
+			setLoadingLocations(false);
+		}
 	};
-	
+
 	// Keep the existing useEffect, but now it just calls the function
 	useEffect(() => {
-	  fetchLocations();
+		fetchLocations();
 	}, [profile?.studio]);
-	
+
 	const handleDeleteRoom = async (roomId: string) => {
 		try {
 			const { error: deleteError } = await supabase
@@ -462,22 +461,22 @@ export default function StudioInfo() {
 				</div>
 
 				{showAddRoom && profile?.studio && (
-				  <div className="mb-6">
-				    <AddRoomForm
-				      studioId={profile?.studio?.id}
-				      onSuccess={(newRoom) => {
-				        setShowAddRoom(false);
-				        // If we get the new room, add it directly to state
-				        if (newRoom) {
-				          setLocations(prev => [...prev, newRoom]);
-				        } else {
-				          // Otherwise fetch all locations
-				          fetchLocations();
-				        }
-				      }}
-				      onCancel={() => setShowAddRoom(false)}
-				    />
-				  </div>
+					<div className="mb-6">
+						<AddRoomForm
+							studioId={profile?.studio?.id}
+							onSuccess={(newRoom) => {
+								setShowAddRoom(false);
+								// If we get the new room, add it directly to state
+								if (newRoom) {
+									setLocations((prev) => [...prev, newRoom]);
+								} else {
+									// Otherwise fetch all locations
+									fetchLocations();
+								}
+							}}
+							onCancel={() => setShowAddRoom(false)}
+						/>
+					</div>
 				)}
 
 				<div className="space-y-4">

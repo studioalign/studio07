@@ -16,6 +16,7 @@ BEGIN
     FROM public.studio_subscriptions s
     WHERE s.studio_id = p_studio_id
     AND s.status = 'active'
+    OR s.status = 'trialing'
     LIMIT 1;
 
     -- If no subscription (current_max_students is NULL), they cannot add students.

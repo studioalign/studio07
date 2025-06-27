@@ -28,8 +28,6 @@ const corsHeaders = {
 		"authorization, x-client-info, apikey, content-type",
 };
 
-console.log("Starting checkout session");
-
 serve(async (req) => {
 	// Handle CORS preflight requests
 	if (req.method === "OPTIONS") {
@@ -52,15 +50,11 @@ serve(async (req) => {
 			);
 		}
 
-		console.log("Auth header:", authHeader);
-
 		const jwt = authHeader.replace("Bearer ", "");
 		const {
 			data: { user },
 			error: userError,
 		} = await supabaseClient.auth.getUser(jwt);
-
-		console.log("User:", user);
 
 		if (userError || !user) {
 			return new Response(JSON.stringify({ error: "Authentication failed" }), {
@@ -136,8 +130,6 @@ serve(async (req) => {
 
 			// If the invoice doesn't have a hosted URL yet, finalize it to get one
 			if (!stripeInvoice.hosted_invoice_url) {
-				console.log("Invoice doesn't have a hosted URL, finalizing it...");
-
 				// Make sure the invoice is finalized (if not already)
 				if (stripeInvoice.status === "draft") {
 					const finalizedInvoice = await stripe.invoices.finalizeInvoice(
@@ -150,12 +142,6 @@ serve(async (req) => {
 						}
 					);
 
-					console.log(
-						"Finalized invoice:",
-						finalizedInvoice.id,
-						"with status:",
-						finalizedInvoice.status
-					);
 					hostedInvoiceUrl = finalizedInvoice.hosted_invoice_url;
 				} else {
 					hostedInvoiceUrl = stripeInvoice.hosted_invoice_url;
@@ -166,8 +152,6 @@ serve(async (req) => {
 
 			// If we still don't have a hosted URL, create a payment link for the invoice
 			if (!hostedInvoiceUrl) {
-				console.log("Creating a payment link for the invoice...");
-
 				// Create a payment link for this invoice
 				const paymentLink = await stripe.paymentLinks.create(
 					{
@@ -210,7 +194,6 @@ serve(async (req) => {
 				);
 
 				hostedInvoiceUrl = paymentLink.url;
-				console.log("Created payment link:", paymentLink.url);
 			}
 
 			// Return the invoice URL

@@ -211,7 +211,6 @@ export const DashboardProvider: React.FC<DashboardProviderProps> = ({
 		setError(null);
 
 		try {
-			console.log("Fetching dashboard data for role:", profile.role);
 			let dashboardData;
 
 			if (profile.role === "owner") {
@@ -224,7 +223,6 @@ export const DashboardProvider: React.FC<DashboardProviderProps> = ({
 				throw new Error("Invalid user role");
 			}
 
-			console.log("Dashboard data fetched successfully");
 			setData(dashboardData);
 		} catch (err) {
 			console.error("Error fetching dashboard data:", err);

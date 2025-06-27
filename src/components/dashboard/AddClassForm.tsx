@@ -44,7 +44,9 @@ export default function AddClassForm({
 	const [isDropIn, setIsDropIn] = useState(false);
 	const [capacity, setCapacity] = useState("");
 	const [dropInPrice, setDropInPrice] = useState("");
-	const [selectedStudents, setSelectedStudents] = useState<{ id: string; label: string }[]>([]);	
+	const [selectedStudents, setSelectedStudents] = useState<
+		{ id: string; label: string }[]
+	>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -233,11 +235,13 @@ export default function AddClassForm({
 				setTimeout(() => {
 					try {
 						// 1. Notify the teacher about the assigned class
-						const formattedStartTime = new Date(`2000-01-01T${startTime}`).toLocaleTimeString([], {
-							hour: '2-digit',
-							minute: '2-digit'
+						const formattedStartTime = new Date(
+							`2000-01-01T${startTime}`
+						).toLocaleTimeString([], {
+							hour: "2-digit",
+							minute: "2-digit",
 						});
-						
+
 						const scheduleDetails = {
 							startTime,
 							endTime,
@@ -245,33 +249,38 @@ export default function AddClassForm({
 							date: !isRecurring ? date : null,
 							endDate: isRecurring ? endDate : null,
 							isRecurring,
-							location: selectedRoom?.label
+							location: selectedRoom?.label,
 						};
-						
+
 						// Send notification to teacher about class assignment
-						notificationService.notifyClassAssigned(
-							selectedTeacher.id,
-							profile.studio.id,
-							name,
-							classIds[0], // Use the first class ID
-							scheduleDetails
-						).catch(err => console.error("Teacher notification failed:", err));
-						
-						console.log("Teacher notification initiated for class assignment");
+						notificationService
+							.notifyClassAssigned(
+								selectedTeacher.id,
+								profile.studio.id,
+								name,
+								classIds[0], // Use the first class ID
+								scheduleDetails
+							)
+							.catch((err) =>
+								console.error("Teacher notification failed:", err)
+							);
 
 						// 2. If students were added, notify the teacher about each student
 						if (selectedStudents.length > 0) {
 							for (const student of selectedStudents) {
-								notificationService.notifyStudentAddedToClass(
-									profile.studio.id,
-									selectedTeacher.id,
-									student.label,
-									student.id,
-									name,
-									classIds[0] // Use the first class ID
-								).catch(err => console.error("Student notification failed:", err));
+								notificationService
+									.notifyStudentAddedToClass(
+										profile.studio.id,
+										selectedTeacher.id,
+										student.label,
+										student.id,
+										name,
+										classIds[0] // Use the first class ID
+									)
+									.catch((err) =>
+										console.error("Student notification failed:", err)
+									);
 							}
-							console.log(`${selectedStudents.length} student notifications initiated`);
 						}
 					} catch (notificationErr) {
 						console.error("Error initiating notifications:", notificationErr);
@@ -297,18 +306,17 @@ export default function AddClassForm({
 			/>
 
 			<SearchableDropdown
-			  id="teacher"
-			  label="Select Teacher"
-			  required
-			  value={selectedTeacher}
-			  onChange={setSelectedTeacher}
-			  options={teachers.map((teacher) => ({
-			    id: teacher.id,
-			    // Show role indicator for owners
-			    label: teacher.role === 'owner' 
-			      ? `${teacher.name} (Owner)` 
-			      : teacher.name,
-			  }))}
+				id="teacher"
+				label="Select Teacher"
+				required
+				value={selectedTeacher}
+				onChange={setSelectedTeacher}
+				options={teachers.map((teacher) => ({
+					id: teacher.id,
+					// Show role indicator for owners
+					label:
+						teacher.role === "owner" ? `${teacher.name} (Owner)` : teacher.name,
+				}))}
 			/>
 
 			<SearchableDropdown

@@ -54,7 +54,9 @@ export default function CreateInvoiceForm({
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isRecurring, setIsRecurring] = useState(false);
-	const [recurringInterval, setRecurringInterval] = useState<"week" | "month" | "year">("month");
+	const [recurringInterval, setRecurringInterval] = useState<
+		"week" | "month" | "year"
+	>("month");
 	const [weeklyDay, setWeeklyDay] = useState<number>(1); // 1 = Monday
 	const [monthlyDate, setMonthlyDate] = useState<number>(1);
 	const [termMonths, setTermMonths] = useState<number[]>([1, 4, 9]); // Default to January, April, September
@@ -120,10 +122,10 @@ export default function CreateInvoiceForm({
 
 	const calculateTotals = () => {
 		const subtotal = items.reduce(
-			(acc, item) => acc + (item.quantity * item.unit_price),
+			(acc, item) => acc + item.quantity * item.unit_price,
 			0
 		);
-		
+
 		// Calculate discount
 		let discount = 0;
 		if (parseFloat(discountValue) > 0) {
@@ -133,13 +135,13 @@ export default function CreateInvoiceForm({
 				discount = parseFloat(discountValue);
 			}
 		}
-		
+
 		const total = subtotal - discount;
-		
+
 		return {
 			subtotal,
 			discount,
-			total
+			total,
 		};
 	};
 
@@ -153,7 +155,7 @@ export default function CreateInvoiceForm({
 		try {
 			// Calculate totals
 			const totals = calculateTotals();
-            
+
 			// Create invoice
 			const { data: invoice, error: invoiceError } = await supabase
 				.from("invoices")
@@ -232,22 +234,20 @@ export default function CreateInvoiceForm({
 				// Continue even if Stripe invoice creation fails - we can retry later
 			}
 
-            // Send notification to the parent about payment request
-            try {
-                console.log("Sending payment request notification to:", selectedParent.id);
-                await notificationService.notifyPaymentRequest(
-                    selectedParent.id,
-                    profile.studio.id,
-                    totals.total,
-                    dueDate,
-                    invoice.id,
+			// Send notification to the parent about payment request
+			try {
+				await notificationService.notifyPaymentRequest(
+					selectedParent.id,
+					profile.studio.id,
+					totals.total,
+					dueDate,
+					invoice.id,
 					profile.studio.currency
-                );
-                console.log("Payment request notification sent successfully");
-            } catch (notificationErr) {
-                console.error("Error sending payment notification:", notificationErr);
-                // Continue even if notification fails
-            }
+				);
+			} catch (notificationErr) {
+				console.error("Error sending payment notification:", notificationErr);
+				// Continue even if notification fails
+			}
 
 			onSuccess();
 		} catch (err) {
@@ -688,16 +688,16 @@ export default function CreateInvoiceForm({
 							currency: profile?.studio?.currency,
 						}).format(calculateTotals().subtotal)}
 					</p>
-                    {parseFloat(discountValue) > 0 && (
-                        <p>
-                            Discount:{" "}
-                            {new Intl.NumberFormat("en-US", {
-                                style: "currency",
-                                currency: profile?.studio?.currency,
-                            }).format(calculateTotals().discount)} 
-                            {discountType === "percentage" && ` (${discountValue}%)`}
-                        </p>
-                    )}
+					{parseFloat(discountValue) > 0 && (
+						<p>
+							Discount:{" "}
+							{new Intl.NumberFormat("en-US", {
+								style: "currency",
+								currency: profile?.studio?.currency,
+							}).format(calculateTotals().discount)}
+							{discountType === "percentage" && ` (${discountValue}%)`}
+						</p>
+					)}
 					<p className="text-lg font-bold text-brand-primary">
 						Total:{" "}
 						{new Intl.NumberFormat("en-US", {

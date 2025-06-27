@@ -87,7 +87,6 @@ export default function AddTeacherForm({
 					authData.user.id,
 					"teacher"
 				);
-				console.log("Teacher registration notification sent");
 			} catch (notificationError) {
 				// Log but don't fail if notification has issues
 				console.error(

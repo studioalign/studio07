@@ -113,8 +113,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	}, []);
 
 	const signIn = async (email: string, password: string) => {
-		console.log("Signing in..."); // Add debugging
-
 		try {
 			const response = await supabase.auth.signInWithPassword({
 				email,

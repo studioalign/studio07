@@ -4,8 +4,8 @@ import MultiSelectDropdown from "../MultiSelectDropdown";
 import { getStudioUsersByRole } from "../../utils/messagingUtils";
 import FormInput from "../FormInput";
 import { useAuth } from "../../contexts/AuthContext";
-import { supabase } from '../../lib/supabase';
-import { notificationService } from '../../services/notificationService';
+import { supabase } from "../../lib/supabase";
+import { notificationService } from "../../services/notificationService";
 
 interface UploadDocumentModalProps {
 	onClose: () => void;
@@ -23,7 +23,7 @@ type RecipientOption = { id: string; label: string } | BulkOption;
 
 export default function UploadDocumentModal({
 	onClose,
-	onSuccess
+	onSuccess,
 }: UploadDocumentModalProps) {
 	const { profile } = useAuth();
 	const [name, setName] = useState("");
@@ -126,93 +126,94 @@ export default function UploadDocumentModal({
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!file) {
-		  setError("Please select a file to upload");
-		  return;
+			setError("Please select a file to upload");
+			return;
 		}
-	  
+
 		setIsSubmitting(true);
 		setError(null);
-	  
+
 		try {
-		  // 1. Upload file to Supabase Storage
-		  const fileExt = file.name.split('.').pop();
-		  const fileName = `${crypto.randomUUID()}.${fileExt}`;
-		  const { error: uploadError } = await supabase.storage
-			.from('documents')
-			.upload(fileName, file);
-	  
-		  if (uploadError) throw uploadError;
-	  
-		  // Get the public URL
-		  const { data: { publicUrl } } = supabase.storage
-			.from('documents')
-			.getPublicUrl(fileName);
-	  
-		  // 2. Create document record in database
-		  const { data: document, error: docError } = await supabase
-			.from('documents')
-			.insert({
-			  studio_id: profile?.studio?.id,
-			  name,
-			  description,
-			  file_url: publicUrl,
-			  requires_signature: requiresSignature,
-			  expires_at: expiryDate ? new Date(expiryDate).toISOString() : null,
-			  created_by: profile?.id
-			})
-			.select()
-			.single();
-	  
-		  if (docError) throw docError;
-	  
-		  // 3. Add recipients
-		  const recipientData = selectedUsers.map(user => ({
-			document_id: document.id,
-			user_id: user.id
-		  }));
-	  
-		  const { error: recipientError } = await supabase
-			.from('document_recipients')
-			.insert(recipientData);
-	  
-		  if (recipientError) throw recipientError;
-	  
-		  // 4. Send notifications to recipients
-		  for (const recipient of selectedUsers) {
-			// Make sure we have a document ID before proceeding
-			if (!document?.id) {
-				console.error("Missing document ID for notifications");
-				continue;
-			}
-	  
-			try {
-				await notificationService.notifyDocumentAssigned(
-					recipient.id,
-					profile?.studio?.id || '',
+			// 1. Upload file to Supabase Storage
+			const fileExt = file.name.split(".").pop();
+			const fileName = `${crypto.randomUUID()}.${fileExt}`;
+			const { error: uploadError } = await supabase.storage
+				.from("documents")
+				.upload(fileName, file);
+
+			if (uploadError) throw uploadError;
+
+			// Get the public URL
+			const {
+				data: { publicUrl },
+			} = supabase.storage.from("documents").getPublicUrl(fileName);
+
+			// 2. Create document record in database
+			const { data: document, error: docError } = await supabase
+				.from("documents")
+				.insert({
+					studio_id: profile?.studio?.id,
 					name,
-					document.id,
-					requiresSignature,
-					description || undefined
-				);
-				console.log("Document notification sent to", recipient.id);
-			} catch (notifyError) {
-				console.error("Error sending document notification:", notifyError);
-				// Continue with other recipients even if one fails
+					description,
+					file_url: publicUrl,
+					requires_signature: requiresSignature,
+					expires_at: expiryDate ? new Date(expiryDate).toISOString() : null,
+					created_by: profile?.id,
+				})
+				.select()
+				.single();
+
+			if (docError) throw docError;
+
+			// 3. Add recipients
+			const recipientData = selectedUsers.map((user) => ({
+				document_id: document.id,
+				user_id: user.id,
+			}));
+
+			const { error: recipientError } = await supabase
+				.from("document_recipients")
+				.insert(recipientData);
+
+			if (recipientError) throw recipientError;
+
+			// 4. Send notifications to recipients
+			for (const recipient of selectedUsers) {
+				// Make sure we have a document ID before proceeding
+				if (!document?.id) {
+					console.error("Missing document ID for notifications");
+					continue;
+				}
+
+				try {
+					await notificationService.notifyDocumentAssigned(
+						recipient.id,
+						profile?.studio?.id || "",
+						name,
+						document.id,
+						requiresSignature,
+						description || undefined
+					);
+				} catch (notifyError) {
+					console.error("Error sending document notification:", notifyError);
+					// Continue with other recipients even if one fails
+				}
 			}
-		  }
-	  
-		  // Call success callback if provided
-		  if (onSuccess) {
-			onSuccess();
-		  }
-	  
-		  // Close modal
-		  onClose();
+
+			// Call success callback if provided
+			if (onSuccess) {
+				onSuccess();
+			}
+
+			// Close modal
+			onClose();
 		} catch (err) {
-		  console.error("Error uploading document:", err);
-		  setError(err instanceof Error ? err.message : "Failed to upload document");
+			console.error("Error uploading document:", err);
+			setError(
+				err instanceof Error ? err.message : "Failed to upload document"
+			);
 		} finally {
-		  setIsSubmitting(false);
+			setIsSubmitting(false);
 		}
 	};
 

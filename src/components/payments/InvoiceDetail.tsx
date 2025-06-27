@@ -64,8 +64,6 @@ export default function InvoiceDetail({
 	useEffect(() => {
 		// If status wasn't already "paid" and is now "paid"
 		if (previousStatusRef.current !== "paid" && invoice.status === "paid") {
-			console.log("Invoice status changed to paid, sending notifications");
-
 			const sendPaymentNotifications = async () => {
 				try {
 					// Use studio_id from invoice or from current user profile
@@ -83,8 +81,6 @@ export default function InvoiceDetail({
 						invoice.total,
 						invoice.id
 					);
-					console.log("Payment received notification sent to studio owner");
-
 					// Notify the parent about the payment confirmation
 					if (invoice.parent.id) {
 						await notificationService.notifyPaymentConfirmation(
@@ -93,7 +89,6 @@ export default function InvoiceDetail({
 							invoice.total,
 							invoice.id
 						);
-						console.log("Payment confirmation notification sent to parent");
 					}
 				} catch (error) {
 					console.error("Failed to send payment notifications:", error);

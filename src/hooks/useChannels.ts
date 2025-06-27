@@ -25,8 +25,6 @@ export function useChannels() {
 			setLoading(true);
 			setError(null);
 
-			console.log("Fetching channels for user:", profile.id);
-
 			// Fetch channels where user is a member
 			const { data, error: fetchError } = await supabase
 				.from("channel_members")
@@ -52,7 +50,6 @@ export function useChannels() {
 				.filter((item) => item.channel !== null)
 				.map((item) => item.channel);
 
-			console.log("Fetched channels:", validChannels);
 			setChannels(validChannels || []);
 		} catch (err) {
 			console.error("Error fetching channels:", err);
@@ -64,7 +61,6 @@ export function useChannels() {
 
 	// Directly update a channel in state when it changes
 	const updateChannelInState = useCallback((updatedChannel: Channel) => {
-		console.log("Updating channel in state:", updatedChannel);
 		setChannels((prevChannels) =>
 			prevChannels.map((channel) =>
 				channel.id === updatedChannel.id ? { ...updatedChannel } : channel
@@ -97,7 +93,6 @@ export function useChannels() {
 					filter: `user_id=eq.${profile.id}`,
 				},
 				(payload) => {
-					console.log("Channel member change detected:", payload);
 					// Refresh channels completely
 					fetchChannels();
 				}
@@ -111,8 +106,6 @@ export function useChannels() {
 					table: "class_channels",
 				},
 				async (payload) => {
-					console.log("Channel update detected:", payload);
-
 					// Get the user's channel memberships to check if we should show this channel
 					const { data } = await supabase
 						.from("channel_members")
@@ -144,7 +137,6 @@ export function useChannels() {
 					table: "class_channels",
 				},
 				(payload) => {
-					console.log("New channel created:", payload);
 					// Refresh the entire list for new channels
 					fetchChannels();
 				}
@@ -157,8 +149,6 @@ export function useChannels() {
 					table: "class_channels",
 				},
 				(payload) => {
-					console.log("Channel deleted:", payload);
-
 					// Remove the deleted channel from state
 					setChannels((currentChannels) =>
 						currentChannels.filter((channel) => channel.id !== payload.old.id)
@@ -166,7 +156,6 @@ export function useChannels() {
 				}
 			)
 			.subscribe((status, err) => {
-				console.log("Channel subscription status:", status);
 				if (err) {
 					console.error("Subscription error:", err);
 				}
