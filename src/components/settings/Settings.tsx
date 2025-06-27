@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Save, Bell, Shield, AlertTriangle, Lock, Check } from "lucide-react";
-import { supabase } from "../../lib/supabase";
+import { supabase, supabaseAdmin } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
 import FormInput from "../FormInput";
 import TwoFactorSettings from "./TwoFactorSettings"; // Import the new component
@@ -207,69 +207,8 @@ export default function Settings() {
 				throw new Error("User not authenticated");
 			}
 
-			// For parents, delete associated students first
-			if (profile.role === "parent") {
-				const { error: studentDeleteError } = await supabase
-					.from("students")
-					.delete()
-					.eq("parent_id", profile.id);
-
-				if (studentDeleteError) {
-					console.error("Error deleting students:", studentDeleteError);
-					throw studentDeleteError;
-				}
-			}
-
-			// Generate a unique email for deleted users to mark the record in public.users
-			const deletedEmail = `deleted_user_${
-				profile.id
-			}_${Date.now()}@deleted.studioalign.com`;
-
-			// Update user record with deletion information in public.users
-			const { error: updateError } = await supabase
-				.from("users")
-				.update({
-					name: "Deleted User",
-					email: deletedEmail,
-					photo_url: null,
-					phone: null,
-					role: "deleted",
-					studio_id: null,
-					deleted_at: new Date().toISOString(),
-				})
-				.eq("id", profile.id);
-
-			if (updateError) throw updateError;
-
-			// Call the serverless function to handle the auth user's email randomization
-			// This will free up the email address for reuse
-			try {
-				const response = await fetch("/.netlify/functions/delete-auth-user", {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify({
-						userId: profile.id,
-						email: deletedEmail,
-					}),
-				});
-
-				if (!response.ok) {
-					const data = await response.json();
-					console.warn(
-						"Auth user email randomization via function had issues:",
-						data.error
-					);
-					// We'll continue even if this fails, as the public.users record is updated
-				}
-			} catch (functionError) {
-				console.warn(
-					"Error calling auth user email randomization function:",
-					functionError
-				);
-				// Continue with the process even if the serverless function fails
-			}
+			// delete auth.users record
+			await supabaseAdmin.auth.admin.deleteUser(profile.id);
 
 			// Sign out the user
 			await supabase.auth.signOut();

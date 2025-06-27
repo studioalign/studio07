@@ -109,9 +109,9 @@ export default function BillingPage() {
 	const loadPricingTiers = async () => {
 		try {
 			const { data, error } = await supabase.functions.invoke(
-				"sync-stripe-products",
+				"manage-subscription",
 				{
-					body: { action: "get_tiers" },
+					body: { action: "get_pricing" },
 				}
 			);
 
@@ -889,7 +889,7 @@ export default function BillingPage() {
 									)}
 
 									{/* Upgrade Preview Section */}
-									{showUpgradeInfo && (
+									{showUpgradeInfo && subscription.status === "active" && (
 										<div className="mb-3">
 											<Button
 												variant="ghost"

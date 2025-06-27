@@ -6,7 +6,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+	createClient,
+	type SupabaseClient,
+} from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.21.0";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
@@ -16,11 +19,185 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
 
 const cryptoProvider = Stripe.createSubtleCryptoProvider();
 
+// Define the tier configuration
+const TIER_CONFIG = [
+	{
+		tier_name: "Starter",
+		max_students: 100,
+		student_range_min: 1,
+		student_range_max: 100,
+		pricing: {
+			monthly: 15,
+			yearly: 150,
+			lifetime: 400,
+		},
+	},
+	{
+		tier_name: "Growth",
+		max_students: 200,
+		student_range_min: 101,
+		student_range_max: 200,
+		pricing: {
+			monthly: 20,
+			yearly: 200,
+			lifetime: 550,
+		},
+	},
+	{
+		tier_name: "Professional",
+		max_students: 300,
+		student_range_min: 201,
+		student_range_max: 300,
+		pricing: {
+			monthly: 25,
+			yearly: 250,
+			lifetime: 700,
+		},
+	},
+	{
+		tier_name: "Scale",
+		max_students: 500,
+		student_range_min: 301,
+		student_range_max: 500,
+		pricing: {
+			monthly: 35,
+			yearly: 350,
+			lifetime: 850,
+		},
+	},
+	{
+		tier_name: "Enterprise",
+		max_students: 1000,
+		student_range_min: 501,
+		student_range_max: 1000,
+		pricing: {
+			monthly: 50,
+			yearly: 500,
+			lifetime: 1000,
+		},
+	},
+];
+
 console.log("Listening for Stripe webhooks...");
+
+// Helper function to sync a single product
+async function syncProduct(
+	supabaseClient: SupabaseClient,
+	stripeProduct: Stripe.Product
+) {
+	console.log(`🔄 Processing product: ${stripeProduct.name}`);
+
+	let tierInfo = TIER_CONFIG.find((tier) =>
+		stripeProduct.name.toLowerCase().includes(tier.tier_name.toLowerCase())
+	);
+
+	if (!tierInfo && stripeProduct.metadata?.tier_name) {
+		tierInfo = TIER_CONFIG.find(
+			(tier) => tier.tier_name === stripeProduct.metadata.tier_name
+		);
+	}
+
+	if (!tierInfo) {
+		console.log(
+			`⚠️ Skipping product ${stripeProduct.name} - no tier info found`
+		);
+		return;
+	}
+
+	const { data: productData, error: productError } = await supabaseClient
+		.from("stripe_products")
+		.upsert(
+			{
+				stripe_product_id: stripeProduct.id,
+				name: stripeProduct.name,
+				description: stripeProduct.description,
+				active: stripeProduct.active,
+				tier_name: tierInfo.tier_name,
+				max_students: tierInfo.max_students,
+				student_range_min: tierInfo.student_range_min,
+				student_range_max: tierInfo.student_range_max,
+				updated_at: new Date().toISOString(),
+			},
+			{
+				onConflict: "stripe_product_id",
+			}
+		)
+		.select()
+		.single();
+
+	if (productError) {
+		console.error(
+			`❌ Error upserting product ${stripeProduct.id}:`,
+			productError
+		);
+		return;
+	}
+
+	console.log(`✅ Product synced: ${productData.name}`);
+	return productData;
+}
+
+// Helper function to sync a single price
+async function syncPrice(
+	supabaseClient: SupabaseClient,
+	stripePrice: Stripe.Price
+) {
+	console.log(`💰 Processing price: ${stripePrice.id}`);
+
+	const { data: productData, error: productError } = await supabaseClient
+		.from("stripe_products")
+		.select("id")
+		.eq("stripe_product_id", stripePrice.product)
+		.single();
+
+	if (productError || !productData) {
+		console.error(
+			`❌ Product not found for price ${stripePrice.id}. Error:`,
+			productError
+		);
+		return;
+	}
+
+	let billingInterval = "monthly";
+	if (stripePrice.type === "one_time") {
+		billingInterval = "lifetime";
+	} else if (stripePrice.recurring?.interval === "year") {
+		billingInterval = "yearly";
+	}
+
+	const amountGbp = (stripePrice.unit_amount || 0) / 100;
+
+	const { error: priceError } = await supabaseClient
+		.from("stripe_prices")
+		.upsert(
+			{
+				stripe_price_id: stripePrice.id,
+				stripe_product_id: stripePrice.product,
+				product_id: productData.id,
+				amount_gbp: amountGbp,
+				currency: stripePrice.currency,
+				billing_interval: billingInterval,
+				interval_count: stripePrice.recurring?.interval_count || 1,
+				trial_period_days: 5,
+				active: stripePrice.active,
+				updated_at: new Date().toISOString(),
+			},
+			{
+				onConflict: "stripe_price_id",
+			}
+		);
+
+	if (priceError) {
+		console.error(`❌ Error upserting price ${stripePrice.id}:`, priceError);
+		return;
+	}
+
+	console.log(`✅ Price synced: ${amountGbp} GBP (${billingInterval})`);
+}
 
 // Helper function to get tier data from database
 async function getTierDataFromStripe(
-	supabaseClient: any,
+	supabaseClient: SupabaseClient,
 	stripeProductId: string,
 	stripePriceId: string
 ) {
@@ -102,7 +279,7 @@ async function getReceiptAndSendEmail(
 
 // Helper function to get customer email from studio
 async function getCustomerEmail(
-	supabaseClient: any,
+	supabaseClient: SupabaseClient,
 	studioId: string
 ): Promise<string | null> {
 	try {
@@ -155,6 +332,39 @@ serve(async (req) => {
 		);
 
 		switch (event.type) {
+			//== PRODUCT AND PRICE SYNCING ==//
+			case "product.created":
+			case "product.updated": {
+				const product = event.data.object as Stripe.Product;
+				await syncProduct(supabaseClient, product);
+				break;
+			}
+			case "product.deleted": {
+				const product = event.data.object as Stripe.Product;
+				console.log(`🗑️ Deactivating product: ${product.id}`);
+				await supabaseClient
+					.from("stripe_products")
+					.update({ active: false })
+					.eq("stripe_product_id", product.id);
+				break;
+			}
+			case "price.created":
+			case "price.updated": {
+				const price = event.data.object as Stripe.Price;
+				await syncPrice(supabaseClient, price);
+				break;
+			}
+			case "price.deleted": {
+				const price = event.data.object as Stripe.Price;
+				console.log(`🗑️ Deactivating price: ${price.id}`);
+				await supabaseClient
+					.from("stripe_prices")
+					.update({ active: false })
+					.eq("stripe_price_id", price.id);
+				break;
+			}
+
+			//== SUBSCRIPTION AND CHECKOUT HANDLING ==//
 			case "customer.subscription.created": {
 				const subscription = event.data.object;
 				console.log("🔄 Processing subscription.created:", {
