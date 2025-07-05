@@ -2,10 +2,18 @@ import React, { useState } from 'react';
 import { Plus, CreditCard, Trash2, Bank } from 'lucide-react';
 import { usePaymentMethods } from '../../hooks/usePaymentMethods';
 import AddPaymentMethodModal from './AddPaymentMethodModal';
+import { useAuth } from '../../contexts/AuthContext';
+import { getStudioPaymentMethods } from '../../utils/studioUtils';
 
 export default function PaymentMethodList() {
   const { paymentMethods, loading, error, deletePaymentMethod, setDefaultMethod } = usePaymentMethods();
   const [showAddModal, setShowAddModal] = useState(false);
+  const { profile } = useAuth();
+  
+  // Get studio payment methods
+  const studioPaymentMethods = profile?.studio ? 
+    getStudioPaymentMethods(profile.studio) : 
+    { stripe: true, bacs: false };
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -41,8 +49,9 @@ export default function PaymentMethodList() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-brand-primary">Payment Methods</h1>
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => studioPaymentMethods.stripe && setShowAddModal(true)}
           className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
+          disabled={!studioPaymentMethods.stripe}
         >
           <Plus className="w-5 h-5 mr-2" />
           Add Payment Method

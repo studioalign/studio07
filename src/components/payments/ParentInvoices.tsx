@@ -10,6 +10,7 @@ import {
 	CheckCircle,
 	AlertCircle,
 	Download,
+	Building2,
 } from "lucide-react";
 import InvoiceDetailsModal from "./InvoiceDetailsModal";
 import ProcessPaymentModal from "./ProcessPaymentModal";
@@ -48,6 +49,7 @@ interface Invoice {
 		email?: string;
 		name?: string;
 	};
+	payment_method?: 'stripe' | 'bacs';
 }
 
 export default function ParentInvoices() {
@@ -442,38 +444,45 @@ export default function ParentInvoices() {
 											)}
 										</div>
 										<div className="flex justify-end mt-2 space-x-2">
-											{invoice.pdf_url && (
-												<button
-													onClick={(e) => handleDownloadPdf(invoice, e)}
-													className="flex items-center px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-100"
-													title="Download Invoice PDF"
-												>
-													<Download className="w-4 h-4" />
-												</button>
-											)}
-											{["pending", "overdue"].includes(invoice.status) && (
-												<button
-													onClick={(e) => {
-														e.stopPropagation();
-
-														// Check if the invoice has a Stripe invoice ID
-														if (!invoice.stripe_invoice_id) {
-															// If no Stripe invoice exists, inform the user
-															alert(
-																"This invoice is not yet ready for payment. Please contact the studio."
-															);
-															return;
-														}
-
-														setSelectedInvoice(invoice);
-														setShowPaymentModal(true);
-													}}
-													className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
-												>
-													<CreditCard className="w-4 h-4 mr-2" />
-													Pay Now
-												</button>
-											)}
+											<div className="flex justify-end mt-2 space-x-2">
+												{invoice.pdf_url && (
+													<button
+														onClick={(e) => handleDownloadPdf(invoice, e)}
+														className="flex items-center px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-100"
+														title="Download Invoice PDF"
+													>
+														<Download className="w-4 h-4" />
+													</button>
+												)}
+												{["pending", "overdue"].includes(invoice.status) && invoice.payment_method === 'stripe' && (
+													<button
+														onClick={(e) => {
+															e.stopPropagation();
+	
+															// Check if the invoice has a Stripe invoice ID
+															if (!invoice.stripe_invoice_id) {
+																// If no Stripe invoice exists, inform the user
+																alert(
+																	"This invoice is not yet ready for payment. Please contact the studio."
+																);
+																return;
+															}
+	
+															setSelectedInvoice(invoice);
+															setShowPaymentModal(true);
+														}}
+														className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
+													>
+														<CreditCard className="w-4 h-4 mr-2" />
+														Pay Now
+													</button>
+												)}
+												{["pending", "overdue"].includes(invoice.status) && invoice.payment_method === 'bacs' && (
+													<div className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm">
+														Bank Transfer Required
+													</div>
+												)}
+											</div>
 										</div>
 									</div>
 								</div>
