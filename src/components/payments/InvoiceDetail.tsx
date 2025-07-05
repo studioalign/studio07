@@ -132,50 +132,30 @@ export default function InvoiceDetail({
 	};
 
 	const handleMarkAsPaid = async () => {
-		setIsMarkingPaid(true);
-		setMarkPaidError(null);
-		
-		try {
-			const result = await markBacsInvoiceAsPaid(invoiceId, paymentReference);
-			
-			if (result.success) {
-				setMarkPaidSuccess(true);
-				// Reset after 3 seconds
-				setTimeout(() => {
-					setMarkPaidSuccess(false);
-					setPaymentReference('');
-					onRefresh(); // Refresh invoice data
-				}, 3000);
-			} else {
-				setMarkPaidError(result.error || 'Failed to mark invoice as paid');
-			}
-		} catch (error) {
-			setMarkPaidError(error instanceof Error ? error.message : 'An unexpected error occurred');
-		} finally {
-			setIsMarkingPaid(false);
-		}
-	};
+	setIsMarkingPaid(true);
+	setMarkPaidError(null);
 
-		try {
-			const result = await markBacsInvoiceAsPaid(invoice.id, paymentReference);
-			
-			if (result.success) {
-				setMarkPaidSuccess(true);
-				// Reset after 3 seconds
-				setTimeout(() => {
-					setMarkPaidSuccess(false);
-					setPaymentReference('');
-					onRefresh(); // Refresh invoice data
-				}, 3000);
-			} else {
-				setMarkPaidError(result.error || 'Failed to mark invoice as paid');
-			}
-		} catch (error) {
-			setMarkPaidError(error instanceof Error ? error.message : 'An unexpected error occurred');
-		} finally {
-			setIsMarkingPaid(false);
+	try {
+		const result = await markBacsInvoiceAsPaid(invoiceId, paymentReference);
+
+		if (result.success) {
+			setMarkPaidSuccess(true);
+			// Reset after 3 seconds
+			setTimeout(() => {
+				setMarkPaidSuccess(false);
+				setPaymentReference('');
+				onRefresh(); // Refresh invoice data
+			}, 3000);
+		} else {
+			setMarkPaidError(result.error || 'Failed to mark invoice as paid');
 		}
-	};
+	} catch (error) {
+		setMarkPaidError(error instanceof Error ? error.message : 'An unexpected error occurred');
+	} finally {
+		setIsMarkingPaid(false);
+	}
+};
+
 
 	return (
 		<div className="bg-white rounded-lg shadow-lg">
