@@ -65,8 +65,6 @@ export default function InvoiceDetail({
 	const [isMarkingPaid, setIsMarkingPaid] = useState(false);
 	const [markPaidSuccess, setMarkPaidSuccess] = useState(false);
 	const [markPaidError, setMarkPaidError] = useState<string | null>(null);
-	
-	const { profile } = useAuth(); // move this to the top of your component
 
 // Then use profile
 const isOwner = profile?.role === 'owner';
