@@ -18,6 +18,10 @@ export interface Invoice {
 	subtotal: number;
 	tax: number;
 	total: number;
+	payment_method?: 'stripe' | 'bacs';
+	manual_payment_status?: 'pending' | 'paid' | 'overdue';
+	manual_payment_date?: string;
+	manual_payment_reference?: string;
 	is_recurring: boolean;
 	recurring_interval: string;
 	recurring_end_date: string;

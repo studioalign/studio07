@@ -10,6 +10,7 @@ import {
 	CardTitle,
 } from "../../components/ui/card";
 import { supabase } from "../../lib/supabase";
+import { getStudioPaymentMethods } from "../../utils/studioUtils";
 
 interface DashboardHeaderProps {
 	title: string;
@@ -53,6 +54,11 @@ export default function PaymentSettings() {
 		platformPayments: false,
 	});
 	const [error, setError] = useState<string | null>(null);
+	
+	// Get studio payment methods
+	const studioPaymentMethods = studioData ? 
+		getStudioPaymentMethods(studioData) : 
+		{ stripe: true, bacs: false };
 
 	const checkAccountStatus = async () => {
 		if (!profile?.studio?.id) return;
@@ -202,84 +208,115 @@ export default function PaymentSettings() {
 			<div className="space-y-6">
 				<main className="w-full space-y-4 mt-6 bg-white">
 					<Card>
-						<CardHeader>
-							<CardTitle className="flex items-center gap-2">
-								<Building2 className="h-5 w-5" />
-								Bank Account Connection
-							</CardTitle>
-							<CardDescription>
-								Connect your bank account to receive payments directly from
-								clients
-							</CardDescription>
-						</CardHeader>
-						<CardContent className="space-y-4">
-							{error && (
-								<div className="bg-red-50 text-red-800 p-3 rounded-md text-sm mb-4">
-									{error}
-								</div>
-							)}
-
-							{studioData?.stripe_connect_onboarding_complete ? (
-								<div className="space-y-4">
-									<div className="flex items-center justify-between p-4 bg-green-50 rounded-md">
-										<div>
-											<h3 className="font-medium text-green-800">
-												Bank Account Connected
-											</h3>
-											{studioData.bank_account_name &&
-												studioData.bank_account_last4 && (
-													<p className="text-sm text-green-700 mt-1">
-														{studioData.bank_account_name} (ending in{" "}
-														{studioData.bank_account_last4})
+						{studioPaymentMethods.stripe ? (
+							<>
+								<CardHeader>
+									<CardTitle className="flex items-center gap-2">
+										<Building2 className="h-5 w-5" />
+										Bank Account Connection
+									</CardTitle>
+									<CardDescription>
+										Connect your bank account to receive payments directly from
+										clients
+									</CardDescription>
+								</CardHeader>
+								<CardContent className="space-y-4">
+									{error && (
+										<div className="bg-red-50 text-red-800 p-3 rounded-md text-sm mb-4">
+											{error}
+										</div>
+									)}
+		
+									{studioData?.stripe_connect_onboarding_complete ? (
+										<div className="space-y-4">
+											<div className="flex items-center justify-between p-4 bg-green-50 rounded-md">
+												<div>
+													<h3 className="font-medium text-green-800">
+														Bank Account Connected
+													</h3>
+													{studioData.bank_account_name &&
+														studioData.bank_account_last4 && (
+															<p className="text-sm text-green-700 mt-1">
+																{studioData.bank_account_name} (ending in{" "}
+																{studioData.bank_account_last4})
+															</p>
+														)}
+												</div>
+												<div className="bg-green-100 rounded-full p-2">
+													<Building2 className="h-5 w-5 text-green-600" />
+												</div>
+											</div>
+		
+											<button
+												onClick={connectStripeAccount}
+												className="px-4 py-2 text-sm font-medium bg-accent text-brand-primary"
+												disabled={loading.connectAccount}
+											>
+												{loading.connectAccount
+													? "Loading..."
+													: "Manage Bank Account"}
+											</button>
+										</div>
+									) : (
+										<div className="space-y-4">
+											<div className="flex items-center justify-between p-4 bg-amber-50 rounded-md">
+												<div>
+													<h3 className="font-medium text-amber-800">
+														Bank Account Not Connected
+													</h3>
+													<p className="text-sm text-amber-700 mt-1">
+														Connect your bank account to receive payments directly
+														from clients.
 													</p>
-												)}
+												</div>
+												<div className="bg-amber-100 rounded-full p-2">
+													<Building2 className="h-5 w-5 text-amber-600" />
+												</div>
+											</div>
+		
+											<button
+												onClick={connectStripeAccount}
+												disabled={loading.connectAccount}
+												className="px-4 py-2 text-sm font-medium bg-brand-primary text-white"
+											>
+												{loading.connectAccount
+													? "Loading..."
+													: studioData?.stripe_connect_id
+													? "Complete Onboarding"
+													: "Connect Bank Account"}
+											</button>
 										</div>
-										<div className="bg-green-100 rounded-full p-2">
-											<Building2 className="h-5 w-5 text-green-600" />
-										</div>
+									)}
+								</CardContent>
+							</>
+						) : (
+							<>
+								<CardHeader>
+									<CardTitle className="flex items-center gap-2">
+										<Building2 className="h-5 w-5" />
+										Payment Settings
+									</CardTitle>
+									<CardDescription>
+										Manage your studio payment settings
+									</CardDescription>
+								</CardHeader>
+								<CardContent>
+									<div className="p-4 bg-blue-50 rounded-lg">
+										<h3 className="font-medium text-blue-800">Bank Transfer Payments Only</h3>
+										<p className="text-sm text-blue-700 mt-1">
+											Your studio is configured for bank transfer payments only. 
+											To accept card payments, enable Stripe in your Studio Info settings.
+										</p>
+										<button
+											onClick={() => navigate('/dashboard/studio')}
+											className="mt-4 px-4 py-2 bg-blue-100 text-blue-800 rounded-md hover:bg-blue-200"
+										>
+											Go to Studio Settings
+										</button>
 									</div>
-
-									<button
-										onClick={connectStripeAccount}
-										className="px-4 py-2 text-sm font-medium bg-accent text-brand-primary"
-										disabled={loading.connectAccount}
-									>
-										{loading.connectAccount
-											? "Loading..."
-											: "Manage Bank Account"}
-									</button>
-								</div>
-							) : (
-								<div className="space-y-4">
-									<div className="flex items-center justify-between p-4 bg-amber-50 rounded-md">
-										<div>
-											<h3 className="font-medium text-amber-800">
-												Bank Account Not Connected
-											</h3>
-											<p className="text-sm text-amber-700 mt-1">
-												Connect your bank account to receive payments directly
-												from clients.
-											</p>
-										</div>
-										<div className="bg-amber-100 rounded-full p-2">
-											<Building2 className="h-5 w-5 text-amber-600" />
-										</div>
-									</div>
-
-									<button
-										onClick={connectStripeAccount}
-										disabled={loading.connectAccount}
-										className="px-4 py-2 text-sm font-medium bg-brand-primary text-white"
-									>
-										{loading.connectAccount
-											? "Loading..."
-											: studioData?.stripe_connect_id
-											? "Complete Onboarding"
-											: "Connect Bank Account"}
-									</button>
-								</div>
-							)}
-						</CardContent>
+								</CardContent>
+							</>
+						)}
 					</Card>
 				</main>
 			</div>

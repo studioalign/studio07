@@ -11,4 +11,9 @@ export interface StudioInfo {
 	stripe_connect_onboarding_complete?: boolean;
 	bank_account_name?: string;
 	bank_account_last4?: string;
+	payment_methods_enabled?: {
+		stripe: boolean;
+		bacs: boolean;
+	} | null;
+	bacs_enabled?: boolean;
 }

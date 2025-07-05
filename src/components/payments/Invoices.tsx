@@ -5,7 +5,8 @@ import {
 	Search,
 	X,
 	AlertCircle,
-	CreditCard,
+	CreditCard, 
+	Building2
 } from "lucide-react";
 import CreateInvoiceForm from "./CreateInvoiceForm";
 import InvoiceDetail from "./InvoiceDetail";
@@ -17,6 +18,7 @@ import type { Invoice } from "../../hooks/useInvoices";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { useNavigate } from "react-router-dom";
+import { getStudioPaymentMethods } from "../../utils/studioUtils";
 
 export default function Invoices() {
 	const { currency, dateFormat } = useLocalization();
@@ -35,6 +37,11 @@ export default function Invoices() {
 		status: selectedStatus,
 		search,
 	});
+	
+	// Get studio payment methods
+	const studioPaymentMethods = profile?.studio ? 
+		getStudioPaymentMethods(profile.studio) : 
+		{ stripe: true, bacs: false };
 
 	useEffect(() => {
 		if (profile?.studio?.id) {
@@ -119,7 +126,7 @@ export default function Invoices() {
 
 	return (
 		<div>
-			{!isStripeConnected && (
+			{!isStripeConnected && !studioPaymentMethods.bacs && (
 				<div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
 					<div className="flex items-start">
 						<AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 mr-3" />
@@ -145,11 +152,28 @@ export default function Invoices() {
 					</div>
 				</div>
 			)}
+			
+			{!isStripeConnected && studioPaymentMethods.bacs && (
+				<div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+					<div className="flex items-start">
+						<Building2 className="w-5 h-5 text-blue-600 mt-0.5 mr-3" />
+						<div>
+							<h3 className="text-sm font-medium text-blue-800">
+								Bank Transfer Payments Enabled
+							</h3>
+							<p className="mt-1 text-sm text-blue-700">
+								Your studio is configured to use bank transfers (BACS) for payments. 
+								You'll need to manually mark invoices as paid when you receive payments.
+							</p>
+						</div>
+					</div>
+				</div>
+			)}
 			<div className="flex justify-between items-center mb-6">
 				<h1 className="text-2xl font-bold text-brand-primary">Invoices</h1>
 				<button
 					onClick={() => setShowCreateForm(true)}
-					disabled={!isStripeConnected}
+					disabled={!isStripeConnected && !studioPaymentMethods.bacs}
 					className="flex items-center px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
 				>
 					<Plus className="w-5 h-5 mr-2" />
@@ -263,10 +287,23 @@ export default function Invoices() {
 										<div className="flex items-center">
 											<FileText className="w-5 h-5 text-brand-primary mr-3" />
 											<div className="text-left">
-												<p className="font-medium">invoice-{invoice.index}</p>
+												<p className="font-medium">Invoice-{invoice.index}</p>
 												<p className="text-sm text-gray-500">
 													{invoice.parent.name}
 												</p>
+												<div className="flex items-center mt-1">
+													{invoice.payment_method === 'stripe' ? (
+														<>
+															<CreditCard className="w-3 h-3 text-blue-600 mr-1" />
+															<span className="text-xs text-blue-600">Card Payment</span>
+														</>
+													) : (
+														<>
+															<Building2 className="w-3 h-3 text-green-600 mr-1" />
+															<span className="text-xs text-green-600">Bank Transfer</span>
+														</>
+													)}
+												</div>
 												{invoice.is_recurring && (
 													<p className="text-xs text-blue-600 mt-1">
 														↻ Recurring{" "}
