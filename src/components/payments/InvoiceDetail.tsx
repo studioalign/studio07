@@ -5,7 +5,6 @@ import { formatCurrency } from "../../utils/formatters";
 import { useLocalization } from "../../contexts/LocalizationContext";
 import { notificationService } from "../../services/notificationService";
 import { supabase } from "../../lib/supabase";
-import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
 import { markBacsInvoiceAsPaid } from "../../utils/studioUtils";
 import { markBacsInvoiceAsPaid } from "../../utils/studioUtils";
