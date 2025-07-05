@@ -1,5 +1,5 @@
 import React from "react";
-import { X, Download, CreditCard, Building2, Calendar, Bank } from "lucide-react";
+import { X, Download, CreditCard, Building2, Calendar, Ban as Bank } from "lucide-react";
 import { useLocalization } from "../../contexts/LocalizationContext";
 import { formatCurrency } from "../../utils/formatters";
 

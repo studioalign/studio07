@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, CreditCard, Trash2, Bank } from 'lucide-react';
+import { Plus, CreditCard, Trash2, Ban as Bank } from 'lucide-react';
 import { usePaymentMethods } from '../../hooks/usePaymentMethods';
 import AddPaymentMethodModal from './AddPaymentMethodModal';
 import { useAuth } from '../../contexts/AuthContext';
