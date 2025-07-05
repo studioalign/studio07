@@ -7,7 +7,6 @@ import { notificationService } from "../../services/notificationService";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
 import { markBacsInvoiceAsPaid } from "../../utils/studioUtils";
-import { useAuth } from "../../contexts/AuthContext";
 
 interface InvoiceItem {
 	id: string;
