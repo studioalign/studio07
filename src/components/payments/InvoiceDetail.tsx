@@ -66,13 +66,16 @@ export default function InvoiceDetail({
 	const [markPaidSuccess, setMarkPaidSuccess] = useState(false);
 	const [markPaidError, setMarkPaidError] = useState<string | null>(null);
 	
-	// Check if user is studio owner
-	const isOwner = profile?.role === 'owner';
-	const [paymentReference, setPaymentReference] = useState('');
-	const [isMarkingPaid, setIsMarkingPaid] = useState(false);
-	const [markPaidSuccess, setMarkPaidSuccess] = useState(false);
-	const [markPaidError, setMarkPaidError] = useState<string | null>(null);
-	const { profile } = useAuth();
+	const { profile } = useAuth(); // move this to the top of your component
+
+// Then use profile
+const isOwner = profile?.role === 'owner';
+
+// Make sure you only declare paymentReference once
+const [paymentReference, setPaymentReference] = useState('');
+const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+const [markPaidSuccess, setMarkPaidSuccess] = useState(false);
+const [markPaidError, setMarkPaidError] = useState<string | null>(null);
 	
 	// Check if user is studio owner
 	const isOwner = profile?.role === 'owner';
