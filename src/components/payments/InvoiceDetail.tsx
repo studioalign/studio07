@@ -156,10 +156,6 @@ export default function InvoiceDetail({
 		}
 	};
 
-	const handleMarkAsPaid = async () => {
-		setIsMarkingPaid(true);
-		setMarkPaidError(null);
-		
 		try {
 			const result = await markBacsInvoiceAsPaid(invoice.id, paymentReference);
 			
