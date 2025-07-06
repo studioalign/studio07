@@ -162,156 +162,167 @@ export default function CreateInvoiceForm({
 	};
 
 	const handleSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (!profile?.studio?.id || !selectedParent) return;
-
-		setIsSubmitting(true);
-		setError(null);
-
-		try {
-			// Calculate totals
-			const totals = calculateTotals();
-
-			// Create invoice
-			const invoiceData = {
-				studio_id: profile?.studio?.id,
-				parent_id: selectedParent.id,
-				status: paymentMethod === 'bacs' ? 'sent' : 'pending',
-				due_date: dueDate,
-				notes: notes || null,
-				subtotal: totals.subtotal,
-				total: totals.total,
-				payment_method: paymentMethod,
-				is_recurring: isRecurring,
-				recurring_interval: recurringInterval,
-				recurring_end_date: recurringEndDate || null,
-				discount_type: discountType,
-				discount_value: discountValue ? parseFloat(discountValue) : 0,
-				discount_reason: discountReason,
-				payment_method: paymentMethod,
-				manual_payment_status: paymentMethod === 'bacs' ? 'pending' : null,
-				stripe_invoice_id: null, // To store the Stripe invoice ID
-				pdf_url: null, // To store the PDF URL
-			};
-			
-			const { data: invoice, error: invoiceError } = await supabase
-				.from("invoices")
-				.insert([invoiceData])
-				.select()
-				.single();
-
-			if (invoiceError) throw invoiceError;
-
-			// Create invoice items
-			const { error: itemsError } = await supabase.from("invoice_items").insert(
-				items.map((item) => ({
-					invoice_id: invoice.id,
-					student_id: item.student_id,
-					description: item.description,
-					quantity: item.quantity,
-					unit_price: item.unit_price,
-					subtotal: item.quantity * item.unit_price,
-					total: item.quantity * item.unit_price,
-					type: item.type,
-					plan_enrollment_id: item.plan_enrollment_id,
-				}))
-			);
-
-			if (itemsError) throw itemsError;
-
-			// Create Stripe invoice - call edge function
-			if (paymentMethod === 'stripe') {
-				try {
-					const response = await supabase.functions.invoke(
-						"create-stripe-invoice",
-						{
-							body: {
-								invoiceId: invoice.id,
-							},
-						}
-					);
+	  e.preventDefault();
+	  if (!profile?.studio?.id || !selectedParent) return;
+	  setIsSubmitting(true);
+	  setError(null);
+	  
+	  try {
+	    // Calculate totals
+	    const totals = calculateTotals();
+	    
+	    // Create invoice
+	    const invoiceData = {
+	      studio_id: profile?.studio?.id,
+	      parent_id: selectedParent.id,
+	      status: paymentMethod === 'bacs' ? 'sent' : 'pending', // Fix: Set to 'sent' for BACS
+	      due_date: dueDate,
+	      notes: notes || null,
+	      subtotal: totals.subtotal,
+	      total: totals.total,
+	      payment_method: paymentMethod,
+	      is_recurring: isRecurring,
+	      recurring_interval: recurringInterval,
+	      recurring_end_date: recurringEndDate || null,
+	      discount_type: discountType,
+	      discount_value: discountValue ? parseFloat(discountValue) : 0,
+	      discount_reason: discountReason,
+	      manual_payment_status: paymentMethod === 'bacs' ? 'pending' : null,
+	      stripe_invoice_id: null,
+	      pdf_url: null,
+	    };
+	    
+	    const { data: invoice, error: invoiceError } = await supabase
+	      .from("invoices")
+	      .insert([invoiceData])
+	      .select()
+	      .single();
 	
-					if (response.error) {
-						console.error("Error creating Stripe invoice:", response.error);
-					} else if (response.data) {
-						// Update the invoice with Stripe invoice ID and PDF URL
-						const { error: updateError } = await supabase
-							.from("invoices")
-							.update({
-								stripe_invoice_id: response.data.stripe_invoice_id,
-								pdf_url: response.data.pdf_url,
-							})
-							.eq("id", invoice.id);
+	    if (invoiceError) throw invoiceError;
 	
-						if (updateError) {
-							console.error(
-								"Error updating invoice with Stripe details:",
-								updateError
-							);
-						}
-					}
-				} catch (stripeErr) {
-					console.error("Error with Stripe invoice creation:", stripeErr);
-					// Continue even if Stripe invoice creation fails - we can retry later
-				}
-			} else if (paymentMethod === 'bacs') {
-				// For BACS invoices, generate a PDF and send email notification
-				try {
-					const response = await supabase.functions.invoke(
-						"generate-invoice-pdf",
-						{
-							body: {
-								invoiceId: invoice.id,
-							},
-						}
-					);
-					
-					if (response.error) {
-						console.error("Error generating invoice PDF:", response.error);
-					} else if (response.data?.pdf_url) {
-						// Update the invoice with PDF URL
-						await supabase
-							.from("invoices")
-							.update({
-								pdf_url: response.data.pdf_url,
-							})
-							.eq("id", invoice.id);
-							
-						// Send BACS invoice email notification
-						await supabase.functions.invoke("send-invoice-email", {
-							body: {
-								invoiceId: invoice.id,
-								paymentMethod: 'bacs'
-							},
-						});
-					}
-				} catch (err) {
-					console.error("Error with BACS invoice processing:", err);
-				}
-			}
-
-			// Send notification to the parent about payment request
-			try {
-				await notificationService.notifyPaymentRequest(
-					selectedParent.id,
-					profile.studio.id,
-					totals.total,
-					dueDate,
-					invoice.id,
-					profile.studio.currency
-				);
-			} catch (notificationErr) {
-				console.error("Error sending payment notification:", notificationErr);
-				// Continue even if notification fails
-			}
-
-			onSuccess();
-		} catch (err) {
-			console.error("Error creating invoice:", err);
-			setError(err instanceof Error ? err.message : "Failed to create invoice");
-		} finally {
-			setIsSubmitting(false);
-		}
+	    // Create invoice items
+	    const { error: itemsError } = await supabase.from("invoice_items").insert(
+	      items.map((item) => ({
+	        invoice_id: invoice.id,
+	        student_id: item.student_id,
+	        description: item.description,
+	        quantity: item.quantity,
+	        unit_price: item.unit_price,
+	        subtotal: item.quantity * item.unit_price,
+	        total: item.quantity * item.unit_price,
+	        type: item.type,
+	        plan_enrollment_id: item.plan_enrollment_id,
+	      }))
+	    );
+	
+	    if (itemsError) throw itemsError;
+	
+	    // Handle invoice processing based on payment method
+	    if (paymentMethod === 'stripe') {
+	      try {
+	        const response = await supabase.functions.invoke(
+	          "create-stripe-invoice",
+	          {
+	            body: {
+	              invoiceId: invoice.id,
+	            },
+	          }
+	        );
+	
+	        if (response.error) {
+	          console.error("Error creating Stripe invoice:", response.error);
+	        } else if (response.data) {
+	          // Update the invoice with Stripe invoice ID and PDF URL
+	          const { error: updateError } = await supabase
+	            .from("invoices")
+	            .update({
+	              stripe_invoice_id: response.data.stripe_invoice_id,
+	              pdf_url: response.data.pdf_url,
+	            })
+	            .eq("id", invoice.id);
+	
+	          if (updateError) {
+	            console.error(
+	              "Error updating invoice with Stripe details:",
+	              updateError
+	            );
+	          }
+	        }
+	      } catch (stripeErr) {
+	        console.error("Error with Stripe invoice creation:", stripeErr);
+	        // Continue even if Stripe invoice creation fails - we can retry later
+	      }
+	    } else if (paymentMethod === 'bacs') {
+	      // For BACS invoices, generate a PDF and send email notification
+	      try {
+	        // Generate PDF first
+	        const pdfResponse = await supabase.functions.invoke(
+	          "generate-invoice-pdf",
+	          {
+	            body: {
+	              invoiceId: invoice.id,
+	            },
+	          }
+	        );
+	        
+	        if (pdfResponse.error) {
+	          console.error("Error generating invoice PDF:", pdfResponse.error);
+	          // Don't fail the whole process, just log the error
+	        } else if (pdfResponse.data?.pdf_url) {
+	          // Update the invoice with PDF URL
+	          const { error: updateError } = await supabase
+	            .from("invoices")
+	            .update({
+	              pdf_url: pdfResponse.data.pdf_url,
+	            })
+	            .eq("id", invoice.id);
+	            
+	          if (updateError) {
+	            console.error("Error updating invoice with PDF URL:", updateError);
+	          }
+	        }
+	        
+	        // Send BACS invoice email notification (regardless of PDF success)
+	        const emailResponse = await supabase.functions.invoke("send-invoice-email", {
+	          body: {
+	            invoiceId: invoice.id,
+	            paymentMethod: 'bacs'
+	          },
+	        });
+	        
+	        if (emailResponse.error) {
+	          console.error("Error sending invoice email:", emailResponse.error);
+	          // Don't fail the whole process
+	        }
+	        
+	      } catch (err) {
+	        console.error("Error with BACS invoice processing:", err);
+	        // Don't fail the whole process - invoice is created, PDF/email are nice-to-have
+	      }
+	    }
+	
+	    // Send notification to the parent about payment request
+	    try {
+	      await notificationService.notifyPaymentRequest(
+	        selectedParent.id,
+	        profile.studio.id,
+	        totals.total,
+	        dueDate,
+	        invoice.id,
+	        profile.studio.currency || "GBP"
+	      );
+	    } catch (notificationErr) {
+	      console.error("Error sending payment notification:", notificationErr);
+	      // Continue even if notification fails
+	    }
+	
+	    onSuccess();
+	  } catch (err) {
+	    console.error("Error creating invoice:", err);
+	    setError(err instanceof Error ? err.message : "Failed to create invoice");
+	  } finally {
+	    setIsSubmitting(false);
+	  }
 	};
 
 	const getStudentOptions = () => {
