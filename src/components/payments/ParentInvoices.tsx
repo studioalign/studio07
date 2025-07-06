@@ -64,6 +64,7 @@ export default function ParentInvoices() {
 	const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 	const [showPaymentModal, setShowPaymentModal] = useState(false);
 	const [filter, setFilter] = useState<"all" | "pending" | "paid">("all");
+	const [bankDetails, setBankDetails] = useState<{[key: string]: any}>({});
 	const [studioInfo, setStudioInfo] = useState<
 		| {
 				name: string;
@@ -222,6 +223,14 @@ export default function ParentInvoices() {
 			} else {
 				setInvoices([]);
 			}
+			// Fetch bank details if there are BACS invoices
+			if (formattedInvoices.some(inv => inv.payment_method === 'bacs') && profile?.studio?.id) {
+			  const details = await fetchBankDetails(profile.studio.id);
+			  if (details) {
+			    setBankDetails({ [profile.studio.id]: details });
+			  }
+			}
+			};
 		} catch (err) {
 			console.error("Error fetching invoices:", err);
 			setError(err instanceof Error ? err.message : "Failed to fetch invoices");
@@ -325,6 +334,26 @@ export default function ParentInvoices() {
 		}
 	};
 
+	const fetchBankDetails = async (studioId: string) => {
+	  try {
+	    const { data, error } = await supabase
+	      .from("studio_bank_details")
+	      .select("*")
+	      .eq("studio_id", studioId)
+	      .single();
+	    
+	    if (error && error.code !== 'PGRST116') {
+	      console.error("Error fetching bank details:", error);
+	      return null;
+	    }
+	    
+	    return data;
+	  } catch (err) {
+	    console.error("Error fetching bank details:", err);
+	    return null;
+	  }
+	};
+
 	if (loading) {
 		return (
 			<div>
@@ -399,165 +428,148 @@ export default function ParentInvoices() {
 					</div>
 				</div>
 
-				<div className="divide-y">
-					{filteredInvoices.length > 0 ? (
-						filteredInvoices.map((invoice) => (
-							<div
-								key={invoice.id}
-								className="p-6 hover:bg-gray-50 transition-colors cursor-pointer"
-								onClick={() => setSelectedInvoice(invoice)}
-							>
-								<div className="flex justify-between items-start">
-									<div>
-										<div className="flex items-center space-x-3">
-											{getStatusIcon(invoice.status)}
-											<h3 className="font-medium text-gray-900">
-												Invoice-{invoice.index}
-											</h3>
-											<span
-												className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(
-													invoice.status
-												)}`}
-											>
-												{invoice.status.charAt(0).toUpperCase() +
-													invoice.status.slice(1)}
-											</span>
-										</div>
-										<p className="text-sm text-gray-500 mt-1">
-											Due {new Date(invoice.due_date).toLocaleDateString()}
-										</p>
-										
-										{/* Payment Method Indicator */}
-										<div className="flex items-center gap-2 mt-2">
-											{invoice.payment_method === 'stripe' ? (
-												<div className="flex items-center text-xs text-blue-600">
-													<CreditCard className="w-3 h-3 mr-1" />
-													Card Payment
-												</div>
-											) : (
-												<div className="flex items-center text-xs text-green-600">
-													<Building2 className="w-3 h-3 mr-1" />
-													Bank Transfer
-												</div>
-											)}
-											
-											{invoice.payment_method === 'bacs' && invoice.manual_payment_status && (
-												<span className={`px-2 py-1 text-xs rounded-full ${
-													invoice.manual_payment_status === 'paid' ? 'bg-green-100 text-green-800' :
-													invoice.manual_payment_status === 'overdue' ? 'bg-red-100 text-red-800' :
-													'bg-yellow-100 text-yellow-800'
-												}`}>
-													{invoice.manual_payment_status.toUpperCase()}
-												</span>
-											)}
-											
-											{invoice.payment_method === 'bacs' && invoice.manual_payment_reference && (
-												<span className="text-xs text-gray-500">
-													Ref: {invoice.manual_payment_reference}
-												</span>
-											)}
-										</div>
-										
-										<div className="mt-2">
-											{invoice.items.map((item) => (
-												<p key={item.id} className="text-sm text-gray-600">
-													{item.student?.name || "Unknown Student"} -{" "}
-													{item.description}
-												</p>
-											))}
-										</div>
-									</div>
-									<div className="text-right">
-										<div className="space-y-1">
-											{invoice.discount_value > 0 && (
-												<span className="text-sm text-green-600">
-													{invoice.discount_type === "percentage"
-														? `${invoice.discount_value}% off`
-														: `${formatCurrency(
-																invoice.discount_value,
-																currency
-														  )} off`}
-													{invoice.discount_reason &&
-														` - ${invoice.discount_reason}`}
-												</span>
-											)}
-											<p className="text-2xl font-bold text-brand-primary">
-												{formatCurrency(invoice.total, currency)}
-											</p>
-											{invoice.discount_reason && (
-												<p className="text-sm text-gray-500">
-													Reason: {invoice.discount_reason}
-												</p>
-											)}
-										</div>
-										<div className="flex justify-end mt-2 space-x-2">
-											<div className="flex justify-end mt-2 space-x-2">
-												{invoice.pdf_url && (
-													<button
-														onClick={(e) => handleDownloadPdf(invoice, e)}
-														className="flex items-center px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-100"
-														title="Download Invoice PDF"
-													>
-														<Download className="w-4 h-4" />
-													</button>
-												)}
-												{["pending", "overdue"].includes(invoice.status) && invoice.payment_method === 'stripe' && (
-													<button
-														onClick={(e) => {
-															e.stopPropagation();
-	
-															// Check if the invoice has a Stripe invoice ID
-															if (!invoice.stripe_invoice_id) {
-																// If no Stripe invoice exists, inform the user
-																alert(
-																	"This invoice is not yet ready for payment. Please contact the studio."
-																);
-																return;
-															}
-	
-															setSelectedInvoice(invoice);
-															setShowPaymentModal(true);
-														}}
-														className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
-													>
-														<CreditCard className="w-4 h-4 mr-2" />
-														Pay Now
-													</button>
-												)}
-												{["pending", "overdue"].includes(invoice.status) && invoice.payment_method === 'bacs' && (
-													<div className="px-4 py-2 bg-blue-50 text-blue-700 rounded-md text-sm flex items-center">
-														<Building2 className="w-4 h-4 mr-1" />
-														Bank Transfer Required
-													</div>
-												)}
-											</div>
-										</div>
-									</div>
-								</div>
-							</div>
-						))
-					) : (
-						<div className="p-8 text-center">
-							<FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-							{error ? (
-								<>
-									<p className="text-red-500 mb-2">Error: {error}</p>
-									<button
-										onClick={() => {
-											setError(null);
-											fetchInvoices();
-										}}
-										className="px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 mt-2"
-									>
-										Try Again
-									</button>
-								</>
-							) : (
-								<p className="text-gray-500">No invoices found</p>
-							)}
-						</div>
-					)}
-				</div>
+				<div className="space-y-4 p-4">
+				  {filteredInvoices.length > 0 ? (
+				    filteredInvoices.map((invoice) => (
+				      <div
+				        key={invoice.id}
+				        className="p-6 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+				        onClick={() => setSelectedInvoice(invoice)}
+				      >
+				        <div className="flex justify-between items-start mb-4">
+				          <div>
+				            <h3 className="font-semibold text-lg text-brand-primary">
+				              Invoice #{invoice.index}
+				            </h3>
+				            <p className="text-sm text-gray-500">
+				              Created {new Date(invoice.created_at).toLocaleDateString()}
+				            </p>
+				          </div>
+				          <div className="text-right">
+				            <p className="text-xl font-bold text-brand-primary">
+				              {formatCurrency(invoice.total, currency)}
+				            </p>
+				            <span className={`inline-block px-2 py-1 text-xs rounded-full ${getStatusColor(invoice.status)}`}>
+				              {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+				            </span>
+				          </div>
+				        </div>
+				
+				        {/* Payment Method - Fixed positioning */}
+				        <div className="mb-4">
+				          <div className="flex items-center text-sm">
+				            {invoice.payment_method === 'bacs' ? (
+				              <div className="flex items-center text-green-600">
+				                <Building2 className="w-4 h-4 mr-2" />
+				                <span>Bank Transfer Required</span>
+				              </div>
+				            ) : (
+				              <div className="flex items-center text-blue-600">
+				                <CreditCard className="w-4 h-4 mr-2" />
+				                <span>Card Payment</span>
+				              </div>
+				            )}
+				          </div>
+				        </div>
+				
+				        {/* Bank Details for BACS payments */}
+				        {invoice.payment_method === 'bacs' && invoice.status !== 'paid' && (
+				          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+				            <h4 className="font-medium text-blue-800 mb-2">Bank Transfer Details</h4>
+				            {bankDetails[profile?.studio?.id || ''] ? (
+				              <div className="text-sm text-blue-700 space-y-1">
+				                <p><strong>Account Name:</strong> {bankDetails[profile?.studio?.id || ''].account_name}</p>
+				                <p><strong>Account Number:</strong> {bankDetails[profile?.studio?.id || ''].account_number}</p>
+				                <p><strong>Sort Code:</strong> {bankDetails[profile?.studio?.id || ''].sort_code}</p>
+				                <p><strong>Bank:</strong> {bankDetails[profile?.studio?.id || ''].bank_name}</p>
+				                <p><strong>Reference:</strong> Invoice-{invoice.id.substring(0, 8)}</p>
+				              </div>
+				            ) : (
+				              <p className="text-sm text-blue-700">
+				                Please contact the studio for bank transfer details.
+				              </p>
+				            )}
+				          </div>
+				        )}
+				
+				        {/* Invoice Items */}
+				        <div className="mb-4">
+				          {invoice.items.map((item) => (
+				            <p key={item.id} className="text-sm text-gray-600">
+				              {item.student?.name || "Unknown Student"} - {item.description}
+				            </p>
+				          ))}
+				        </div>
+				
+				        {/* Due Date */}
+				        <div className="mb-4">
+				          <p className="text-sm text-gray-600">
+				            Due: {new Date(invoice.due_date).toLocaleDateString()}
+				          </p>
+				        </div>
+				
+				        {/* Action Buttons */}
+				        <div className="flex gap-2">
+				          <button
+				            onClick={(e) => {
+				              e.stopPropagation();
+				              setSelectedInvoice(invoice);
+				            }}
+				            className="flex-1 px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 transition-colors"
+				          >
+				            View Details
+				          </button>
+				          
+				          {invoice.pdf_url && (
+				            <button
+				              onClick={(e) => handleDownloadPdf(invoice, e)}
+				              className="px-4 py-2 border border-brand-primary text-brand-primary rounded-md hover:bg-brand-primary hover:text-white transition-colors"
+				            >
+				              <Download className="w-4 h-4" />
+				            </button>
+				          )}
+				          
+				          {["pending", "overdue"].includes(invoice.status) && invoice.payment_method === 'stripe' && (
+				            <button
+				              onClick={(e) => {
+				                e.stopPropagation();
+				                if (!invoice.stripe_invoice_id) {
+				                  alert("This invoice is not yet ready for payment. Please contact the studio.");
+				                  return;
+				                }
+				                setSelectedInvoice(invoice);
+				                setShowPaymentModal(true);
+				              }}
+				              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+				            >
+				              <CreditCard className="w-4 h-4 mr-2" />
+				              Pay Now
+				            </button>
+				          )}
+				        </div>
+				      </div>
+				    ))
+				  ) : (
+				    <div className="p-8 text-center">
+				      <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+				      {error ? (
+				        <>
+				          <p className="text-red-500 mb-2">Error: {error}</p>
+				          <button
+				            onClick={() => {
+				              setError(null);
+				              fetchInvoices();
+				            }}
+				            className="px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 mt-2"
+				          >
+				            Try Again
+				          </button>
+				        </>
+				      ) : (
+				        <p className="text-gray-500">No invoices found</p>
+				      )}
+				    </div>
+				  )}
 			</div>
 
 			{selectedInvoice && !showPaymentModal && (
