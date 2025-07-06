@@ -253,53 +253,72 @@ export default function CreateInvoiceForm({
 	        // Continue even if Stripe invoice creation fails - we can retry later
 	      }
 	    } else if (paymentMethod === 'bacs') {
-	      // For BACS invoices, generate a PDF and send email notification
-	      try {
-	        // Generate PDF first
-	        const pdfResponse = await supabase.functions.invoke(
-	          "generate-invoice-pdf",
-	          {
-	            body: {
-	              invoiceId: invoice.id,
-	            },
-	          }
-	        );
-	        
-	        if (pdfResponse.error) {
-	          console.error("Error generating invoice PDF:", pdfResponse.error);
-	          // Don't fail the whole process, just log the error
-	        } else if (pdfResponse.data?.pdf_url) {
-	          // Update the invoice with PDF URL
-	          const { error: updateError } = await supabase
-	            .from("invoices")
-	            .update({
-	              pdf_url: pdfResponse.data.pdf_url,
-	            })
-	            .eq("id", invoice.id);
-	            
-	          if (updateError) {
-	            console.error("Error updating invoice with PDF URL:", updateError);
-	          }
-	        }
-	        
-	        // Send BACS invoice email notification (regardless of PDF success)
-	        const emailResponse = await supabase.functions.invoke("send-invoice-email", {
-	          body: {
-	            invoiceId: invoice.id,
-	            paymentMethod: 'bacs'
-	          },
-	        });
-	        
-	        if (emailResponse.error) {
-	          console.error("Error sending invoice email:", emailResponse.error);
-	          // Don't fail the whole process
-	        }
-	        
-	      } catch (err) {
-	        console.error("Error with BACS invoice processing:", err);
-	        // Don't fail the whole process - invoice is created, PDF/email are nice-to-have
-	      }
-	    }
+		  // For BACS invoices, generate a PDF and send email notification
+		  try {
+		    // Generate PDF first
+		    const pdfResponse = await supabase.functions.invoke(
+		      "generate-invoice-pdf",
+		      {
+		        body: {
+		          invoiceId: invoice.id,
+		          paymentMethod: 'bacs', // Add this parameter
+		        },
+		      }
+		    );
+		    
+		    if (pdfResponse.error) {
+		      console.error("Error generating invoice PDF:", pdfResponse.error);
+		      // Don't fail the whole process, just log the error
+		    } else if (pdfResponse.data?.pdf_url) {
+		      // Update the invoice with PDF URL
+		      const { error: updateError } = await supabase
+		        .from("invoices")
+		        .update({
+		          pdf_url: pdfResponse.data.pdf_url,
+		        })
+		        .eq("id", invoice.id);
+		        
+		      if (updateError) {
+		        console.error("Error updating invoice with PDF URL:", updateError);
+		      }
+		    }
+		    
+		    // Send BACS invoice email notification (regardless of PDF success)
+		    const emailResponse = await supabase.functions.invoke("send-invoice-email", {
+		      body: {
+		        invoiceId: invoice.id,
+		        paymentMethod: 'bacs' // Ensure this is explicitly set
+		      },
+		    });
+		    
+		    if (emailResponse.error) {
+		      console.error("Error sending invoice email:", emailResponse.error);
+		      // Log the full error details for debugging
+		      console.error("Full email error details:", {
+		        error: emailResponse.error,
+		        invoiceId: invoice.id,
+		        paymentMethod: 'bacs'
+		      });
+		      
+		      // Show error to user but don't fail the whole process
+		      setError(`Invoice created but email failed to send: ${emailResponse.error.message || 'Unknown email error'}`);
+		    } else {
+		      console.log("BACS invoice email sent successfully");
+		    }
+		    
+		  } catch (err) {
+		    console.error("Error with BACS invoice processing:", err);
+		    // Log more details for debugging
+		    console.error("BACS processing error details:", {
+		      error: err,
+		      invoiceId: invoice.id,
+		      paymentMethod: 'bacs'
+		    });
+		    
+		    // Show error to user but don't fail the whole process
+		    setError(`Invoice created but there was an issue with email/PDF: ${err instanceof Error ? err.message : 'Unknown error'}`);
+		  }
+		}
 	
 	    // Send notification to the parent about payment request
 	    try {
