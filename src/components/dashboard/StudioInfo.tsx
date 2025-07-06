@@ -11,6 +11,7 @@ import { useLocalization } from "../../contexts/LocalizationContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { SUPPORTED_COUNTRIES } from "../../utils/formatters";
 import { getStudioPaymentMethods } from "../../utils/studioUtils";
+import BankDetailsSetup from './BankDetailsSetup';
 
 const TIMEZONE_LABELS: Record<string, string> = {
 	// UK & Ireland
@@ -381,6 +382,11 @@ export default function StudioInfo() {
 
 					{/* Bank Account Setup */}
 					<BankAccountSetup />
+
+					{/* Bank Details Setup for BACS - Add this new section */}
+					{localPaymentMethods.bacs && (
+					  <BankDetailsSetup />
+					)}
 
 					{/* Localization Settings */}
 					<div>
