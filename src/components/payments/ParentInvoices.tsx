@@ -569,6 +569,7 @@ export default function ParentInvoices() {
 				      )}
 				    </div>
 				  )}
+				</div>
 			</div>
 
 			{selectedInvoice && !showPaymentModal && (
