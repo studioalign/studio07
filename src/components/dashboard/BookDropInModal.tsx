@@ -1,5 +1,3 @@
-// src/components/dashboard/BookDropInModal.tsx - Updated to handle both ID types
-
 import React, { useState, useEffect } from "react";
 import { X, CreditCard, Plus, AlertCircle, CheckCircle } from "lucide-react";
 import SearchableDropdown from "../SearchableDropdown";
@@ -228,7 +226,7 @@ export default function BookDropInModal({
 	}
 
 	// If studio only accepts BACS, show message
-	if (!acceptsCardPayments) {
+	if (!acceptsCardPayments && studioPaymentMethods.bacs) {
 		return (
 			<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
 				<div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -274,7 +272,7 @@ export default function BookDropInModal({
 						</div>
 					</div>
 					
-					<div className="p-4 bg-yellow-50 rounded-lg mb-4">
+					<div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg mb-4">
 						<div className="flex items-start">
 							<AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 mr-2" />
 							<div>
@@ -283,6 +281,24 @@ export default function BookDropInModal({
 									This studio only accepts bank transfer payments. Please contact the studio directly 
 									to book this drop-in class and arrange payment.
 								</p>
+								<div className="mt-3 flex gap-2 flex-wrap">
+									{profile?.studio?.phone && (
+										<button
+											onClick={() => window.open(`tel:${profile.studio.phone}`, '_self')}
+											className="inline-flex items-center px-3 py-1 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-sm rounded-md"
+										>
+											Call Studio
+										</button>
+									)}
+									{profile?.studio?.email && (
+										<button
+											onClick={() => window.open(`mailto:${profile.studio.email}`, '_self')}
+											className="inline-flex items-center px-3 py-1 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-sm rounded-md"
+										>
+											Email Studio
+										</button>
+									)}
+								</div>
 							</div>
 						</div>
 					</div>

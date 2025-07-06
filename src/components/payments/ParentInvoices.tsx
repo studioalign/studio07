@@ -50,6 +50,9 @@ interface Invoice {
 		name?: string;
 	};
 	payment_method?: 'stripe' | 'bacs';
+	manual_payment_status?: 'pending' | 'paid' | 'overdue';
+	manual_payment_date?: string;
+	manual_payment_reference?: string;
 }
 
 export default function ParentInvoices() {
@@ -119,6 +122,10 @@ export default function ParentInvoices() {
 				created_at: string;
 				stripe_invoice_id?: string;
 				parent?: { email?: string; name?: string };
+				payment_method?: 'stripe' | 'bacs';
+				manual_payment_status?: 'pending' | 'paid' | 'overdue';
+				manual_payment_date?: string;
+				manual_payment_reference?: string;
 				items?: Array<{
 					id: string;
 					description: string;
@@ -150,6 +157,10 @@ export default function ParentInvoices() {
 					pdf_url,
 					created_at,
 					stripe_invoice_id,
+					payment_method,
+					manual_payment_status,
+					manual_payment_date,
+					manual_payment_reference,
 					parent:parent_id(email, name),
 					items:invoice_items(
 						id, 
@@ -189,6 +200,10 @@ export default function ParentInvoices() {
 						created_at: invoice.created_at || new Date().toISOString(),
 						stripe_invoice_id: invoice.stripe_invoice_id,
 						parent: invoice.parent,
+						payment_method: invoice.payment_method || 'stripe',
+						manual_payment_status: invoice.manual_payment_status,
+						manual_payment_date: invoice.manual_payment_date,
+						manual_payment_reference: invoice.manual_payment_reference,
 						items: Array.isArray(invoice.items)
 							? invoice.items.map((item) => ({
 									id: item.id,
@@ -411,6 +426,38 @@ export default function ParentInvoices() {
 										<p className="text-sm text-gray-500 mt-1">
 											Due {new Date(invoice.due_date).toLocaleDateString()}
 										</p>
+										
+										{/* Payment Method Indicator */}
+										<div className="flex items-center gap-2 mt-2">
+											{invoice.payment_method === 'stripe' ? (
+												<div className="flex items-center text-xs text-blue-600">
+													<CreditCard className="w-3 h-3 mr-1" />
+													Card Payment
+												</div>
+											) : (
+												<div className="flex items-center text-xs text-green-600">
+													<Building2 className="w-3 h-3 mr-1" />
+													Bank Transfer
+												</div>
+											)}
+											
+											{invoice.payment_method === 'bacs' && invoice.manual_payment_status && (
+												<span className={`px-2 py-1 text-xs rounded-full ${
+													invoice.manual_payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+													invoice.manual_payment_status === 'overdue' ? 'bg-red-100 text-red-800' :
+													'bg-yellow-100 text-yellow-800'
+												}`}>
+													{invoice.manual_payment_status.toUpperCase()}
+												</span>
+											)}
+											
+											{invoice.payment_method === 'bacs' && invoice.manual_payment_reference && (
+												<span className="text-xs text-gray-500">
+													Ref: {invoice.manual_payment_reference}
+												</span>
+											)}
+										</div>
+										
 										<div className="mt-2">
 											{invoice.items.map((item) => (
 												<p key={item.id} className="text-sm text-gray-600">
@@ -478,7 +525,8 @@ export default function ParentInvoices() {
 													</button>
 												)}
 												{["pending", "overdue"].includes(invoice.status) && invoice.payment_method === 'bacs' && (
-													<div className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm">
+													<div className="px-4 py-2 bg-blue-50 text-blue-700 rounded-md text-sm flex items-center">
+														<Building2 className="w-4 h-4 mr-1" />
 														Bank Transfer Required
 													</div>
 												)}

@@ -1,4 +1,5 @@
 import { StudioInfo } from '../types/studio';
+import { supabase } from '../lib/supabase';
 
 /**
  * Helper function to get studio payment methods with proper fallbacks
@@ -48,9 +49,12 @@ export async function hasActiveStripeSubscriptions(studioId: string) {
  */
 export async function markBacsInvoiceAsPaid(invoiceId: string, paymentReference?: string) {
   try {
-    const { data, error } = await supabase.rpc('mark_bacs_invoice_paid', {
-      p_invoice_id: invoiceId,
-      p_payment_reference: paymentReference || null
+    // Call the Supabase Edge Function to mark the invoice as paid
+    const { data, error } = await supabase.functions.invoke('mark-invoice-paid', {
+      body: {
+        invoiceId,
+        paymentReference: paymentReference || null
+      }
     });
     
     if (error) throw error;
@@ -63,5 +67,3 @@ export async function markBacsInvoiceAsPaid(invoiceId: string, paymentReference?
     };
   }
 }
-
-import { supabase } from '../lib/supabase';

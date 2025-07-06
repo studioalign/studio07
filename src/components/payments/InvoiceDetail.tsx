@@ -4,8 +4,9 @@ import PaymentHistory from "./PaymentHistory";
 import { formatCurrency } from "../../utils/formatters";
 import { useLocalization } from "../../contexts/LocalizationContext";
 import { notificationService } from "../../services/notificationService";
-import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
+import { useState } from "react";
+import { useState } from "react";
 import { markBacsInvoiceAsPaid } from "../../utils/studioUtils";
 
 interface InvoiceItem {
@@ -61,6 +62,13 @@ export default function InvoiceDetail({
 	const { currency } = useLocalization();
 	const { profile } = useAuth();
 	const previousStatusRef = useRef(invoice.status);
+	const [paymentReference, setPaymentReference] = useState('');
+	const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+	const [markPaidSuccess, setMarkPaidSuccess] = useState(false);
+	const [markPaidError, setMarkPaidError] = useState<string | null>(null);
+	
+	// Check if user is studio owner
+	const isOwner = profile?.role === 'owner';
 	const [paymentReference, setPaymentReference] = useState('');
 	const [isMarkingPaid, setIsMarkingPaid] = useState(false);
 	const [markPaidSuccess, setMarkPaidSuccess] = useState(false);
@@ -136,11 +144,10 @@ export default function InvoiceDetail({
 	setMarkPaidError(null);
 
 	try {
-		const result = await markBacsInvoiceAsPaid(invoiceId, paymentReference);
+		const result = await markBacsInvoiceAsPaid(invoice.id, paymentReference);
 
 		if (result.success) {
 			setMarkPaidSuccess(true);
-			// Reset after 3 seconds
 			setTimeout(() => {
 				setMarkPaidSuccess(false);
 				setPaymentReference('');
@@ -150,12 +157,35 @@ export default function InvoiceDetail({
 			setMarkPaidError(result.error || 'Failed to mark invoice as paid');
 		}
 	} catch (error) {
-		setMarkPaidError(error instanceof Error ? error.message : 'An unexpected error occurred');
+		setMarkPaidError(error instanceof Error ? error.message : 'Failed to mark invoice as paid');
 	} finally {
 		setIsMarkingPaid(false);
 	}
 };
 
+	const handleMarkAsPaid = async () => {
+	setIsMarkingPaid(true);
+	setMarkPaidError(null);
+
+	try {
+		const result = await markBacsInvoiceAsPaid(invoice.id, paymentReference);
+
+		if (result.success) {
+			setMarkPaidSuccess(true);
+			setTimeout(() => {
+				setMarkPaidSuccess(false);
+				setPaymentReference('');
+				onRefresh(); // Refresh invoice data
+			}, 3000);
+		} else {
+			setMarkPaidError(result.error || 'Failed to mark invoice as paid');
+		}
+	} catch (error) {
+		setMarkPaidError(error instanceof Error ? error.message : 'Failed to mark invoice as paid');
+	} finally {
+		setIsMarkingPaid(false);
+	}
+};
 
 	return (
 		<div className="bg-white rounded-lg shadow-lg">
@@ -337,6 +367,69 @@ export default function InvoiceDetail({
 					</div>
 				)}
 			</div>
+			
+			{/* BACS Payment Handling */}
+			{invoice.payment_method === 'bacs' && invoice.status === 'pending' && isOwner && (
+				<div className="mt-6 p-4 bg-gray-50 rounded-lg">
+					<h3 className="text-lg font-medium text-brand-primary mb-4 flex items-center">
+						<Building2 className="w-5 h-5 mr-2" />
+						Mark Bank Transfer as Received
+					</h3>
+					
+					{markPaidSuccess ? (
+						<div className="bg-green-50 p-4 rounded-lg flex items-start">
+							<CheckCircle className="w-5 h-5 text-green-500 mr-2 mt-0.5" />
+							<div>
+								<p className="font-medium text-green-800">Payment marked as received</p>
+								<p className="text-sm text-green-600">The invoice has been updated and payment recorded.</p>
+							</div>
+						</div>
+					) : (
+						<div className="space-y-4">
+							<p className="text-sm text-gray-600">
+								Use this form to record when you've received a bank transfer payment for this invoice.
+							</p>
+							
+							<div>
+								<label className="block text-sm font-medium text-gray-700 mb-1">
+									Payment Reference (Optional)
+								</label>
+								<input
+									type="text"
+									value={paymentReference}
+									onChange={(e) => setPaymentReference(e.target.value)}
+									placeholder="Enter bank reference if available"
+									className="w-full px-3 py-2 border border-gray-300 rounded-md"
+								/>
+							</div>
+							
+							{markPaidError && (
+								<div className="bg-red-50 p-3 rounded-md text-red-700 text-sm">
+									{markPaidError}
+								</div>
+							)}
+							
+							<button
+								onClick={handleMarkAsPaid}
+								disabled={isMarkingPaid}
+								className="w-full flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400"
+							>
+								{isMarkingPaid ? (
+									<>
+										<div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+										Processing...
+									</>
+								) : (
+									<>
+										<CheckCircle className="w-4 h-4 mr-2" />
+										Mark as Paid
+									</>
+								)}
+							</button>
+						</div>
+					)}
+				</div>
+			)}
 			
 			{/* BACS Payment Handling */}
 			{invoice.payment_method === 'bacs' && invoice.status === 'pending' && isOwner && (

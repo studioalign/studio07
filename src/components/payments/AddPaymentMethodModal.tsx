@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { X, CreditCard, Lock } from "lucide-react";
 import FormInput from "../FormInput";
 import { usePaymentMethods } from "../../hooks/usePaymentMethods";
+import { getStudioPaymentMethods } from "../../utils/studioUtils";
 import { useAuth } from "../../contexts/AuthContext";
 import {
 	createSetupIntent,
@@ -270,6 +271,45 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
 	};
 
 	return (
+	if (!studioPaymentMethods.stripe && studioPaymentMethods.bacs) {
+		return (
+			<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+				<div className="bg-white rounded-lg p-6 w-full max-w-md">
+					<div className="flex justify-between items-center mb-6">
+						<h2 className="text-xl font-semibold text-brand-primary">
+							Payment Methods
+						</h2>
+						<button
+							onClick={onClose}
+							className="text-gray-400 hover:text-gray-600"
+						>
+							<X className="w-6 h-6" />
+						</button>
+					</div>
+					
+					<div className="p-4 bg-blue-50 rounded-lg mb-4">
+						<div className="flex items-start">
+							<AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 mr-2" />
+							<div>
+								<h4 className="font-medium text-blue-800">Bank Transfer Only</h4>
+								<p className="text-sm text-blue-700 mt-1">
+									This studio only accepts bank transfer payments. You cannot add card payment methods.
+								</p>
+							</div>
+						</div>
+					</div>
+					
+					<button
+						onClick={onClose}
+						className="w-full px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+					>
+						Close
+					</button>
+				</div>
+			</div>
+		);
+	}
+
 		<form onSubmit={handleSubmit} className="space-y-4">
 			<div className="flex justify-between mb-4">
 				<div className="text-sm text-gray-500">
@@ -441,6 +481,11 @@ export default function AddPaymentMethodModal({
 }: AddPaymentMethodModalProps) {
 	const [stripeInstance, setStripeInstance] = useState<any>(null);
 	const { profile } = useAuth();
+
+	// Get studio payment methods
+	const studioPaymentMethods = profile?.studio ? 
+		getStudioPaymentMethods(profile.studio) : 
+		{ stripe: true, bacs: false };
 
 	// Initialize Stripe.js with the connected account when component mounts
 	useEffect(() => {

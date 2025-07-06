@@ -1,81 +1,65 @@
-import React, { useState, useCallback, useEffect } from "react";
-import {
-	Plus,
-	FileText,
-	Search,
-	X,
-	AlertCircle,
-	CreditCard, 
-	Building2
-} from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Plus, X, AlertCircle, CreditCard, Building2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useInvoices } from "../../hooks/useInvoices";
+import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabase";
 import CreateInvoiceForm from "./CreateInvoiceForm";
 import InvoiceDetail from "./InvoiceDetail";
 import EditInvoiceForm from "./EditInvoiceForm";
-import { useInvoices, InvoiceStatus } from "../../hooks/useInvoices";
-import { formatCurrency, formatDate } from "../../utils/formatters";
+import { formatCurrency } from "../../utils/formatters";
 import { useLocalization } from "../../contexts/LocalizationContext";
-import type { Invoice } from "../../hooks/useInvoices";
-import { useAuth } from "../../contexts/AuthContext";
-import { supabase } from "../../lib/supabase";
-import { useNavigate } from "react-router-dom";
 import { getStudioPaymentMethods } from "../../utils/studioUtils";
 
 export default function Invoices() {
-	const { currency, dateFormat } = useLocalization();
-	const { profile } = useAuth();
-	const [isStripeConnected, setIsStripeConnected] = useState<boolean>(true);
 	const navigate = useNavigate();
+	const { profile } = useAuth();
+	const { currency } = useLocalization();
+	const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
 	const [showCreateForm, setShowCreateForm] = useState(false);
-	const [selectedStatus, setSelectedStatus] = useState<
-		InvoiceStatus | undefined
-	>(undefined);
-	const [search, setSearch] = useState("");
-	const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-	const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+	const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+	const [editingInvoice, setEditingInvoice] = useState<any>(null);
+	const [isStripeConnected, setIsStripeConnected] = useState(true);
 
 	const { invoices, loading, error, counts, refresh } = useInvoices({
-		status: selectedStatus,
-		search,
+		status: selectedStatus as any,
 	});
-	
+
 	// Get studio payment methods
 	const studioPaymentMethods = profile?.studio ? 
 		getStudioPaymentMethods(profile.studio) : 
 		{ stripe: true, bacs: false };
 
-	useEffect(() => {
-		if (profile?.studio?.id) {
-			checkStripeConnection(profile.studio.id);
-		}
-	}, [profile]);
-
 	const filters = [
-		{ id: undefined, label: "All" },
-		{ id: "draft" as InvoiceStatus, label: "Draft" },
-		{ id: "pending" as InvoiceStatus, label: "Pending" },
-		{ id: "paid" as InvoiceStatus, label: "Paid" },
-		{ id: "overdue" as InvoiceStatus, label: "Overdue" },
+		{ id: null, label: "All", count: Object.values(counts).reduce((a, b) => a + b, 0) },
+		{ id: "pending", label: "Pending", count: counts.pending },
+		{ id: "paid", label: "Paid", count: counts.paid },
+		{ id: "overdue", label: "Overdue", count: counts.overdue },
+		{ id: "cancelled", label: "Cancelled", count: counts.cancelled },
 	];
 
-	const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-		setSearch(e.target.value);
-	}, []);
+	useEffect(() => {
+		const checkStripeConnection = async () => {
+			if (!profile?.studio?.id) return;
 
-	const checkStripeConnection = async (studioId: string) => {
-		try {
-			const { data: studioData, error } = await supabase
-				.from("studios")
-				.select("stripe_connect_enabled")
-				.eq("id", studioId)
-				.single();
+			try {
+				const { data: studioData, error } = await supabase
+					.from("studios")
+					.select("stripe_connect_enabled")
+					.eq("id", profile.studio.id)
+					.single();
 
-			if (error) throw error;
-			setIsStripeConnected(!!studioData?.stripe_connect_enabled);
-		} catch (err) {
-			console.error("Error checking Stripe connection:", err);
-			setIsStripeConnected(false);
-		}
-	};
+				if (error) throw error;
+
+				setIsStripeConnected(!!studioData?.stripe_connect_enabled);
+			} catch (err) {
+				console.error("Error checking Stripe connection:", err);
+				setIsStripeConnected(false);
+			}
+		};
+
+		checkStripeConnection();
+	}, [profile?.studio?.id]);
 
 	if (selectedInvoice) {
 		return (
@@ -126,6 +110,7 @@ export default function Invoices() {
 
 	return (
 		<div>
+			{/* Stripe Not Connected Warning */}
 			{!isStripeConnected && !studioPaymentMethods.bacs && (
 				<div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
 					<div className="flex items-start">
@@ -153,6 +138,7 @@ export default function Invoices() {
 				</div>
 			)}
 			
+			{/* BACS Enabled Notice */}
 			{!isStripeConnected && studioPaymentMethods.bacs && (
 				<div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
 					<div className="flex items-start">
@@ -169,6 +155,8 @@ export default function Invoices() {
 					</div>
 				</div>
 			)}
+
+			{/* Header */}
 			<div className="flex justify-between items-center mb-6">
 				<h1 className="text-2xl font-bold text-brand-primary">Invoices</h1>
 				<button
@@ -181,6 +169,7 @@ export default function Invoices() {
 				</button>
 			</div>
 
+			{/* Create Invoice Modal */}
 			{showCreateForm && (
 				<>
 					<div
@@ -214,6 +203,7 @@ export default function Invoices() {
 				</>
 			)}
 
+			{/* Invoice List */}
 			{!showCreateForm && (
 				<div className="bg-white rounded-lg shadow">
 					<div className="border-b p-4">
@@ -230,130 +220,131 @@ export default function Invoices() {
 										}`}
 									>
 										{item.label}
-										{counts && item.label !== "All" && (
-											<span className="ml-2 text-xs text-gray-400">
-												({counts[item.id as keyof typeof counts] || 0})
-											</span>
-										)}
-										{counts && item.label === "All" && (
-											<span className="ml-2 text-xs text-gray-400">
-												({invoices.length || 0})
+										{item.count > 0 && (
+											<span className="ml-2 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-full">
+												{item.count}
 											</span>
 										)}
 									</button>
 								))}
 							</nav>
 						</div>
-
-						<div className="relative">
-							<input
-								type="text"
-								placeholder="Search invoices..."
-								value={search}
-								onChange={handleSearch}
-								className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-brand-accent focus:border-brand-accent"
-							/>
-							<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-						</div>
 					</div>
 
-					<div className="p-6">
-						{loading ? (
-							<div className="space-y-4">
-								{[1, 2, 3].map((i) => (
-									<div key={i} className="animate-pulse">
-										<div className="h-20 bg-gray-100 rounded-lg" />
-									</div>
-								))}
-							</div>
-						) : error ? (
-							<div className="text-center text-red-500 py-8">{error}</div>
-						) : invoices.length === 0 ? (
-							<div className="text-center text-gray-500 py-8">
-								<FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-								<p className="text-lg font-medium">No invoices found</p>
-								<p className="text-sm">
-									Create your first invoice to get started
-								</p>
-							</div>
-						) : (
-							<div className="space-y-4">
-								{invoices.map((invoice) => (
-									<button
-										key={invoice.id}
-										onClick={() => setSelectedInvoice(invoice)}
-										className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-									>
-										<div className="flex items-center">
-											<FileText className="w-5 h-5 text-brand-primary mr-3" />
-											<div className="text-left">
-												<p className="font-medium">Invoice-{invoice.index}</p>
-												<p className="text-sm text-gray-500">
-													{invoice.parent.name}
-												</p>
-												<div className="flex items-center mt-1">
+					{loading ? (
+						<div className="flex items-center justify-center h-64">
+							<div className="animate-spin rounded-full h-32 w-32 border-b-2 border-brand-primary"></div>
+						</div>
+					) : error ? (
+						<div className="text-center text-red-600 p-6">Error: {error}</div>
+					) : invoices.length === 0 ? (
+						<div className="text-center py-12">
+							<p className="text-gray-500">No invoices found</p>
+						</div>
+					) : (
+						<div className="overflow-x-auto">
+							<table className="w-full">
+								<thead className="bg-gray-50">
+									<tr>
+										<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+											Invoice
+										</th>
+										<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+											Parent
+										</th>
+										<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+											Due Date
+										</th>
+										<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+											Payment Method
+										</th>
+										<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+											Status
+										</th>
+										<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+											Amount
+										</th>
+									</tr>
+								</thead>
+								<tbody className="bg-white divide-y divide-gray-200">
+									{invoices.map((invoice) => (
+										<tr
+											key={invoice.id}
+											onClick={() => setSelectedInvoice(invoice)}
+											className="hover:bg-gray-50 cursor-pointer"
+										>
+											<td className="px-6 py-4 whitespace-nowrap">
+												<div className="text-sm font-medium text-gray-900">
+													Invoice-{invoice.index}
+												</div>
+												<div className="text-sm text-gray-500">
+													{new Date(invoice.created_at).toLocaleDateString()}
+												</div>
+											</td>
+											<td className="px-6 py-4 whitespace-nowrap">
+												<div className="text-sm font-medium text-gray-900">
+													{invoice.parent?.name}
+												</div>
+												<div className="text-sm text-gray-500">
+													{invoice.parent?.email}
+												</div>
+											</td>
+											<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+												{new Date(invoice.due_date).toLocaleDateString()}
+											</td>
+											<td className="px-6 py-4 whitespace-nowrap">
+												<div className="flex items-center gap-2">
 													{invoice.payment_method === 'stripe' ? (
-														<>
-															<CreditCard className="w-3 h-3 text-blue-600 mr-1" />
-															<span className="text-xs text-blue-600">Card Payment</span>
-														</>
+														<div className="flex items-center text-xs text-blue-600">
+															<CreditCard className="w-3 h-3 mr-1" />
+															Card Payment
+														</div>
 													) : (
-														<>
-															<Building2 className="w-3 h-3 text-green-600 mr-1" />
-															<span className="text-xs text-green-600">Bank Transfer</span>
-														</>
+														<div className="flex items-center text-xs text-green-600">
+															<Building2 className="w-3 h-3 mr-1" />
+															Bank Transfer
+														</div>
 													)}
 												</div>
-												{invoice.is_recurring && (
-													<p className="text-xs text-blue-600 mt-1">
-														↻ Recurring{" "}
-														{invoice.recurring_interval.toLowerCase()}
-													</p>
+												{invoice.payment_method === 'bacs' && invoice.manual_payment_status && (
+													<span className={`inline-block px-2 py-1 text-xs rounded-full mt-1 ${
+														invoice.manual_payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+														invoice.manual_payment_status === 'overdue' ? 'bg-red-100 text-red-800' :
+														'bg-yellow-100 text-yellow-800'
+													}`}>
+														{invoice.manual_payment_status.toUpperCase()}
+													</span>
 												)}
-											</div>
-										</div>
-										<div className="flex items-center space-x-6">
-											<div className="text-right">
-												<p className="font-medium">
-													{formatCurrency(invoice.total, currency)}
-													{invoice.discount_value &&
-													invoice.discount_value > 0 ? (
-														<span className="text-xs ml-1 text-green-600">
-															(
-															{invoice.discount_type === "percentage"
-																? `${invoice.discount_value}% off`
-																: `${formatCurrency(
-																		invoice.discount_value,
-																		currency
-																  )} off`}
-															)
-														</span>
-													) : null}
-												</p>
-												<p className="text-sm text-gray-500">
-													Due {formatDate(invoice.due_date, dateFormat)}
-												</p>
-											</div>
-											<span
-												className={`px-3 py-1 text-sm font-medium rounded-full ${
-													invoice.status === "paid"
-														? "bg-green-100 text-green-800"
-														: invoice.status === "overdue"
-														? "bg-red-100 text-red-800"
-														: invoice.status === "pending"
-														? "bg-yellow-100 text-yellow-800"
-														: "bg-gray-100 text-gray-800"
-												}`}
-											>
-												{invoice.status.charAt(0).toUpperCase() +
-													invoice.status.slice(1)}
-											</span>
-										</div>
-									</button>
-								))}
-							</div>
-						)}
-					</div>
+											</td>
+											<td className="px-6 py-4 whitespace-nowrap">
+												<span
+													className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+														invoice.status === "paid"
+															? "bg-green-100 text-green-800"
+															: invoice.status === "overdue"
+															? "bg-red-100 text-red-800"
+															: invoice.status === "pending"
+															? "bg-yellow-100 text-yellow-800"
+															: "bg-gray-100 text-gray-800"
+													}`}
+												>
+													{invoice.status}
+												</span>
+												{invoice.is_recurring && (
+													<div className="text-xs text-gray-500 mt-1">
+														Recurring {invoice.recurring_interval}
+													</div>
+												)}
+											</td>
+											<td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+												{formatCurrency(invoice.total, currency)}
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
+					)}
 				</div>
 			)}
 		</div>
