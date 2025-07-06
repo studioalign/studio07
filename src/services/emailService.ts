@@ -574,7 +574,7 @@ export class EmailService {
 	  dueDate: string;
 	  invoiceId: string;
 	  currency: string;
-	  paymentMethod: string;
+	  paymentMethod: 'stripe' | 'bacs'; // Make this explicit
 	}): Promise<boolean> {
 	  const invoiceUrl = `https://app.studioalignpro.com/dashboard/payments`;
 	
@@ -587,6 +587,7 @@ export class EmailService {
 	    paymentMethod: params.paymentMethod,
 	  });
 	
+	  // Different subject lines based on payment method
 	  const subject = params.paymentMethod === 'bacs' 
 	    ? "New Invoice - Bank Transfer Required"
 	    : "New Invoice - Payment Required";
