@@ -230,7 +230,6 @@ export default function ParentInvoices() {
 			    setBankDetails({ [profile.studio.id]: details });
 			  }
 			}
-			};
 		} catch (err) {
 			console.error("Error fetching invoices:", err);
 			setError(err instanceof Error ? err.message : "Failed to fetch invoices");
