@@ -176,10 +176,12 @@ export default function CreateInvoiceForm({
 			const invoiceData = {
 				studio_id: profile?.studio?.id,
 				parent_id: selectedParent.id,
+				status: paymentMethod === 'bacs' ? 'sent' : 'pending',
 				due_date: dueDate,
 				notes: notes || null,
 				subtotal: totals.subtotal,
 				total: totals.total,
+				payment_method: paymentMethod,
 				is_recurring: isRecurring,
 				recurring_interval: recurringInterval,
 				recurring_end_date: recurringEndDate || null,
