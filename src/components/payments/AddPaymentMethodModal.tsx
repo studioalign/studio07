@@ -269,26 +269,22 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
 		}
 	};
 
-if (!studioPaymentMethods.stripe && studioPaymentMethods.bacs) {
-	return (
-		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-			<div className="bg-white rounded-lg p-6 w-full max-w-md">
-				<div className="flex justify-between items-center mb-6">
-					<h2 className="text-xl font-semibold text-brand-primary">
-						Payment Methods
-					</h2>
-					<button
-						onClick={onClose}
-						className="text-gray-400 hover:text-gray-600"
-					>
-						<X className="w-6 h-6" />
-					</button>
-				</div>
-				{/* ...more content */}
-			</div>
-		</div>
-	);
-}
+	// If studio only accepts BACS, show message
+	if (!studioPaymentMethods.stripe && studioPaymentMethods.bacs) {
+		return (
+			<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+				<div className="bg-white rounded-lg p-6 w-full max-w-md">
+					<div className="flex justify-between items-center mb-6">
+						<h2 className="text-xl font-semibold text-brand-primary">
+							Payment Methods
+						</h2>
+						<button
+							onClick={onClose}
+							className="text-gray-400 hover:text-gray-600"
+						>
+							<X className="w-6 h-6" />
+						</button>
+					</div>
 					
 					<div className="p-4 bg-blue-50 rounded-lg mb-4">
 						<div className="flex items-start">
