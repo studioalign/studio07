@@ -6,7 +6,6 @@ import { useLocalization } from "../../contexts/LocalizationContext";
 import { notificationService } from "../../services/notificationService";
 import { useAuth } from "../../contexts/AuthContext";
 import { useState } from "react";
-import { useState } from "react";
 import { markBacsInvoiceAsPaid } from "../../utils/studioUtils";
 
 interface InvoiceItem {
