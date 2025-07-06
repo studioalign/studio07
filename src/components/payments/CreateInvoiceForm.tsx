@@ -175,7 +175,7 @@ export default function CreateInvoiceForm({
 	    const invoiceData = {
 	      studio_id: profile?.studio?.id,
 	      parent_id: selectedParent.id,
-	      status: paymentMethod === 'bacs' ? 'sent' : 'pending', // Fix: Set to 'sent' for BACS
+	      status: 'pending',
 	      due_date: dueDate,
 	      notes: notes || null,
 	      subtotal: totals.subtotal,
