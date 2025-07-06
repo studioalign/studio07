@@ -99,143 +99,145 @@ export default function ParentInvoices() {
 	};
 
 	const fetchInvoices = async () => {
-		try {
-			setLoading(true);
-			if (!profile?.id) return;
-
-			// Type annotation for the expected response
-			type InvoiceData = {
-				id: string;
-				index?: number;
-				status: string;
-				due_date: string;
-				subtotal: number;
-				tax: number;
-				total: number;
-				notes?: string | null;
-				is_recurring?: boolean;
-				recurring_interval?: string;
-				recurring_end_date?: string;
-				discount_type?: string;
-				discount_value?: number;
-				discount_reason?: string;
-				pdf_url?: string;
-				created_at: string;
-				stripe_invoice_id?: string;
-				parent?: { email?: string; name?: string };
-				payment_method?: 'stripe' | 'bacs';
-				manual_payment_status?: 'pending' | 'paid' | 'overdue';
-				manual_payment_date?: string;
-				manual_payment_reference?: string;
-				items?: Array<{
-					id: string;
-					description: string;
-					quantity: number;
-					unit_price: number;
-					total: number;
-					student?: { name?: string };
-				}>;
-			};
-
-			// Fetch invoices created for this parent
-			const { data, error: invoicesError } = await supabase
-				.from("invoices")
-				.select(
-					`
-					id, 
-					status, 
-					due_date, 
-					subtotal, 
-					tax, 
-					total, 
-					notes,
-					is_recurring,
-					recurring_interval,
-					recurring_end_date,
-					discount_type,
-					discount_value,
-					discount_reason,
-					pdf_url,
-					created_at,
-					stripe_invoice_id,
-					payment_method,
-					manual_payment_status,
-					manual_payment_date,
-					manual_payment_reference,
-					parent:parent_id(email, name),
-					items:invoice_items(
-						id, 
-						description, 
-						quantity, 
-						unit_price, 
-						total,
-						student:student_id(name)
-					)
-				`
-				)
-				.eq("parent_id", profile.id)
-				.order("created_at", { ascending: false });
-
-			if (invoicesError) throw invoicesError;
-
-			// Transform the response to match our interface
-			if (data) {
-				const formattedInvoices: Invoice[] = (data as InvoiceData[]).map(
-					(invoice) => ({
-						id: invoice.id,
-						index: invoice.index || 1,
-						status: invoice.status || "pending",
-						due_date: invoice.due_date || new Date().toISOString(),
-						subtotal: invoice.subtotal || 0,
-						tax: invoice.tax || 0,
-						total: invoice.total || 0,
-						notes: invoice.notes || null,
-						is_recurring: invoice.is_recurring || false,
-						recurring_interval: invoice.recurring_interval || "monthly",
-						recurring_end_date:
-							invoice.recurring_end_date || new Date().toISOString(),
-						discount_type: invoice.discount_type || "percentage",
-						discount_value: invoice.discount_value || 0,
-						discount_reason: invoice.discount_reason || "",
-						pdf_url: invoice.pdf_url,
-						created_at: invoice.created_at || new Date().toISOString(),
-						stripe_invoice_id: invoice.stripe_invoice_id,
-						parent: invoice.parent,
-						payment_method: invoice.payment_method || 'stripe',
-						manual_payment_status: invoice.manual_payment_status,
-						manual_payment_date: invoice.manual_payment_date,
-						manual_payment_reference: invoice.manual_payment_reference,
-						items: Array.isArray(invoice.items)
-							? invoice.items.map((item) => ({
-									id: item.id,
-									description: item.description || "",
-									quantity: item.quantity || 1,
-									unit_price: item.unit_price || 0,
-									total: item.total || 0,
-									student: {
-										name: item.student?.name || "Unknown Student",
-									},
-							  }))
-							: [],
-					})
-				);
-				setInvoices(formattedInvoices);
-			} else {
-				setInvoices([]);
-			}
-			// Fetch bank details if there are BACS invoices
-			if (formattedInvoices.some(inv => inv.payment_method === 'bacs') && profile?.studio?.id) {
-			  const details = await fetchBankDetails(profile.studio.id);
-			  if (details) {
-			    setBankDetails({ [profile.studio.id]: details });
-			  }
-			}
-		} catch (err) {
-			console.error("Error fetching invoices:", err);
-			setError(err instanceof Error ? err.message : "Failed to fetch invoices");
-		} finally {
-			setLoading(false);
-		}
+	  if (!profile?.id) return;
+	
+	  try {
+	    setLoading(true);
+	    setError(null);
+	
+	    // Define the interface here for better type safety
+	    interface InvoiceData {
+	      id: string;
+	      index?: number;
+	      status: string;
+	      due_date: string;
+	      subtotal: number;
+	      tax: number;
+	      total: number;
+	      notes?: string | null;
+	      is_recurring?: boolean;
+	      recurring_interval?: string;
+	      recurring_end_date?: string;
+	      discount_type?: string;
+	      discount_value?: number;
+	      discount_reason?: string;
+	      pdf_url?: string;
+	      created_at: string;
+	      stripe_invoice_id?: string;
+	      parent?: { email?: string; name?: string };
+	      payment_method?: 'stripe' | 'bacs';
+	      manual_payment_status?: 'pending' | 'paid' | 'overdue';
+	      manual_payment_date?: string;
+	      manual_payment_reference?: string;
+	      items?: Array<{
+	        id: string;
+	        description: string;
+	        quantity: number;
+	        unit_price: number;
+	        total: number;
+	        student?: { name?: string };
+	      }>;
+	    }
+	
+	    const { data, error: invoicesError } = await supabase
+	      .from("invoices")
+	      .select(`
+	        id, 
+	        index,
+	        status, 
+	        due_date, 
+	        subtotal, 
+	        tax, 
+	        total, 
+	        notes,
+	        is_recurring,
+	        recurring_interval,
+	        recurring_end_date,
+	        discount_type,
+	        discount_value,
+	        discount_reason,
+	        pdf_url,
+	        created_at,
+	        stripe_invoice_id,
+	        payment_method,
+	        manual_payment_status,
+	        manual_payment_date,
+	        manual_payment_reference,
+	        parent:parent_id(email, name),
+	        items:invoice_items(
+	          id, 
+	          description, 
+	          quantity, 
+	          unit_price, 
+	          total,
+	          student:student_id(name)
+	        )
+	      `)
+	      .eq("parent_id", profile.id)
+	      .order("created_at", { ascending: false });
+	
+	    if (invoicesError) throw invoicesError;
+	
+	    // Initialize formattedInvoices as empty array
+	    let formattedInvoices: Invoice[] = [];
+	
+	    // Transform the response to match our interface
+	    if (data && Array.isArray(data)) {
+	      formattedInvoices = (data as InvoiceData[]).map((invoice) => ({
+	        id: invoice.id,
+	        index: invoice.index || 1,
+	        status: invoice.status || "pending",
+	        due_date: invoice.due_date || new Date().toISOString(),
+	        subtotal: invoice.subtotal || 0,
+	        tax: invoice.tax || 0,
+	        total: invoice.total || 0,
+	        notes: invoice.notes || null,
+	        is_recurring: invoice.is_recurring || false,
+	        recurring_interval: invoice.recurring_interval || "monthly",
+	        recurring_end_date: invoice.recurring_end_date || new Date().toISOString(),
+	        discount_type: invoice.discount_type || "percentage",
+	        discount_value: invoice.discount_value || 0,
+	        discount_reason: invoice.discount_reason || "",
+	        pdf_url: invoice.pdf_url,
+	        created_at: invoice.created_at || new Date().toISOString(),
+	        stripe_invoice_id: invoice.stripe_invoice_id,
+	        parent: invoice.parent,
+	        // Better payment method detection
+	        payment_method: invoice.payment_method || (invoice.stripe_invoice_id ? 'stripe' : 'bacs'),
+	        manual_payment_status: invoice.manual_payment_status,
+	        manual_payment_date: invoice.manual_payment_date,
+	        manual_payment_reference: invoice.manual_payment_reference,
+	        items: Array.isArray(invoice.items)
+	          ? invoice.items.map((item) => ({
+	              id: item.id,
+	              description: item.description || "",
+	              quantity: item.quantity || 1,
+	              unit_price: item.unit_price || 0,
+	              total: item.total || 0,
+	              student: {
+	                name: item.student?.name || "Unknown Student",
+	              },
+	            }))
+	          : [],
+	      }));
+	    }
+	
+	    setInvoices(formattedInvoices);
+	
+	    // Fetch bank details if there are BACS invoices
+	    if (formattedInvoices.some(inv => inv.payment_method === 'bacs') && profile?.studio?.id) {
+	      const details = await fetchBankDetails(profile.studio.id);
+	      if (details) {
+	        setBankDetails({ [profile.studio.id]: details });
+	      }
+	    }
+	  } catch (err) {
+	    console.error("Error fetching invoices:", err);
+	    setError(err instanceof Error ? err.message : "Failed to fetch invoices");
+	    setInvoices([]); // Set empty array on error
+	  } finally {
+	    setLoading(false);
+	  }
 	};
 
 	useEffect(() => {
