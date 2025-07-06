@@ -1,5 +1,5 @@
 import React from "react";
-import { X, Download, CreditCard, Building2, Calendar } from "lucide-react";
+import { X, Download, CreditCard, Building2, Calendar, Ban as Bank } from "lucide-react";
 import { useLocalization } from "../../contexts/LocalizationContext";
 import { formatCurrency } from "../../utils/formatters";
 
@@ -18,6 +18,7 @@ interface InvoiceDetailsModalProps {
 		discount_type?: string;
 		discount_value?: number;
 		discount_reason?: string;
+		payment_method?: 'stripe' | 'bacs';
 		items: {
 			id: string;
 			description: string;
@@ -144,6 +145,23 @@ export default function InvoiceDetailsModal({
 						</button>
 					</div>
 				</div>
+
+				{/* Payment Method */}
+				{invoice.payment_method && (
+					<div className="mb-4 flex items-center">
+						{invoice.payment_method === 'bacs' ? (
+							<span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+								<Bank className="w-3 h-3 mr-1" />
+								Bank Transfer
+							</span>
+						) : (
+							<span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+								<CreditCard className="w-3 h-3 mr-1" />
+								Card Payment
+							</span>
+						)}
+					</div>
+				)}
 
 				<div className="p-6 space-y-6">
 					{/* Studio and Invoice Info */}
@@ -292,31 +310,51 @@ export default function InvoiceDetailsModal({
 
 					{/* Payment Button */}
 					{["pending", "overdue"].includes(invoice.status) && onPayClick && (
-						<div className="flex justify-end">
-							{studio?.stripe_connect_enabled ? (
-								<button
-									onClick={onPayClick}
-									className="flex items-center px-8 py-4 bg-brand-primary text-white rounded-xl hover:bg-brand-secondary-400 transform hover:scale-105 transition-all duration-200"
-								>
-									<CreditCard className="w-5 h-5 mr-3" />
-									Pay {formatCurrency(invoice.total, currency)}
-								</button>
+						<>
+							{invoice.payment_method === 'stripe' ? (
+								<div className="flex justify-end">
+									{studio?.stripe_connect_enabled ? (
+										<button
+											onClick={onPayClick}
+											className="flex items-center px-8 py-4 bg-brand-primary text-white rounded-xl hover:bg-brand-secondary-400 transform hover:scale-105 transition-all duration-200"
+										>
+											<CreditCard className="w-5 h-5 mr-3" />
+											Pay {formatCurrency(invoice.total, currency)}
+										</button>
+									) : (
+										<div className="text-right">
+											<button
+												disabled
+												className="flex items-center px-8 py-4 bg-gray-300 text-gray-500 rounded-xl cursor-not-allowed"
+											>
+												<CreditCard className="w-5 h-5 mr-3" />
+												Payment Unavailable
+											</button>
+											<p className="text-sm text-gray-500 mt-2">
+												The studio needs to connect their Stripe account to accept
+												payments.
+											</p>
+										</div>
+									)}
+								</div>
 							) : (
-								<div className="text-right">
-									<button
-										disabled
-										className="flex items-center px-8 py-4 bg-gray-300 text-gray-500 rounded-xl cursor-not-allowed"
-									>
-										<CreditCard className="w-5 h-5 mr-3" />
-										Payment Unavailable
-									</button>
-									<p className="text-sm text-gray-500 mt-2">
-										The studio needs to connect their Stripe account to accept
-										payments.
+								<div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+									<h3 className="font-medium text-blue-800 flex items-center">
+										<Bank className="w-4 h-4 mr-2" />
+										Bank Transfer Required
+									</h3>
+									<p className="text-sm text-blue-700 mt-2">
+										Please make payment via bank transfer using the reference: <strong>Invoice-{invoice.id.substring(0, 8)}</strong>
 									</p>
+									{studio?.bank_account_name && (
+										<div className="mt-3 text-sm">
+											<p><strong>Account Name:</strong> {studio.bank_account_name}</p>
+											{/* Add other bank details if available */}
+										</div>
+									)}
 								</div>
 							)}
-						</div>
+						</>
 					)}
 				</div>
 			</div>

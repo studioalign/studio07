@@ -1,5 +1,3 @@
-// src/components/dashboard/BookDropInModal.tsx - Updated to handle both ID types
-
 import React, { useState, useEffect } from "react";
 import { X, CreditCard, Plus, AlertCircle, CheckCircle } from "lucide-react";
 import SearchableDropdown from "../SearchableDropdown";
@@ -9,6 +7,7 @@ import { usePaymentMethods } from "../../hooks/usePaymentMethods";
 import { bookDropInClass } from "../../utils/bookingUtils";
 import { formatCurrency } from "../../utils/formatters";
 import AddPaymentMethodModal from "../payments/AddPaymentMethodModal";
+import { getStudioPaymentMethods } from "../../utils/studioUtils";
 
 interface BookDropInModalProps {
 	classInfo: {
@@ -52,6 +51,11 @@ export default function BookDropInModal({
 		"idle" | "processing" | "success" | "error"
 	>("idle");
 	const [showAddPaymentMethod, setShowAddPaymentMethod] = useState(false);
+	
+	// Get studio payment methods
+	const studioPaymentMethods = profile?.studio ? 
+		getStudioPaymentMethods(profile.studio) : 
+		{ stripe: true, bacs: false };
 
 	// Two separate mappings for payment method IDs
 	const [paymentMethodDetails, setPaymentMethodDetails] = useState<{
@@ -73,6 +77,9 @@ export default function BookDropInModal({
 			}
 		}
 	}, [paymentMethods, selectedPaymentMethod]);
+
+	// Check if studio accepts card payments
+	const acceptsCardPayments = studioPaymentMethods.stripe;
 
 	// Create lookup tables for payment method IDs
 	useEffect(() => {
@@ -212,6 +219,95 @@ export default function BookDropInModal({
 						className="px-6 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
 					>
 						Continue
+					</button>
+				</div>
+			</div>
+		);
+	}
+
+	// If studio only accepts BACS, show message
+	if (!acceptsCardPayments && studioPaymentMethods.bacs) {
+		return (
+			<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+				<div className="bg-white rounded-lg p-6 w-full max-w-md">
+					<div className="flex justify-between items-center mb-6">
+						<h2 className="text-xl font-semibold text-brand-primary">
+							Book Drop-in Class
+						</h2>
+						<button
+							onClick={onClose}
+							className="text-gray-400 hover:text-gray-600"
+						>
+							<X className="w-6 h-6" />
+						</button>
+					</div>
+					
+					<div className="mb-6">
+						<h3 className="font-medium text-gray-900">{classInfo.name}</h3>
+						<p className="text-sm text-gray-500">
+							{new Date(classInfo.date).toLocaleDateString()} at{" "}
+							{new Date(`2000-01-01T${classInfo.start_time}`).toLocaleTimeString(
+								[],
+								{
+									hour: "numeric",
+									minute: "2-digit",
+								}
+							)}
+						</p>
+						<div className="mt-2 flex items-center justify-between">
+							<span className="text-brand-primary font-medium">
+								{formatCurrency(
+									classInfo.drop_in_price,
+									profile?.studio?.currency || "USD"
+								)}
+							</span>
+							<span
+								className={`text-sm ${
+									spotsRemaining <= 3 ? "text-red-600" : "text-gray-600"
+								}`}
+							>
+								{spotsRemaining} {spotsRemaining === 1 ? "spot" : "spots"}{" "}
+								remaining
+							</span>
+						</div>
+					</div>
+					
+					<div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg mb-4">
+						<div className="flex items-start">
+							<AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 mr-2" />
+							<div>
+								<h4 className="font-medium text-yellow-800">Bank Transfer Only</h4>
+								<p className="text-sm text-yellow-700 mt-1">
+									This studio only accepts bank transfer payments. Please contact the studio directly 
+									to book this drop-in class and arrange payment.
+								</p>
+								<div className="mt-3 flex gap-2 flex-wrap">
+									{profile?.studio?.phone && (
+										<button
+											onClick={() => window.open(`tel:${profile.studio.phone}`, '_self')}
+											className="inline-flex items-center px-3 py-1 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-sm rounded-md"
+										>
+											Call Studio
+										</button>
+									)}
+									{profile?.studio?.email && (
+										<button
+											onClick={() => window.open(`mailto:${profile.studio.email}`, '_self')}
+											className="inline-flex items-center px-3 py-1 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-sm rounded-md"
+										>
+											Email Studio
+										</button>
+									)}
+								</div>
+							</div>
+						</div>
+					</div>
+					
+					<button
+						onClick={onClose}
+						className="w-full px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+					>
+						Close
 					</button>
 				</div>
 			</div>

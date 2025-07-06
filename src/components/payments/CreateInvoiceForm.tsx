@@ -7,6 +7,7 @@ import FormInput from "../FormInput";
 import SearchableDropdown from "../SearchableDropdown";
 import { useAuth } from "../../contexts/AuthContext";
 import { getStudioUsersByRole } from "../../utils/messagingUtils";
+import { getStudioPaymentMethods } from "../../utils/studioUtils";
 import { notificationService } from "../../services/notificationService";
 
 interface Parent {
@@ -67,10 +68,25 @@ export default function CreateInvoiceForm({
 	);
 	const [discountValue, setDiscountValue] = useState("");
 	const [discountReason, setDiscountReason] = useState("");
+	const [paymentMethod, setPaymentMethod] = useState<'stripe' | 'bacs'>('stripe');
 
 	useEffect(() => {
 		fetchParents();
 	}, [profile?.studio?.id]);
+
+	// Get studio payment methods
+	const studioPaymentMethods = profile?.studio ? 
+		getStudioPaymentMethods(profile.studio) : 
+		{ stripe: true, bacs: false };
+	
+	// Auto-set payment method if only one is enabled
+	useEffect(() => {
+		if (studioPaymentMethods.stripe && !studioPaymentMethods.bacs) {
+			setPaymentMethod('stripe');
+		} else if (!studioPaymentMethods.stripe && studioPaymentMethods.bacs) {
+			setPaymentMethod('bacs');
+		}
+	}, [studioPaymentMethods]);
 
 	const fetchParents = async () => {
 		try {
@@ -157,26 +173,28 @@ export default function CreateInvoiceForm({
 			const totals = calculateTotals();
 
 			// Create invoice
+			const invoiceData = {
+				studio_id: profile?.studio?.id,
+				parent_id: selectedParent.id,
+				due_date: dueDate,
+				notes: notes || null,
+				subtotal: totals.subtotal,
+				total: totals.total,
+				is_recurring: isRecurring,
+				recurring_interval: recurringInterval,
+				recurring_end_date: recurringEndDate || null,
+				discount_type: discountType,
+				discount_value: discountValue ? parseFloat(discountValue) : 0,
+				discount_reason: discountReason,
+				payment_method: paymentMethod,
+				manual_payment_status: paymentMethod === 'bacs' ? 'pending' : null,
+				stripe_invoice_id: null, // To store the Stripe invoice ID
+				pdf_url: null, // To store the PDF URL
+			};
+			
 			const { data: invoice, error: invoiceError } = await supabase
 				.from("invoices")
-				.insert([
-					{
-						studio_id: profile?.studio?.id,
-						parent_id: selectedParent.id,
-						due_date: dueDate,
-						notes: notes || null,
-						subtotal: totals.subtotal,
-						total: totals.total,
-						is_recurring: isRecurring,
-						recurring_interval: recurringInterval,
-						recurring_end_date: recurringEndDate || null,
-						discount_type: discountType,
-						discount_value: discountValue ? parseFloat(discountValue) : 0,
-						discount_reason: discountReason,
-						stripe_invoice_id: null, // To store the Stripe invoice ID
-						pdf_url: null, // To store the PDF URL
-					},
-				])
+				.insert([invoiceData])
 				.select()
 				.single();
 
@@ -200,38 +218,74 @@ export default function CreateInvoiceForm({
 			if (itemsError) throw itemsError;
 
 			// Create Stripe invoice - call edge function
-			try {
-				const response = await supabase.functions.invoke(
-					"create-stripe-invoice",
-					{
-						body: {
-							invoiceId: invoice.id,
-						},
+			if (paymentMethod === 'stripe') {
+				try {
+					const response = await supabase.functions.invoke(
+						"create-stripe-invoice",
+						{
+							body: {
+								invoiceId: invoice.id,
+							},
+						}
+					);
+	
+					if (response.error) {
+						console.error("Error creating Stripe invoice:", response.error);
+					} else if (response.data) {
+						// Update the invoice with Stripe invoice ID and PDF URL
+						const { error: updateError } = await supabase
+							.from("invoices")
+							.update({
+								stripe_invoice_id: response.data.stripe_invoice_id,
+								pdf_url: response.data.pdf_url,
+							})
+							.eq("id", invoice.id);
+	
+						if (updateError) {
+							console.error(
+								"Error updating invoice with Stripe details:",
+								updateError
+							);
+						}
 					}
-				);
-
-				if (response.error) {
-					console.error("Error creating Stripe invoice:", response.error);
-				} else if (response.data) {
-					// Update the invoice with Stripe invoice ID and PDF URL
-					const { error: updateError } = await supabase
-						.from("invoices")
-						.update({
-							stripe_invoice_id: response.data.stripe_invoice_id,
-							pdf_url: response.data.pdf_url,
-						})
-						.eq("id", invoice.id);
-
-					if (updateError) {
-						console.error(
-							"Error updating invoice with Stripe details:",
-							updateError
-						);
-					}
+				} catch (stripeErr) {
+					console.error("Error with Stripe invoice creation:", stripeErr);
+					// Continue even if Stripe invoice creation fails - we can retry later
 				}
-			} catch (stripeErr) {
-				console.error("Error with Stripe invoice creation:", stripeErr);
-				// Continue even if Stripe invoice creation fails - we can retry later
+			} else if (paymentMethod === 'bacs') {
+				// For BACS invoices, generate a PDF and send email notification
+				try {
+					const response = await supabase.functions.invoke(
+						"generate-invoice-pdf",
+						{
+							body: {
+								invoiceId: invoice.id,
+							},
+						}
+					);
+					
+					if (response.error) {
+						console.error("Error generating invoice PDF:", response.error);
+					} else if (response.data?.pdf_url) {
+						// Update the invoice with PDF URL
+						await supabase
+							.from("invoices")
+							.update({
+								pdf_url: response.data.pdf_url,
+							})
+							.eq("id", invoice.id);
+							
+						// Send BACS invoice email notification
+						await supabase.functions.invoke("send-invoice-email", {
+							body: {
+								invoiceId: invoice.id,
+								paymentMethod: 'bacs'
+							},
+						});
+					}
+				} catch (err) {
+					console.error("Error with BACS invoice processing:", err);
+				}
 			}
 
 			// Send notification to the parent about payment request
@@ -662,6 +716,34 @@ export default function CreateInvoiceForm({
 					)}
 				</div>
 			</div>
+
+			{/* Payment Method Selection */}
+			{studioPaymentMethods.stripe && studioPaymentMethods.bacs && (
+				<div className="mb-4">
+					<label className="block text-sm font-medium text-brand-secondary-400 mb-2">
+						Payment Method
+					</label>
+					<select
+						value={paymentMethod}
+						onChange={(e) => setPaymentMethod(e.target.value as 'stripe' | 'bacs')}
+						className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-accent focus:border-brand-accent"
+						required
+					>
+						{studioPaymentMethods.stripe && (
+							<option value="stripe">Card Payment (Stripe)</option>
+						)}
+						{studioPaymentMethods.bacs && (
+							<option value="bacs">Bank Transfer (BACS)</option>
+						)}
+					</select>
+					
+					{paymentMethod === 'bacs' && (
+						<p className="mt-2 text-sm text-gray-500">
+							Parents will receive bank details to make a manual transfer. You'll need to mark payments as received.
+						</p>
+					)}
+				</div>
+			)}
 
 			<div>
 				<label
