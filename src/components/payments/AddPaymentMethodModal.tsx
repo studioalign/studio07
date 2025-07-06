@@ -8,7 +8,6 @@ import {
 	createSetupIntent,
 	addStripePaymentMethod,
 } from "../../utils/stripeUtils";
-import { getStudioPaymentMethods } from "../../utils/studioUtils";
 
 // Add Stripe imports
 import { loadStripe } from "@stripe/stripe-js";
