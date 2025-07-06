@@ -68,13 +68,6 @@ export default function InvoiceDetail({
 	
 	// Check if user is studio owner
 	const isOwner = profile?.role === 'owner';
-	const [paymentReference, setPaymentReference] = useState('');
-	const [isMarkingPaid, setIsMarkingPaid] = useState(false);
-	const [markPaidSuccess, setMarkPaidSuccess] = useState(false);
-	const [markPaidError, setMarkPaidError] = useState<string | null>(null);
-	
-	// Check if user is studio owner
-	const isOwner = profile?.role === 'owner';
 
 	// Send notifications when invoice status changes to "paid"
 	useEffect(() => {
