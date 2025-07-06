@@ -566,6 +566,39 @@ export class EmailService {
 		});
 		return result;
 	}
+
+	async sendPaymentRequestEmail(params: {
+	  recipientEmail: string;
+	  recipientName: string;
+	  amount: number;
+	  dueDate: string;
+	  invoiceId: string;
+	  currency: string;
+	  paymentMethod: string;
+	}): Promise<boolean> {
+	  const invoiceUrl = `https://app.studioalignpro.com/dashboard/payments`;
+	
+	  const emailHtml = emailTemplates.paymentRequest({
+	    recipient: { name: params.recipientName },
+	    amount: params.amount,
+	    dueDate: params.dueDate,
+	    invoiceUrl,
+	    currency: params.currency,
+	    paymentMethod: params.paymentMethod,
+	  });
+	
+	  const subject = params.paymentMethod === 'bacs' 
+	    ? "New Invoice - Bank Transfer Required"
+	    : "New Invoice - Payment Required";
+	
+	  const result = await this.sendEmail({
+	    to: params.recipientEmail,
+	    subject: subject,
+	    html: emailHtml,
+	  });
+	
+	  return result;
+	}
 }
 
 // Create a singleton instance
