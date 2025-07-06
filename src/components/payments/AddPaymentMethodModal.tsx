@@ -309,6 +309,7 @@ function CardForm({ onClose, onSuccess }: AddPaymentMethodModalProps) {
 		);
 	}
 
+	return (
 		<form onSubmit={handleSubmit} className="space-y-4">
 			<div className="flex justify-between mb-4">
 				<div className="text-sm text-gray-500">
