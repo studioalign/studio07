@@ -669,7 +669,7 @@ async function fetchParentBalanceData(parentId: string) {
     .from('invoices')
     .select('id, total, status, due_date, discount_reason')
     .eq('parent_id', parentId)
-    .or('status.in.(pending,overdue),and(payment_method.eq.bacs,manual_payment_status.in.(pending,overdue))');
+    .or('status.in.(pending,overdue),and(payment_method.eq.bacs,manual_payment_status.in.(pending,overdue))')
     .order('due_date');
   
   if (error) throw error;

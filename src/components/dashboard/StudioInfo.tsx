@@ -66,16 +66,11 @@ export default function StudioInfo() {
 	const [email, setEmail] = useState("");
 	const [phone, setPhone] = useState("");
 	const [hasActiveStripeSubscriptions, setHasActiveStripeSubscriptions] = useState(false);
-	const [hasActiveStripeSubscriptions, setHasActiveStripeSubscriptions] = useState(false);
 	const [timezone, setTimezone] = useState("Europe/London");
 	const [dateFormat, setDateFormat] = useState("dd/MM/yyyy");
 	const [localStudioInfo, setLocalStudioInfo] = useState<StudioInfoType | null>(
 		null
 	);
-	const [localPaymentMethods, setLocalPaymentMethods] = useState<{
-		stripe: boolean;
-		bacs: boolean;
-	}>({ stripe: true, bacs: false });
 	const [localPaymentMethods, setLocalPaymentMethods] = useState<{
 		stripe: boolean;
 		bacs: boolean;
@@ -88,30 +83,6 @@ export default function StudioInfo() {
 	useEffect(() => {
 		if (profile?.studio && !localStudioInfo) {
 			setLocalStudioInfo(profile.studio);
-			
-			// Initialize payment methods
-			const paymentMethods = getStudioPaymentMethods(profile.studio);
-			setLocalPaymentMethods(paymentMethods);
-			
-			// Check for active Stripe subscriptions
-			const checkSubscriptions = async () => {
-				try {
-					const { count, error } = await supabase
-						.from('invoices')
-						.select('*', { count: 'exact', head: true })
-						.eq('studio_id', profile.studio?.id || '')
-						.eq('payment_method', 'stripe')
-						.eq('is_recurring', true)
-						.eq('status', 'active');
-						
-					if (error) throw error;
-					setHasActiveStripeSubscriptions(count > 0);
-				} catch (err) {
-					console.error('Error checking for active subscriptions:', err);
-				}
-			};
-			
-			checkSubscriptions();
 			
 			// Initialize payment methods
 			const paymentMethods = getStudioPaymentMethods(profile.studio);

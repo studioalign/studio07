@@ -1,12 +1,10 @@
 import React, { useEffect, useRef } from "react";
-import { Edit2, Download, Building2, Save, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { Edit2, Download, Building2, CreditCard, CheckCircle } from "lucide-react";
 import PaymentHistory from "./PaymentHistory";
 import { formatCurrency } from "../../utils/formatters";
 import { useLocalization } from "../../contexts/LocalizationContext";
 import { notificationService } from "../../services/notificationService";
 import { useAuth } from "../../contexts/AuthContext";
-import { useState } from "react";
-import { markBacsInvoiceAsPaid } from "../../utils/studioUtils";
 import { useState } from "react";
 import { markBacsInvoiceAsPaid } from "../../utils/studioUtils";
 
@@ -40,17 +38,12 @@ interface Invoice {
 	discount_value: number;
 	discount_reason: string;
 	pdf_url?: string;
-	pdf_url?: string;
 	parent: {
-		id?: string; // Added for notification purposes
 		id?: string; // Added for notification purposes
 		name: string;
 		email: string;
 	};
 	items: InvoiceItem[];
-	studio_id?: string; // Added for notification purposes
-	payment_method?: 'stripe' | 'bacs';
-	manual_payment_status?: 'pending' | 'paid' | 'overdue';
 	studio_id?: string; // Added for notification purposes
 }
 
@@ -67,15 +60,7 @@ export default function InvoiceDetail({
 }: InvoiceDetailProps) {
 	const { currency } = useLocalization();
 	const { profile } = useAuth();
-	const { profile } = useAuth();
 	const previousStatusRef = useRef(invoice.status);
-	const [paymentReference, setPaymentReference] = useState('');
-	const [isMarkingPaid, setIsMarkingPaid] = useState(false);
-	const [markPaidSuccess, setMarkPaidSuccess] = useState(false);
-	const [markPaidError, setMarkPaidError] = useState<string | null>(null);
-	
-	// Check if user is studio owner
-	const isOwner = profile?.role === 'owner';
 	const [paymentReference, setPaymentReference] = useState('');
 	const [isMarkingPaid, setIsMarkingPaid] = useState(false);
 	const [markPaidSuccess, setMarkPaidSuccess] = useState(false);
