@@ -240,6 +240,26 @@ export default function ParentInvoices() {
 	  }
 	};
 
+	const fetchBankDetails = async (studioId: string) => {
+	  try {
+	    const { data, error } = await supabase
+	      .from("studio_bank_details")
+	      .select("*")
+	      .eq("studio_id", studioId)
+	      .single();
+	    
+	    if (error && error.code !== 'PGRST116') {
+	      console.error("Error fetching bank details:", error);
+	      return null;
+	    }
+	    
+	    return data;
+	  } catch (err) {
+	    console.error("Error fetching bank details:", err);
+	    return null;
+	  }
+	};
+
 	useEffect(() => {
 		if (!profile?.id) return;
 
@@ -333,26 +353,6 @@ export default function ParentInvoices() {
 			button.innerHTML = originalContent;
 			button.disabled = false;
 		}
-	};
-
-	const fetchBankDetails = async (studioId: string) => {
-	  try {
-	    const { data, error } = await supabase
-	      .from("studio_bank_details")
-	      .select("*")
-	      .eq("studio_id", studioId)
-	      .single();
-	    
-	    if (error && error.code !== 'PGRST116') {
-	      console.error("Error fetching bank details:", error);
-	      return null;
-	    }
-	    
-	    return data;
-	  } catch (err) {
-	    console.error("Error fetching bank details:", err);
-	    return null;
-	  }
 	};
 
 	if (loading) {
