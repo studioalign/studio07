@@ -3,11 +3,9 @@
 // This enables autocomplete, go to definition, etc.
 
 // Setup type definitions for built-in Supabase Runtime APIs
-// supabase/functions/generate-invoice-pdf/index.ts - CORRECTED VERSION
+// supabase/functions/generate-invoice-pdf/index.ts - FINAL CORRECTED VERSION
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
 import autoTable from "https://esm.sh/jspdf-autotable@3.5.28";
@@ -17,7 +15,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-serve(async (req) => {
+// FIXED: Use Deno.serve instead of serve
+Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -30,7 +29,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Get request parameters - FIXED: This was in the wrong place in your code
+    // Get request parameters
     const { invoiceId, paymentMethod } = await req.json();
     console.log("Generating PDF for invoice:", invoiceId, "Payment method:", paymentMethod);
 
@@ -255,7 +254,7 @@ serve(async (req) => {
       doc.text(invoice.notes, 20, currentY);
     }
     
-    // FIXED: Add payment instructions for BACS - This is where you add the BACS-specific content
+    // Add payment instructions for BACS
     if (effectivePaymentMethod === 'bacs') {
       currentY += 15;
       doc.setFontSize(12);
@@ -358,7 +357,6 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    // FIXED: Better error handling
     console.error("Error generating invoice PDF:", error);
     console.error("Error details:", {
       invoiceId: invoiceId || 'unknown',
@@ -380,6 +378,9 @@ serve(async (req) => {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
+    );
+  }
+});
     );
   }
 });
