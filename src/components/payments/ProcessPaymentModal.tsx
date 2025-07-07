@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { formatCurrency } from "../../utils/formatters";
 import { useLocalization } from "../../contexts/LocalizationContext";
 import { getStudioPaymentMethods } from "../../utils/studioUtils";
+import { useAuth } from "../../contexts/AuthContext";
 
 // We no longer need the Stripe SDK for this component
 // since we're using Stripe's hosted invoice URL directly
@@ -39,6 +40,7 @@ interface ProcessPaymentModalProps {
 
 // Checkout Component
 const CheckoutForm = ({ invoice, onClose }: ProcessPaymentModalProps) => {
+	const { profile } = useAuth();
 	const [error, setError] = useState<string | null>(null);
 	const [processing, setProcessing] = useState(false);
 	const { currency } = useLocalization();
