@@ -115,7 +115,7 @@ export default function StudioInfo() {
 
 		try {
 			const { data, error } = await supabase
-				.from("rooms")
+				.from("locations")
 				.select("*")
 				.eq("studio_id", profile.studio.id);
 
