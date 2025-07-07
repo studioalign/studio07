@@ -1,10 +1,12 @@
 import React, { useEffect, useRef } from "react";
-import { Edit2, Download, Building2, CreditCard, CheckCircle } from "lucide-react";
+import { Edit2, Download, Building2, Save, CheckCircle, Clock, AlertCircle } from "lucide-react";
 import PaymentHistory from "./PaymentHistory";
 import { formatCurrency } from "../../utils/formatters";
 import { useLocalization } from "../../contexts/LocalizationContext";
 import { notificationService } from "../../services/notificationService";
 import { useAuth } from "../../contexts/AuthContext";
+import { useState } from "react";
+import { markBacsInvoiceAsPaid } from "../../utils/studioUtils";
 import { useState } from "react";
 import { markBacsInvoiceAsPaid } from "../../utils/studioUtils";
 
@@ -38,12 +40,17 @@ interface Invoice {
 	discount_value: number;
 	discount_reason: string;
 	pdf_url?: string;
+	pdf_url?: string;
 	parent: {
+		id?: string; // Added for notification purposes
 		id?: string; // Added for notification purposes
 		name: string;
 		email: string;
 	};
 	items: InvoiceItem[];
+	studio_id?: string; // Added for notification purposes
+	payment_method?: 'stripe' | 'bacs';
+	manual_payment_status?: 'pending' | 'paid' | 'overdue';
 	studio_id?: string; // Added for notification purposes
 }
 
@@ -60,7 +67,15 @@ export default function InvoiceDetail({
 }: InvoiceDetailProps) {
 	const { currency } = useLocalization();
 	const { profile } = useAuth();
+	const { profile } = useAuth();
 	const previousStatusRef = useRef(invoice.status);
+	const [paymentReference, setPaymentReference] = useState('');
+	const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+	const [markPaidSuccess, setMarkPaidSuccess] = useState(false);
+	const [markPaidError, setMarkPaidError] = useState<string | null>(null);
+	
+	// Check if user is studio owner
+	const isOwner = profile?.role === 'owner';
 	const [paymentReference, setPaymentReference] = useState('');
 	const [isMarkingPaid, setIsMarkingPaid] = useState(false);
 	const [markPaidSuccess, setMarkPaidSuccess] = useState(false);
@@ -408,6 +423,103 @@ export default function InvoiceDetail({
 			    )}
 			  </div>
 			)}
+			
+			{/* BACS Payment Handling - Single clean section */}
+			{invoice.payment_method === 'bacs' && 
+			 (invoice.manual_payment_status === 'pending' || invoice.status === 'pending') && 
+			 isOwner && (
+			  <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+			    <h3 className="text-lg font-medium text-brand-primary mb-4 flex items-center">
+			      <Building2 className="w-5 h-5 mr-2" />
+			      Mark Bank Transfer as Received
+			    </h3>
+			    
+			    {markPaidSuccess ? (
+			      <div className="bg-green-50 p-4 rounded-lg flex items-start">
+			        <CheckCircle className="w-5 h-5 text-green-500 mr-2 mt-0.5" />
+			        <div>
+			          <p className="font-medium text-green-800">Payment marked as received</p>
+			          <p className="text-sm text-green-600">The invoice has been updated and payment recorded.</p>
+			        </div>
+			      </div>
+			    ) : (
+			      <div className="space-y-4">
+			        <p className="text-sm text-gray-600">
+			          Use this form to record when you've received a bank transfer payment for this invoice.
+			        </p>
+			        
+			        <div>
+			          <label className="block text-sm font-medium text-gray-700 mb-1">
+			            Payment Reference (Optional)
+			          </label>
+			          <input
+			            type="text"
+			            value={paymentReference}
+			            onChange={(e) => setPaymentReference(e.target.value)}
+			            placeholder="Enter bank reference if available"
+			            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent"
+			          />
+			        </div>
+			        
+			        {markPaidError && (
+			          <div className="bg-red-50 p-3 rounded-md text-red-700 text-sm">
+			            {markPaidError}
+			          </div>
+			        )}
+			        
+			        <button
+			          onClick={handleMarkAsPaid}
+			          disabled={isMarkingPaid}
+			          className="w-full flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+			        >
+			          {isMarkingPaid ? (
+			            <>
+			              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+			              Processing...
+			            </>
+			          ) : (
+			            <>
+			              <CheckCircle className="w-4 h-4 mr-2" />
+			              Mark as Paid
+			            </>
+			          )}
+			        </button>
+			      </div>
+			    )}
+			  </div>
+			)}
 		</div>
 	);
+
+	async function handleMarkAsPaid() {
+	  if (!invoice.id) return;
+	  
+	  setIsMarkingPaid(true);
+	  setMarkPaidError(null);
+	  
+	  try {
+	    const { data, error } = await supabase.functions.invoke('mark-invoice-paid', {
+	      body: {
+	        invoiceId: invoice.id,
+	        paymentReference: paymentReference || null
+	      }
+	    });
+	    
+	    if (error) throw error;
+	    
+	    setMarkPaidSuccess(true);
+	    
+	    // Refresh the invoice data
+	    if (onRefresh) {
+	      setTimeout(() => {
+	        onRefresh();
+	      }, 2000);
+	    }
+	  } catch (error) {
+	    console.error('Error marking invoice as paid:', error);
+	    setMarkPaidError(error instanceof Error ? error.message : 'Failed to mark invoice as paid');
+	  } finally {
+	    setIsMarkingPaid(false);
+	  }
+	}
 }

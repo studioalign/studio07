@@ -39,7 +39,7 @@ export default function AddRoomForm({
 
 			onSuccess();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to add room");
+			setError(err instanceof Error ? err.message : "Failed to add location");
 		} finally {
 			setIsSubmitting(false);
 		}
@@ -50,7 +50,7 @@ export default function AddRoomForm({
 			<FormInput
 				id="name"
 				type="text"
-				label="Room Name *"
+				label="Location Name *"
 				value={name}
 				onChange={(e) => setName(e.target.value)}
 				required
@@ -67,7 +67,7 @@ export default function AddRoomForm({
 			<FormInput
 				id="address"
 				type="text"
-				label="Address/Location"
+				label="Address"
 				value={address}
 				onChange={(e) => setAddress(e.target.value)}
 			/>
@@ -88,7 +88,7 @@ export default function AddRoomForm({
 					className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 disabled:bg-gray-400"
 				>
 					<Plus className="w-4 h-4 mr-2" />
-					Add Room
+					Add Location
 				</button>
 			</div>
 		</form>

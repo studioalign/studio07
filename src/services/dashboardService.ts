@@ -664,12 +664,12 @@ async function fetchParentClassesData(studentIds: string[], students: any[]) {
 }
 
 async function fetchParentBalanceData(parentId: string) {
-  // Get pending or overdue invoices
+  // Get pending or overdue invoices (both Stripe and BACS)
   const { data: invoices, error } = await supabase
     .from('invoices')
     .select('id, total, status, due_date, discount_reason')
     .eq('parent_id', parentId)
-    .in('status', ['pending', 'overdue'])
+    .or('status.in.(pending,overdue),and(payment_method.eq.bacs,manual_payment_status.in.(pending,overdue))');
     .order('due_date');
   
   if (error) throw error;
@@ -682,7 +682,12 @@ async function fetchParentBalanceData(parentId: string) {
   }
   
   // Get the most urgent invoice (first overdue, then earliest due date)
-  const overdueInvoices = invoices.filter(inv => inv.status === 'overdue');
+  // For BACS invoices, check manual_payment_status
+  const overdueInvoices = invoices.filter(inv => 
+    inv.status === 'overdue' || 
+    (inv.payment_method === 'bacs' && inv.manual_payment_status === 'overdue')
+  );
+  
   const targetInvoice = overdueInvoices.length > 0 
     ? overdueInvoices[0] // Get first overdue invoice
     : invoices[0]; // Otherwise get earliest due pending invoice

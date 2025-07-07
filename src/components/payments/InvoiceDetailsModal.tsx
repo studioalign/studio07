@@ -19,6 +19,7 @@ interface InvoiceDetailsModalProps {
 		discount_value?: number;
 		discount_reason?: string;
 		payment_method?: 'stripe' | 'bacs';
+		payment_method?: 'stripe' | 'bacs';
 		items: {
 			id: string;
 			description: string;
@@ -39,12 +40,20 @@ interface InvoiceDetailsModalProps {
 		email: string;
 		stripe_connect_enabled?: boolean;
 	};
+	studio?: {
+		name: string;
+		address: string;
+		phone: string;
+		email: string;
+		stripe_connect_enabled?: boolean;
+	};
 }
 
 export default function InvoiceDetailsModal({
 	invoice,
 	onClose,
 	onPayClick,
+	studio,
 	studio,
 }: InvoiceDetailsModalProps) {
 	const { currency } = useLocalization();
@@ -148,13 +157,19 @@ export default function InvoiceDetailsModal({
 
 				<div className="p-6 space-y-6">
 					{/* Studio and Invoice Info */}
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-						{studio && (
-							<div className="p-6 bg-gray-50 rounded-xl">
-								<div className="flex items-center text-brand-primary mb-4">
-									<Building2 className="w-6 h-6 mr-2" />
-									<h3 className="text-lg font-medium">{studio.name}</h3>
-								</div>
+					{studio && (
+						<div className="p-6 bg-gray-50 rounded-xl">
+							<div className="flex items-center text-brand-primary mb-4">
+								<Building2 className="w-6 h-6 mr-2" />
+								<h3 className="text-lg font-medium">{studio.name}</h3>
+							</div>
+							<div className="text-sm text-gray-600 space-y-2">
+								<p>{studio.address}</p>
+								<p>{studio.phone}</p>
+								<p>{studio.email}</p>
+							</div>
+						</div>
+					)}
 								<div className="text-sm text-gray-600 space-y-2">
 									<p>{studio.address}</p>
 									<p>{studio.phone}</p>
@@ -246,7 +261,7 @@ export default function InvoiceDetailsModal({
 												Tax
 											</td>
 											<td className="px-6 py-4 text-sm text-gray-900 text-right">
-												{formatCurrency(invoice.tax, currency)}
+									<td colSpan={3}></td>
 											</td>
 										</tr>
 									)}
@@ -266,7 +281,7 @@ export default function InvoiceDetailsModal({
 										</tr>
 									)}
 									<tr className="border-t-2">
-										<td colSpan={3} />
+										<td colSpan={3}></td>
 										<td className="px-6 py-4 text-lg font-bold text-brand-primary text-right">
 											Final Amount
 										</td>
@@ -277,7 +292,7 @@ export default function InvoiceDetailsModal({
 								</tfoot>
 							</table>
 						</div>
-					</div>
+										<td colSpan={3}></td>
 
 					{/* Notes */}
 					{invoice.notes && (
@@ -318,26 +333,49 @@ export default function InvoiceDetailsModal({
 												payments.
 											</p>
 										</div>
-									)}
-								</div>
-							) : (
-								<div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-									<h3 className="font-medium text-blue-800 flex items-center">
-										<Bank className="w-4 h-4 mr-2" />
-										Bank Transfer Required
-									</h3>
-									<p className="text-sm text-blue-700 mt-2">
-										Please make payment via bank transfer using the reference: <strong>Invoice-{invoice.id.substring(0, 8)}</strong>
-									</p>
-									{studio?.bank_account_name && (
-										<div className="mt-3 text-sm">
-											<p><strong>Account Name:</strong> {studio.bank_account_name}</p>
-											{/* Add other bank details if available */}
-										</div>
-									)}
-								</div>
-							)}
-						</>
+						{invoice.payment_method === 'stripe' ? (
+							<div className="flex justify-end">
+								{studio?.stripe_connect_enabled ? (
+									<button
+										onClick={onPayClick}
+										className="flex items-center px-8 py-4 bg-brand-primary text-white rounded-xl hover:bg-brand-secondary-400 transform hover:scale-105 transition-all duration-200"
+									>
+										<CreditCard className="w-5 h-5 mr-3" />
+										Pay {formatCurrency(invoice.total, currency)}
+									</button>
+								) : (
+									<div className="text-right">
+										<button
+											disabled
+											className="flex items-center px-8 py-4 bg-gray-300 text-gray-500 rounded-xl cursor-not-allowed"
+										>
+											<CreditCard className="w-5 h-5 mr-3" />
+											Payment Unavailable
+										</button>
+										<p className="text-sm text-gray-500 mt-2">
+											The studio needs to connect their Stripe account to accept
+											payments.
+										</p>
+									</div>
+								)}
+							</div>
+						) : (
+							<div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+								<h3 className="font-medium text-blue-800 flex items-center">
+									<Bank className="w-4 h-4 mr-2" />
+									Bank Transfer Required
+								</h3>
+								<p className="text-sm text-blue-700 mt-2">
+									Please make payment via bank transfer using the reference: <strong>Invoice-{invoice.id.substring(0, 8)}</strong>
+								</p>
+								{studio?.bank_account_name && (
+									<div className="mt-3 text-sm">
+										<p><strong>Account Name:</strong> {studio.bank_account_name}</p>
+										{/* Add other bank details if available */}
+									</div>
+								)}
+							</div>
+						)}
 					)}
 				</div>
 			</div>
