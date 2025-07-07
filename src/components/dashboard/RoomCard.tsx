@@ -22,7 +22,6 @@ export default function RoomCard({ name, description, address, onDelete }: RoomC
             {address && (
               <p className="text-sm text-gray-500 mt-1">{address}</p>
             )}
-            )}
           </div>
         </div>
         <button

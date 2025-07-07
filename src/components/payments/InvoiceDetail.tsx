@@ -65,7 +65,7 @@ export default function InvoiceDetail({
 	const [isMarkingPaid, setIsMarkingPaid] = useState(false);
 	const [markPaidSuccess, setMarkPaidSuccess] = useState(false);
 	const [markPaidError, setMarkPaidError] = useState<string | null>(null);
-	
+
 	// Check if user is studio owner
 	const isOwner = profile?.role === 'owner';
 
@@ -129,38 +129,6 @@ export default function InvoiceDetail({
 			default:
 				return "bg-gray-100 text-gray-800";
 		}
-	};
-
-	const handleMarkAsPaid = async () => {
-	  if (!invoice.id) return;
-	  
-	  setIsMarkingPaid(true);
-	  setMarkPaidError(null);
-	  
-	  try {
-	    const { data, error } = await supabase.functions.invoke('mark-invoice-paid', {
-	      body: {
-	        invoiceId: invoice.id,
-	        paymentReference: paymentReference || null
-	      }
-	    });
-	    
-	    if (error) throw error;
-	    
-	    setMarkPaidSuccess(true);
-	    
-	    // Refresh the invoice data
-	    if (onRefresh) {
-	      setTimeout(() => {
-	        onRefresh();
-	      }, 2000);
-	    }
-	  } catch (error) {
-	    console.error('Error marking invoice as paid:', error);
-	    setMarkPaidError(error instanceof Error ? error.message : 'Failed to mark invoice as paid');
-	  } finally {
-	    setIsMarkingPaid(false);
-	  }
 	};
 
 	return (
