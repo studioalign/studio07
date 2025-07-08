@@ -77,45 +77,101 @@ export default function Payments() {
 	};
 
 	const fetchPayments = async (studioId: string) => {
-		try {
-			const { data, error: fetchError } = await supabase
-				.from("payments")
-				.select(
-					`
-          id,
-          amount,
-          original_amount,
-          discount_amount,
-          is_recurring,
-          recurring_interval,
-          payment_method,
-          status,
-          stripe_payment_intent_id,
-          payment_date,
-          invoice:invoices!payments_invoice_id_fkey (
-            id,
-            index,
-            studio_id,
-            parent:users!invoices_parent_id_fkey (
-              name
-            )
-          )
-        `
-				)
-				.order("payment_date", { ascending: false })
-				.limit(10);
-
-			if (fetchError) throw fetchError;
-
-			// Filter out any payments with null invoice or mismatched studio_id
-			const filteredPayments = (data || []).filter(
-				(payment) => payment.invoice && payment.invoice.studio_id === studioId
-			);
-			setPayments(filteredPayments as Payment[]);
-		} catch (err) {
-			console.error("Error fetching payments:", err);
-			setError(err instanceof Error ? err.message : "Failed to fetch payments");
-		}
+	  try {
+	    console.log("Fetching payments for studio:", studioId);
+	    
+	    const { data, error: fetchError } = await supabase
+	      .from("payments")
+	      .select(
+	        `
+	          id,
+	          amount,
+	          original_amount,
+	          discount_amount,
+	          is_recurring,
+	          recurring_interval,
+	          payment_method,
+	          status,
+	          stripe_payment_intent_id,
+	          payment_date,
+	          invoice:invoices!payments_invoice_id_fkey (
+	            id,
+	            index,
+	            studio_id,
+	            parent_id
+	          )
+	        `
+	      )
+	      .order("payment_date", { ascending: false })
+	      .limit(10);
+	
+	    if (fetchError) {
+	      console.error("Error fetching payments:", fetchError);
+	      throw fetchError;
+	    }
+	
+	    console.log("Raw payment data:", data);
+	
+	    // Filter payments that belong to this studio
+	    const studioPayments = (data || []).filter(
+	      (payment) => payment.invoice && payment.invoice.studio_id === studioId
+	    );
+	
+	    console.log("Filtered studio payments:", studioPayments);
+	
+	    if (studioPayments.length > 0) {
+	      // Get parent names for the payments
+	      const parentIds = studioPayments
+	        .map((payment) => payment.invoice?.parent_id)
+	        .filter((id) => id);
+	
+	      console.log("Parent IDs to fetch:", parentIds);
+	
+	      if (parentIds.length > 0) {
+	        const { data: parents, error: parentError } = await supabase
+	          .from("users")
+	          .select("id, name")
+	          .in("id", parentIds);
+	
+	        if (parentError) {
+	          console.error("Error fetching parent names:", parentError);
+	        } else {
+	          console.log("Parent data:", parents);
+	          
+	          // Map parent names to payments
+	          const paymentsWithParents = studioPayments.map((payment) => ({
+	            ...payment,
+	            invoice: payment.invoice ? {
+	              ...payment.invoice,
+	              parent: parents?.find((p) => p.id === payment.invoice.parent_id) || {
+	                name: "Unknown Parent",
+	              },
+	            } : null,
+	          }));
+	
+	          console.log("Final payments with parents:", paymentsWithParents);
+	          setPayments(paymentsWithParents as Payment[]);
+	          return;
+	        }
+	      }
+	    }
+	
+	    // Fallback: set payments without parent names if parent fetch fails
+	    const paymentsWithFallback = studioPayments.map((payment) => ({
+	      ...payment,
+	      invoice: payment.invoice ? {
+	        ...payment.invoice,
+	        parent: { name: "Unknown Parent" },
+	      } : null,
+	    }));
+	
+	    console.log("Fallback payments:", paymentsWithFallback);
+	    setPayments(paymentsWithFallback as Payment[]);
+	    
+	  } catch (err) {
+	    console.error("Error fetching payments:", err);
+	    setError(err instanceof Error ? err.message : "Failed to fetch payments");
+	  }
 	};
 
 	const fetchStats = async (studioId: string) => {
