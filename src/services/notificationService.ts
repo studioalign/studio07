@@ -1308,6 +1308,33 @@ async function notifyUpgradeRequired(studioId: string, message: string) {
 	}
 }
 
+async function notifyBacsPaymentRequest(
+	parentId: string,
+	studioId: string,
+	amount: number,
+	dueDate: string,
+	invoiceId: string,
+	currency: string,
+	bacsReference: string
+) {
+	await createNotification({
+		user_id: parentId,
+		studio_id: studioId,
+		type: "payment_request",
+		title: "Bank Transfer Required",
+		message: `Payment of ${new Intl.NumberFormat("en-US", {
+			style: "currency",
+			currency: currency,
+		}).format(amount)} is due by ${dueDate}. Reference: ${bacsReference}`,
+		priority: "high",
+		entity_id: invoiceId,
+		entity_type: "invoice",
+		details: { amount, dueDate, currency, bacsReference, paymentMethod: 'bacs' },
+		requires_action: true,
+		email_required: false, // KEY: No email for BACS notifications
+	});
+}
+
 // Export all functions
 export {
 	createNotification,
@@ -1380,6 +1407,7 @@ export const notificationService = {
 	notifyAttendanceMarked,
 	notifyUnauthorizedAbsence,
 	notifyPaymentRequest,
+	notifyBacsPaymentRequest,
 	notifyPaymentConfirmation,
 	notifyUpgradeRequired,
 };
