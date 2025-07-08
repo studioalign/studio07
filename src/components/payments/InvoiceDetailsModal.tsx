@@ -253,7 +253,7 @@ export default function InvoiceDetailsModal({
 											</td>
 										</tr>
 									)}
-									{invoice.discount_value && invoice.discount_value > 0 && (
+									{invoice.discount_value > 0 && (
 										<tr>
 											<td colSpan={3} />
 											<td className="px-6 py-4 text-sm font-medium text-green-600 text-right">
