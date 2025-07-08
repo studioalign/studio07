@@ -601,6 +601,7 @@ export default function CreateInvoiceForm({
 						        }).format(item.quantity * item.unit_price)}
 						    </div>
 						</div>
+					</div>
 				))}
 			</div>
 
