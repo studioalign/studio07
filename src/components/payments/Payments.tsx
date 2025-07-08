@@ -382,7 +382,7 @@ export default function Payments() {
 									  <p className="font-medium">
 									    {formatCurrency(payment.amount, currency)}
 									  </p>
-									  {payment.discount_amount && payment.discount_amount > 0 && (
+									  {payment.discount_amount > 0 && (
 									    <p className="text-xs text-gray-500">
 									      Original: {formatCurrency(payment.original_amount || 0, currency)}
 									      <span className="ml-1 text-green-600">
