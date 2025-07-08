@@ -64,7 +64,7 @@ export default function ParentInvoices() {
 	const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 	const [showPaymentModal, setShowPaymentModal] = useState(false);
 	const [filter, setFilter] = useState<"all" | "pending" | "paid">("all");
-	const [bankDetails, setBankDetails] = useState<{[key: string]: any}>({});
+	const [Details, setDetails] = useState<{[key: string]: any}>({});
 	const [studioInfo, setStudioInfo] = useState<
 		| {
 				name: string;
@@ -492,6 +492,17 @@ export default function ParentInvoices() {
 				            )}
 				          </div>
 				        )}
+
+					{invoice.payment_method === 'bacs' && (
+					  <div className="mt-2 pt-2 border-t border-blue-100">
+					    <p className="text-sm text-blue-800">
+					      <strong>Payment Reference:</strong> 
+					      <span className="font-mono ml-1">
+					        {invoice.manual_payment_reference || `Invoice ${invoice.index}`}
+					      </span>
+					    </p>
+					  </div>
+					)}
 				
 				        {/* Invoice Items */}
 				        <div className="mb-4">
