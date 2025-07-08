@@ -170,10 +170,10 @@ export default function InvoiceDetailsModal({
 							<div className="text-sm text-gray-600 space-y-2">
 								<p>Invoice-{invoice.index}</p>
 								<p>
-									Issue Date: {new Date(invoice.due_date).toLocaleDateString()}
+								  Issue Date: {new Date(invoice.created_at || invoice.due_date).toLocaleDateString()}
 								</p>
 								<p>
-									Due Date: {new Date(invoice.due_date).toLocaleDateString()}
+								  Due Date: {new Date(invoice.due_date).toLocaleDateString()}
 								</p>
 							</div>
 						</div>
