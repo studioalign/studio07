@@ -124,7 +124,7 @@ export default function CreateInvoiceForm({
 		setItems([
 			...items,
 			{
-				student_id: "",
+				student_id: sendToMultiple ? "" : "", // Always empty for multi-parent
 				description: "",
 				quantity: 1,
 				unit_price: 0,
@@ -172,7 +172,25 @@ export default function CreateInvoiceForm({
 	  e.preventDefault();
 	  if (!profile?.studio?.id) return;
 	  if (!sendToMultiple && !selectedParent) return;
-	  if (sendToMultiple && (!selectedParents || selectedParents.length === 0)) return;
+	if (sendToMultiple && (!selectedParents || selectedParents.length === 0)) return;
+
+		const invalidItems = items.some(item => {
+			if (sendToMultiple) {
+				// For multi-parent, only require description and valid pricing
+				return !item.description.trim() || item.unit_price <= 0 || item.quantity <= 0;
+			} else {
+				// For single parent, require student selection too
+				return !item.student_id || !item.description.trim() || item.unit_price <= 0 || item.quantity <= 0;
+			}
+		});
+		
+		if (invalidItems) {
+			setError(sendToMultiple 
+				? "All items must have a description, valid quantity, and price" 
+				: "All items must have a student, description, valid quantity, and price"
+			);
+			return;
+		}
 	  
 	  setIsSubmitting(true);
 	  setError(null);
@@ -224,14 +242,14 @@ export default function CreateInvoiceForm({
 	      const { error: itemsError } = await supabase.from("invoice_items").insert(
 	        items.map((item) => ({
 	          invoice_id: invoice.id,
-	          student_id: item.student_id,
+	          student_id: sendToMultiple ? null : item.student_id, // Set to null for multi-parent
 	          description: item.description,
 	          quantity: item.quantity,
 	          unit_price: item.unit_price,
 	          subtotal: item.quantity * item.unit_price,
 	          total: item.quantity * item.unit_price,
 	          type: item.type,
-	          plan_enrollment_id: item.plan_enrollment_id,
+	          plan_enrollment_id: sendToMultiple ? null : item.plan_enrollment_id, // Set to null for multi-parent
 	        }))
 	      );
 	  
@@ -369,6 +387,9 @@ export default function CreateInvoiceForm({
 	};
 
 	const getStudentOptions = () => {
+		// Only return student options for single parent mode
+		if (sendToMultiple) return [];
+		
 		if (!selectedParent) return [];
 		const parent = parents.find((p) => p.id === selectedParent.id);
 		return (
@@ -380,6 +401,9 @@ export default function CreateInvoiceForm({
 	};
 
 	const getEnrollmentOptions = (studentId: string) => {
+		// Only return enrollment options for single parent mode
+		if (sendToMultiple) return [];
+		
 		if (!selectedParent) return [];
 		const parent = parents.find((p) => p.id === selectedParent.id);
 		const student = parent?.students.find((s) => s.id === studentId);
@@ -490,130 +514,93 @@ export default function CreateInvoiceForm({
 								<Trash2 className="w-4 h-4" />
 							</button>
 						</div>
-
-						<div className="grid grid-cols-2 gap-4">
-							<SearchableDropdown
-								id={`student-${index}`}
-								label="Student"
-								value={
-									item.student_id
-										? {
-												id: item.student_id,
-												label:
-													getStudentOptions().find(
-														(opt) => opt.id === item.student_id
-													)?.label || "",
-										  }
-										: null
-								}
-								onChange={(option) =>
-									updateItem(index, { student_id: option?.id || "" })
-								}
-								options={getStudentOptions()}
-								required
-							/>
-
-							<div>
-								<label className="block text-sm font-medium text-brand-secondary-400">
-									Type
-								</label>
-								<select
-									value={item.type}
-									onChange={(e) =>
-										updateItem(index, { type: e.target.value as any })
-									}
-									className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-accent focus:border-brand-accent"
-									required
-								>
-									<option value="tuition">Tuition</option>
-									<option value="costume">Costume</option>
-									<option value="registration">Registration</option>
-									<option value="other">Other</option>
-								</select>
-							</div>
+				
+						<div className="space-y-4"> {/* Remove the grid-cols-2, use space-y-4 instead */}
+						    {/* Student selection or placeholder */}
+						    {!sendToMultiple ? (
+						        <SearchableDropdown
+						            id={`student-${index}`}
+						            label="Student"
+						            value={
+						                item.student_id
+						                    ? {
+						                            id: item.student_id,
+						                            label:
+						                                getStudentOptions().find((s) => s.id === item.student_id)
+						                                    ?.label || "",
+						                      }
+						                    : null
+						            }
+						            onChange={(student) =>
+						                updateItem(index, { student_id: student?.id || "" })
+						            }
+						            options={getStudentOptions()}
+						            required
+						        />
+						    ) : (
+						        <div>
+						            <label className="block text-sm font-medium text-brand-secondary-400 mb-2">
+						                Student
+						            </label>
+						            <div className="mt-1 px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-500 text-sm">
+						                Multiple families - no student selection required
+						            </div>
+						        </div>
+						    )}
+						
+						    {/* Description field - full width */}
+						    <FormInput
+						        id={`description-${index}`}
+						        type="text"
+						        label="Description"
+						        value={item.description}
+						        onChange={(e) =>
+						            updateItem(index, { description: e.target.value })
+						        }
+						        required
+						    />
+						    
+						    {/* Quantity and price in a 2-column grid */}
+						    <div className="grid grid-cols-2 gap-4">
+						        <FormInput
+						            id={`quantity-${index}`}
+						            type="number"
+						            label="Quantity"
+						            value={item.quantity.toString()}
+						            onChange={(e) =>
+						                updateItem(index, {
+						                    quantity: parseInt(e.target.value) || 0,
+						                })
+						            }
+						            required
+						            min="1"
+						        />
+						    
+						        <FormInput
+						            id={`price-${index}`}
+						            type="number"
+						            label="Unit Price"
+						            value={item.unit_price.toString()}
+						            onChange={(e) =>
+						                updateItem(index, {
+						                    unit_price: parseFloat(e.target.value) || 0,
+						                })
+						            }
+						            required
+						            min="0"
+						            step="0.01"
+						        />
+						    </div>
+						
+						    {/* Subtotal display */}
+						    <div className="text-right text-sm text-brand-secondary-400">
+						        Subtotal:{" "}
+						        {new Intl.NumberFormat("en-US", {
+						            style: "currency",
+						            currency: profile?.studio?.currency,
+						        }).format(item.quantity * item.unit_price)}
+						    </div>
 						</div>
-
-						{/* {item.type === "tuition" && item.student_id && (
-							<SearchableDropdown
-								id={`enrollment-${index}`}
-								label="Plan Enrollment"
-								value={
-									item.plan_enrollment_id
-										? {
-												id: item.plan_enrollment_id,
-												label:
-													getEnrollmentOptions(item.student_id).find(
-														(opt) => opt.id === item.plan_enrollment_id
-													)?.label || "",
-										  }
-										: null
-								}
-								onChange={(option) => {
-									const enrollment = parents
-										.find((p) => p.id === selectedParent?.id)
-										?.students.find((s) => s.id === item.student_id)
-										?.enrollments.find((e) => e.id === option?.id);
-
-									updateItem(index, {
-										plan_enrollment_id: option?.id,
-										unit_price: enrollment?.plan.amount || 0,
-										description: `${enrollment?.plan.name} Tuition`,
-									});
-								}}
-								options={getEnrollmentOptions(item.student_id)}
-							/>
-						)} */}
-
-						<div className="grid grid-cols-3 gap-4">
-							<FormInput
-								id={`description-${index}`}
-								type="text"
-								label="Description"
-								value={item.description}
-								onChange={(e) =>
-									updateItem(index, { description: e.target.value })
-								}
-								required
-							/>
-
-							<FormInput
-								id={`quantity-${index}`}
-								type="number"
-								label="Quantity"
-								value={item.quantity.toString()}
-								onChange={(e) =>
-									updateItem(index, {
-										quantity: parseInt(e.target.value) || 0,
-									})
-								}
-								required
-								min="1"
-							/>
-
-							<FormInput
-								id={`price-${index}`}
-								type="number"
-								label="Unit Price"
-								value={item.unit_price.toString()}
-								onChange={(e) =>
-									updateItem(index, {
-										unit_price: parseFloat(e.target.value) || 0,
-									})
-								}
-								required
-								min="0"
-								step="0.01"
-							/>
-						</div>
-
-						<div className="text-right text-sm text-brand-secondary-400">
-							Subtotal:{" "}
-							{new Intl.NumberFormat("en-US", {
-								style: "currency",
-								currency: profile?.studio?.currency,
-							}).format(item.quantity * item.unit_price)}
-						</div>
-					</div>
 				))}
 			</div>
 
