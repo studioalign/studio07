@@ -359,21 +359,36 @@ export default function CreateInvoiceForm({
 	      }
 	  
 	      // Send notification to the parent about payment request
-	      // BUT ONLY if it's NOT a BACS invoice (since we already sent BACS email)
-	      if (paymentMethod !== 'bacs') {
-	        try {
-	          await notificationService.notifyPaymentRequest(
-	            parent.id,
-	            profile.studio.id,
-	            totals.total,
-	            dueDate,
-	            invoice.id,
-	            profile.studio.currency || "GBP"
-	          );
-	        } catch (notificationErr) {
-	          console.error("Error sending payment notification:", notificationErr);
-	        }
-	      }
+	      if (paymentMethod === 'bacs') {
+		  // Use BACS-specific notification (in-app only)
+		  try {
+		    await notificationService.notifyBacsPaymentRequest(
+		      parent.id,
+		      profile.studio.id,
+		      totals.total,
+		      dueDate,
+		      invoice.id,
+		      profile.studio.currency || "GBP",
+		      finalBacsReference
+		    );
+		  } catch (notificationErr) {
+		    console.error("Error sending BACS notification:", notificationErr);
+		  }
+		} else {
+		  // Use regular notification (in-app + email)
+		  try {
+		    await notificationService.notifyPaymentRequest(
+		      parent.id,
+		      profile.studio.id,
+		      totals.total,
+		      dueDate,
+		      invoice.id,
+		      profile.studio.currency || "GBP"
+		    );
+		  } catch (notificationErr) {
+		    console.error("Error sending payment notification:", notificationErr);
+		  }
+		}
 	    }
 	    
 	    // Call success after all invoices are created
