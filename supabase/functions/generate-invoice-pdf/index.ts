@@ -3,9 +3,9 @@
 // This enables autocomplete, go to definition, etc.
 
 // Setup type definitions for built-in Supabase Runtime APIs
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+// supabase/functions/generate-invoice-pdf/index.ts - FINAL CORRECTED VERSION
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
 import autoTable from "https://esm.sh/jspdf-autotable@3.5.28";
@@ -15,7 +15,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-serve(async (req) => {
+// FIXED: Use Deno.serve instead of serve
+Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -29,7 +30,8 @@ serve(async (req) => {
     );
 
     // Get request parameters
-    const { invoiceId } = await req.json();
+    const { invoiceId, paymentMethod } = await req.json();
+    console.log("Generating PDF for invoice:", invoiceId, "Payment method:", paymentMethod);
 
     if (!invoiceId) {
       return new Response(
@@ -70,6 +72,7 @@ serve(async (req) => {
       .single();
 
     if (invoiceError || !invoice) {
+      console.error("Invoice lookup error:", invoiceError);
       return new Response(
         JSON.stringify({ error: "Invoice not found" }),
         {
@@ -79,16 +82,44 @@ serve(async (req) => {
       );
     }
 
+    // Use payment method from parameter or fall back to invoice data
+    const effectivePaymentMethod = paymentMethod || invoice.payment_method || 'stripe';
+    console.log("Using payment method:", effectivePaymentMethod);
+
     // Get studio bank details if BACS payment
     let bankDetails = null;
-    if (invoice.payment_method === 'bacs') {
-      const { data: bankData } = await supabaseClient
+    if (effectivePaymentMethod === 'bacs') {
+      console.log("Fetching bank details for BACS invoice");
+      
+      // Try studio_bank_details table first
+      const { data: bankData, error: bankError } = await supabaseClient
         .from("studio_bank_details")
         .select("*")
         .eq("studio_id", invoice.studio.id)
         .single();
       
-      bankDetails = bankData;
+      if (bankError) {
+        console.log("No studio_bank_details found, trying studios table");
+        // Fall back to studios table
+        const { data: studioData, error: studioError } = await supabaseClient
+          .from("studios")
+          .select("bank_account_name, bank_sort_code, bank_account_number, bank_name")
+          .eq("id", invoice.studio.id)
+          .single();
+          
+        if (!studioError && studioData) {
+          bankDetails = {
+            account_name: studioData.bank_account_name,
+            sort_code: studioData.bank_sort_code,
+            account_number: studioData.bank_account_number,
+            bank_name: studioData.bank_name
+          };
+        }
+      } else {
+        bankDetails = bankData;
+      }
+      
+      console.log("Bank details found:", !!bankDetails);
     }
 
     // Format currency
@@ -136,7 +167,7 @@ serve(async (req) => {
     doc.text(`Due Date: ${new Date(invoice.due_date).toLocaleDateString()}`, 140, 40);
     
     // Add payment method
-    doc.text(`Payment Method: ${invoice.payment_method === 'bacs' ? 'Bank Transfer' : 'Card Payment'}`, 140, 45);
+    doc.text(`Payment Method: ${effectivePaymentMethod === 'bacs' ? 'Bank Transfer' : 'Card Payment'}`, 140, 45);
     
     // Add bill to section
     doc.setFontSize(12);
@@ -224,30 +255,44 @@ serve(async (req) => {
     }
     
     // Add payment instructions for BACS
-    if (invoice.payment_method === 'bacs') {
+    if (effectivePaymentMethod === 'bacs') {
       currentY += 15;
       doc.setFontSize(12);
       doc.setTextColor(19, 26, 86);
       doc.text("Payment Instructions:", 20, currentY);
       
-      currentY += 5;
+      currentY += 7;
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
       doc.text("Please make payment via bank transfer using the following details:", 20, currentY);
       
-      currentY += 7;
+      currentY += 8;
       if (bankDetails) {
-        doc.text(`Account Name: ${bankDetails.account_name}`, 20, currentY);
-        currentY += 5;
-        doc.text(`Account Number: ${bankDetails.account_number}`, 20, currentY);
-        currentY += 5;
-        doc.text(`Sort Code: ${bankDetails.sort_code}`, 20, currentY);
+        if (bankDetails.account_name) {
+          doc.text(`Account Name: ${bankDetails.account_name}`, 20, currentY);
+          currentY += 6;
+        }
+        if (bankDetails.account_number) {
+          doc.text(`Account Number: ${bankDetails.account_number}`, 20, currentY);
+          currentY += 6;
+        }
+        if (bankDetails.sort_code) {
+          doc.text(`Sort Code: ${bankDetails.sort_code}`, 20, currentY);
+          currentY += 6;
+        }
+        if (bankDetails.bank_name) {
+          doc.text(`Bank: ${bankDetails.bank_name}`, 20, currentY);
+          currentY += 6;
+        }
       } else {
         doc.text("Please contact the studio for bank details.", 20, currentY);
+        currentY += 6;
       }
       
-      currentY += 5;
+      currentY += 2;
       doc.text(`Payment Reference: Invoice-${invoiceId.substring(0, 8)}`, 20, currentY);
+      currentY += 6;
+      doc.text(`Amount: ${formatCurrency(invoice.total)}`, 20, currentY);
     }
     
     // Add footer
@@ -268,8 +313,9 @@ serve(async (req) => {
       });
       
     if (uploadError) {
+      console.error("PDF upload error:", uploadError);
       return new Response(
-        JSON.stringify({ error: "Failed to upload PDF" }),
+        JSON.stringify({ error: "Failed to upload PDF", details: uploadError }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -282,6 +328,8 @@ serve(async (req) => {
       .from('invoices')
       .getPublicUrl(pdfFileName);
     
+    console.log("PDF uploaded successfully:", publicUrl);
+    
     // Update invoice with PDF URL
     const { error: updateError } = await supabaseClient
       .from("invoices")
@@ -289,14 +337,17 @@ serve(async (req) => {
       .eq("id", invoiceId);
       
     if (updateError) {
+      console.error("Invoice update error:", updateError);
       return new Response(
-        JSON.stringify({ error: "Failed to update invoice with PDF URL" }),
+        JSON.stringify({ error: "Failed to update invoice with PDF URL", details: updateError }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
+    
+    console.log("Invoice updated with PDF URL successfully");
     
     return new Response(
       JSON.stringify({ success: true, pdf_url: publicUrl }),
@@ -307,12 +358,29 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Error generating invoice PDF:", error);
+    console.error("Error details:", {
+      invoiceId: invoiceId || 'unknown',
+      paymentMethod: paymentMethod || 'unknown',
+      error: error.message,
+      stack: error.stack
+    });
+    
     return new Response(
-      JSON.stringify({ error: error.message || "An unexpected error occurred" }),
+      JSON.stringify({ 
+        error: error.message || "An unexpected error occurred",
+        details: {
+          invoiceId: invoiceId || 'unknown',
+          paymentMethod: paymentMethod || 'unknown',
+          timestamp: new Date().toISOString()
+        }
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
+    );
+  }
+});
     );
   }
 });

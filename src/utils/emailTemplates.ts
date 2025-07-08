@@ -606,6 +606,43 @@ export function invitationTemplate(params: InvitationParams) {
 	});
 }
 
+export interface PaymentRequestParams extends BaseTemplateParams {
+  amount: number;
+  dueDate: string;
+  invoiceUrl: string;
+  currency: string;
+  paymentMethod: string;
+}
+
+export function paymentRequestTemplate(params: PaymentRequestParams) {
+  const formattedAmount = formatCurrency(params.amount, params.currency);
+  const formattedDueDate = new Date(params.dueDate).toLocaleDateString();
+
+  const content = `
+    <h2>New Invoice - Payment Required</h2>
+    <p>A new invoice has been created for you.</p>
+    <div style="background-color: #f9fafb; padding: 15px; margin: 20px 0; border-radius: 5px;">
+      <p><strong>Amount:</strong> ${formattedAmount}</p>
+      <p><strong>Due Date:</strong> ${formattedDueDate}</p>
+      ${params.paymentMethod === 'bacs' ? 
+        '<p><strong>Payment Method:</strong> Bank Transfer Required</p>' :
+        '<p><strong>Payment Method:</strong> Card Payment</p>'
+      }
+    </div>
+    ${params.paymentMethod === 'bacs' ? 
+      '<p>Please make payment via bank transfer using the details provided in your invoice.</p>' :
+      '<p>Please complete your payment at your earliest convenience.</p>'
+    }
+    <a href="${params.invoiceUrl}" class="btn">View Invoice</a>
+  `;
+
+  return generateBaseTemplate({
+    recipient: params.recipient,
+    content,
+    title: "New Invoice",
+  });
+}
+
 // Export all template functions and interfaces
 export const emailTemplates = {
 	generateBaseTemplate,
@@ -627,6 +664,7 @@ export const emailTemplates = {
 	documentDeadline: documentDeadlineTemplate,
 	sendClassAssignedEmail,
 	invitation: invitationTemplate,
+	paymentRequest: paymentRequestTemplate,
 };
 
 export default emailTemplates;

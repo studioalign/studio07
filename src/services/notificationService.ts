@@ -193,14 +193,15 @@ async function createNotification(data: NotificationData) {
 				// Handle different notification types and send appropriate emails
 				switch (data.type) {
 					case "payment_request":
-						emailResult = await emailService.sendPaymentOverdueEmail({
-							recipientEmail: userData.email,
-							recipientName: userData.name || "User",
-							amount: details?.amount || 0,
-							daysOverdue: 0, // New request, not overdue yet
-							invoiceId: data.entity_id || "",
-							currency: details?.currency || "USD",
-						});
+						emailResult = await emailService.sendPaymentRequestEmail({
+						    recipientEmail: userData.email,
+						    recipientName: userData.name || "User",
+						    amount: details?.amount || 0,
+						    dueDate: details?.dueDate || new Date().toISOString(),
+						    invoiceId: data.entity_id || "",
+						    currency: details?.currency || "USD",
+						    paymentMethod: details?.paymentMethod || "stripe"
+						  });
 						break;
 
 					case "payment_overdue":

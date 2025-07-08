@@ -5,6 +5,7 @@ import { supabase } from "../../lib/supabase";
 import { useData } from "../../contexts/DataContext";
 import FormInput from "../FormInput";
 import SearchableDropdown from "../SearchableDropdown";
+import MultiSelectDropdown from "../MultiSelectDropdown";
 import { useAuth } from "../../contexts/AuthContext";
 import { getStudioUsersByRole } from "../../utils/messagingUtils";
 import { getStudioPaymentMethods } from "../../utils/studioUtils";
@@ -49,6 +50,11 @@ export default function CreateInvoiceForm({
 		id: string;
 		label: string;
 	} | null>(null);
+	const [selectedParents, setSelectedParents] = useState<{
+		id: string;
+		label: string;
+	}[]>([]);
+	const [sendToMultiple, setSendToMultiple] = useState(false);
 	const [dueDate, setDueDate] = useState("");
 	const [notes, setNotes] = useState("");
 	const [items, setItems] = useState<InvoiceItem[]>([]);
@@ -69,11 +75,12 @@ export default function CreateInvoiceForm({
 	const [discountValue, setDiscountValue] = useState("");
 	const [discountReason, setDiscountReason] = useState("");
 	const [paymentMethod, setPaymentMethod] = useState<'stripe' | 'bacs'>('stripe');
+	const [bacsReference, setBacsReference] = useState("");
 
 	useEffect(() => {
 		fetchParents();
 	}, [profile?.studio?.id]);
-
+	
 	// Get studio payment methods
 	const studioPaymentMethods = profile?.studio ? 
 		getStudioPaymentMethods(profile.studio) : 
@@ -162,154 +169,203 @@ export default function CreateInvoiceForm({
 	};
 
 	const handleSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (!profile?.studio?.id || !selectedParent) return;
-
-		setIsSubmitting(true);
-		setError(null);
-
-		try {
-			// Calculate totals
-			const totals = calculateTotals();
-
-			// Create invoice
-			const invoiceData = {
-				studio_id: profile?.studio?.id,
-				parent_id: selectedParent.id,
-				due_date: dueDate,
-				notes: notes || null,
-				subtotal: totals.subtotal,
-				total: totals.total,
-				is_recurring: isRecurring,
-				recurring_interval: recurringInterval,
-				recurring_end_date: recurringEndDate || null,
-				discount_type: discountType,
-				discount_value: discountValue ? parseFloat(discountValue) : 0,
-				discount_reason: discountReason,
-				payment_method: paymentMethod,
-				manual_payment_status: paymentMethod === 'bacs' ? 'pending' : null,
-				stripe_invoice_id: null, // To store the Stripe invoice ID
-				pdf_url: null, // To store the PDF URL
-			};
-			
-			const { data: invoice, error: invoiceError } = await supabase
-				.from("invoices")
-				.insert([invoiceData])
-				.select()
-				.single();
-
-			if (invoiceError) throw invoiceError;
-
-			// Create invoice items
-			const { error: itemsError } = await supabase.from("invoice_items").insert(
-				items.map((item) => ({
-					invoice_id: invoice.id,
-					student_id: item.student_id,
-					description: item.description,
-					quantity: item.quantity,
-					unit_price: item.unit_price,
-					subtotal: item.quantity * item.unit_price,
-					total: item.quantity * item.unit_price,
-					type: item.type,
-					plan_enrollment_id: item.plan_enrollment_id,
-				}))
-			);
-
-			if (itemsError) throw itemsError;
-
-			// Create Stripe invoice - call edge function
-			if (paymentMethod === 'stripe') {
-				try {
-					const response = await supabase.functions.invoke(
-						"create-stripe-invoice",
-						{
-							body: {
-								invoiceId: invoice.id,
-							},
-						}
-					);
-	
-					if (response.error) {
-						console.error("Error creating Stripe invoice:", response.error);
-					} else if (response.data) {
-						// Update the invoice with Stripe invoice ID and PDF URL
-						const { error: updateError } = await supabase
-							.from("invoices")
-							.update({
-								stripe_invoice_id: response.data.stripe_invoice_id,
-								pdf_url: response.data.pdf_url,
-							})
-							.eq("id", invoice.id);
-	
-						if (updateError) {
-							console.error(
-								"Error updating invoice with Stripe details:",
-								updateError
-							);
-						}
-					}
-				} catch (stripeErr) {
-					console.error("Error with Stripe invoice creation:", stripeErr);
-					// Continue even if Stripe invoice creation fails - we can retry later
-				}
-			} else if (paymentMethod === 'bacs') {
-				// For BACS invoices, generate a PDF and send email notification
-				try {
-					const response = await supabase.functions.invoke(
-						"generate-invoice-pdf",
-						{
-							body: {
-								invoiceId: invoice.id,
-							},
-						}
-					);
-					
-					if (response.error) {
-						console.error("Error generating invoice PDF:", response.error);
-					} else if (response.data?.pdf_url) {
-						// Update the invoice with PDF URL
-						await supabase
-							.from("invoices")
-							.update({
-								pdf_url: response.data.pdf_url,
-							})
-							.eq("id", invoice.id);
-							
-						// Send BACS invoice email notification
-						await supabase.functions.invoke("send-invoice-email", {
-							body: {
-								invoiceId: invoice.id,
-								paymentMethod: 'bacs'
-							},
-						});
-					}
-				} catch (err) {
-					console.error("Error with BACS invoice processing:", err);
-				}
-			}
-
-			// Send notification to the parent about payment request
-			try {
-				await notificationService.notifyPaymentRequest(
-					selectedParent.id,
-					profile.studio.id,
-					totals.total,
-					dueDate,
-					invoice.id,
-					profile.studio.currency
-				);
-			} catch (notificationErr) {
-				console.error("Error sending payment notification:", notificationErr);
-				// Continue even if notification fails
-			}
-
-			onSuccess();
-		} catch (err) {
-			console.error("Error creating invoice:", err);
-			setError(err instanceof Error ? err.message : "Failed to create invoice");
-		} finally {
-			setIsSubmitting(false);
-		}
+	  e.preventDefault();
+	  if (!profile?.studio?.id) return;
+	  if (!sendToMultiple && !selectedParent) return;
+	  if (sendToMultiple && (!selectedParents || selectedParents.length === 0)) return;
+	  
+	  setIsSubmitting(true);
+	  setError(null);
+	  
+	  // Determine which parents to send invoices to
+	  const parentsToInvoice = sendToMultiple ? selectedParents : [selectedParent!];
+	  
+	  // Generate a default BACS reference if not provided
+	  const defaultBacsReference = `Invoice-${Date.now().toString(36)}`;
+	  const finalBacsReference = bacsReference || defaultBacsReference;
+	  
+	  try {
+	    // Calculate totals
+	    const totals = calculateTotals();
+	    
+	    // Create invoices for each parent
+	    for (const parent of parentsToInvoice) {
+	      // Create invoice
+	      const invoiceData = {
+	        studio_id: profile?.studio?.id,
+	        parent_id: parent.id,
+	        status: 'pending',
+	        due_date: dueDate,
+	        notes: notes || null,
+	        subtotal: totals.subtotal,
+	        total: totals.total,
+	        payment_method: paymentMethod,
+	        is_recurring: isRecurring,
+	        recurring_interval: recurringInterval,
+	        recurring_end_date: recurringEndDate || null,
+	        discount_type: discountType,
+	        discount_value: discountValue ? parseFloat(discountValue) : 0,
+	        discount_reason: discountReason,
+	        manual_payment_status: paymentMethod === 'bacs' ? 'pending' : null,
+	        manual_payment_reference: paymentMethod === 'bacs' ? finalBacsReference : null,
+	        stripe_invoice_id: null,
+	        pdf_url: null,
+	      };
+	      
+	      const { data: invoice, error: invoiceError } = await supabase
+	        .from("invoices")
+	        .insert([invoiceData])
+	        .select()
+	        .single();
+	  
+	      if (invoiceError) throw invoiceError;
+	  
+	      // Create invoice items
+	      const { error: itemsError } = await supabase.from("invoice_items").insert(
+	        items.map((item) => ({
+	          invoice_id: invoice.id,
+	          student_id: item.student_id,
+	          description: item.description,
+	          quantity: item.quantity,
+	          unit_price: item.unit_price,
+	          subtotal: item.quantity * item.unit_price,
+	          total: item.quantity * item.unit_price,
+	          type: item.type,
+	          plan_enrollment_id: item.plan_enrollment_id,
+	        }))
+	      );
+	  
+	      if (itemsError) throw itemsError;
+	  
+	      // Handle invoice processing based on payment method
+	      if (paymentMethod === 'stripe') {
+	        try {
+	          const response = await supabase.functions.invoke(
+	            "create-stripe-invoice",
+	            {
+	              body: {
+	                invoiceId: invoice.id,
+	              },
+	            }
+	          );
+	  
+	          if (response.error) {
+	            console.error("Error creating Stripe invoice:", response.error);
+	          } else if (response.data) {
+	            // Update the invoice with Stripe invoice ID and PDF URL
+	            const { error: updateError } = await supabase
+	              .from("invoices")
+	              .update({
+	                stripe_invoice_id: response.data.stripe_invoice_id,
+	                pdf_url: response.data.pdf_url,
+	              })
+	              .eq("id", invoice.id);
+	  
+	            if (updateError) {
+	              console.error(
+	                "Error updating invoice with Stripe details:",
+	                updateError
+	              );
+	            }
+	          }
+	        } catch (stripeErr) {
+	          console.error("Error with Stripe invoice creation:", stripeErr);
+	          // Continue even if Stripe invoice creation fails - we can retry later
+	        }
+	      } else if (paymentMethod === 'bacs') {
+	        // For BACS invoices, generate a PDF and send email notification
+	        try {
+	          // Generate PDF first
+	          const pdfResponse = await supabase.functions.invoke(
+	            "generate-invoice-pdf",
+	            {
+	              body: {
+	                invoiceId: invoice.id,
+	                paymentMethod: 'bacs', // Add this parameter
+	              },
+	            }
+	          );
+	          
+	          if (pdfResponse.error) {
+	            console.error("Error generating invoice PDF:", pdfResponse.error);
+	            // Don't fail the whole process, just log the error
+	          } else if (pdfResponse.data?.pdf_url) {
+	            // Update the invoice with PDF URL
+	            const { error: updateError } = await supabase
+	              .from("invoices")
+	              .update({
+	                pdf_url: pdfResponse.data.pdf_url,
+	              })
+	              .eq("id", invoice.id);
+	              
+	            if (updateError) {
+	              console.error("Error updating invoice with PDF URL:", updateError);
+	            }
+	          }
+	          
+	          // Send BACS invoice email notification (regardless of PDF success)
+	          const emailResponse = await supabase.functions.invoke("send-invoice-email", {
+	            body: {
+	              invoiceId: invoice.id,
+	              paymentMethod: 'bacs' // Ensure this is explicitly set
+	            },
+	          });
+	          
+	          if (emailResponse.error) {
+	            console.error("Error sending invoice email:", emailResponse.error);
+	            // Log the full error details for debugging
+	            console.error("Full email error details:", {
+	              error: emailResponse.error,
+	              invoiceId: invoice.id,
+	              paymentMethod: 'bacs'
+	            });
+	            
+	            // Show error to user but don't fail the whole process
+	            setError(`Invoice created but email failed to send: ${emailResponse.error.message || 'Unknown email error'}`);
+	          } else {
+	            console.log("BACS invoice email sent successfully");
+	          }
+	          
+	        } catch (err) {
+	          console.error("Error with BACS invoice processing:", err);
+	          // Log more details for debugging
+	          console.error("BACS processing error details:", {
+	            error: err,
+	            invoiceId: invoice.id,
+	            paymentMethod: 'bacs'
+	          });
+	          
+	          // Show error to user but don't fail the whole process
+	          setError(`Invoice created but there was an issue with email/PDF: ${err instanceof Error ? err.message : 'Unknown error'}`);
+	        }
+	      }
+	  
+	      // Send notification to the parent about payment request
+	      // BUT ONLY if it's NOT a BACS invoice (since we already sent BACS email)
+	      if (paymentMethod !== 'bacs') {
+	        try {
+	          await notificationService.notifyPaymentRequest(
+	            parent.id,
+	            profile.studio.id,
+	            totals.total,
+	            dueDate,
+	            invoice.id,
+	            profile.studio.currency || "GBP"
+	          );
+	        } catch (notificationErr) {
+	          console.error("Error sending payment notification:", notificationErr);
+	        }
+	      }
+	    }
+	    
+	    // Call success after all invoices are created
+	    onSuccess();
+	  } catch (err) {
+	    console.error("Error creating invoice:", err);
+	    setError(err instanceof Error ? err.message : "Failed to create invoice");
+	  } finally {
+	    setIsSubmitting(false);
+	  }
 	};
 
 	const getStudentOptions = () => {
@@ -341,17 +397,59 @@ export default function CreateInvoiceForm({
 	return (
 		<form onSubmit={handleSubmit} className="space-y-6">
 			<div className="grid grid-cols-2 gap-4">
-				<SearchableDropdown
-					id="parent"
-					label="Select Parent"
-					value={selectedParent}
-					onChange={setSelectedParent}
-					options={parents.map((parent) => ({
-						id: parent.id,
-						label: `${parent.name} (${parent.email})`,
-					}))}
-					required
-				/>
+				<div>
+					<div className="flex items-center mb-2">
+						<label className="block text-sm font-medium text-brand-secondary-400">
+							Parent Selection
+						</label>
+						<div className="ml-auto">
+							<label className="flex items-center space-x-2 text-sm">
+								<input
+									type="checkbox"
+									checked={sendToMultiple}
+									onChange={(e) => {
+										setSendToMultiple(e.target.checked);
+										// Clear selected parent when switching to multiple
+										if (e.target.checked) {
+											setSelectedParent(null);
+										} else {
+											setSelectedParents([]);
+										}
+									}}
+									className="h-4 w-4 text-brand-primary border-gray-300 rounded focus:ring-brand-accent"
+								/>
+								<span>Send to multiple parents</span>
+							</label>
+						</div>
+					</div>
+					
+					{sendToMultiple ? (
+						<MultiSelectDropdown
+							id="parents"
+							label=""
+							value={selectedParents}
+							onChange={setSelectedParents}
+							options={parents.map((parent) => ({
+								id: parent.id,
+								label: `${parent.name} (${parent.email})`,
+							}))}
+							isLoading={false}
+							error={selectedParents.length === 0 ? "Select at least one parent" : null}
+						/>
+					) : (
+						<SearchableDropdown
+							id="parent"
+							label=""
+							value={selectedParent}
+							onChange={setSelectedParent}
+							options={parents.map((parent) => ({
+								id: parent.id,
+								label: `${parent.name} (${parent.email})`,
+							}))}
+							required
+						/>
+					)}
+				</div>
 
 				<FormInput
 					id="dueDate"
@@ -744,6 +842,25 @@ export default function CreateInvoiceForm({
 					)}
 				</div>
 			)}
+			
+			{/* BACS Reference Field */}
+			{paymentMethod === 'bacs' && (
+				<div className="mb-4">
+					<label className="block text-sm font-medium text-brand-secondary-400 mb-2">
+						Payment Reference
+					</label>
+					<input
+						type="text"
+						value={bacsReference}
+						onChange={(e) => setBacsReference(e.target.value)}
+						placeholder="Leave blank to generate automatically"
+						className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-accent focus:border-brand-accent"
+					/>
+					<p className="mt-1 text-xs text-gray-500">
+						This reference will be shown to parents in the invoice. If left blank, a unique reference will be generated.
+					</p>
+				</div>
+			)}
 
 			<div>
 				<label
@@ -799,11 +916,11 @@ export default function CreateInvoiceForm({
 					</button>
 					<button
 						type="submit"
-						disabled={isSubmitting || items.length === 0}
+						disabled={isSubmitting || items.length === 0 || (sendToMultiple && selectedParents.length === 0) || (!sendToMultiple && !selectedParent)}
 						className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 disabled:bg-gray-400"
 					>
 						<Save className="w-4 h-4 mr-2" />
-						Create Invoice
+						{sendToMultiple ? `Create ${selectedParents.length} Invoices` : "Create Invoice"}
 					</button>
 				</div>
 			</div>

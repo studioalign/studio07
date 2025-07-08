@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { MapPin, Phone, Mail, Save, Plus, Globe, CreditCard, Building2 } from "lucide-react";
 import FormField from "../FormField";
-import RoomCard from "./RoomCard";
-import AddRoomForm from "./AddRoomForm";
+import RoomCard from "./RoomCard"; // We'll keep using this component but with location data
+import AddRoomForm from "./AddRoomForm"; // We'll keep using this component but with location data
 import BankAccountSetup from "./BankAccountSetup";
 import { supabase } from "../../lib/supabase";
 import type { StudioInfo as StudioInfoType } from "../../types/studio";
@@ -11,6 +11,7 @@ import { useLocalization } from "../../contexts/LocalizationContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { SUPPORTED_COUNTRIES } from "../../utils/formatters";
 import { getStudioPaymentMethods } from "../../utils/studioUtils";
+import BankDetailsSetup from './BankDetailsSetup';
 
 const TIMEZONE_LABELS: Record<string, string> = {
 	// UK & Ireland
@@ -114,14 +115,14 @@ export default function StudioInfo() {
 
 		try {
 			const { data, error } = await supabase
-				.from("rooms")
+				.from("locations")
 				.select("*")
 				.eq("studio_id", profile.studio.id);
 
 			if (error) throw error;
 			setRooms(data || []);
 		} catch (err) {
-			console.error("Error fetching rooms:", err);
+			console.error("Error fetching locations:", err);
 		}
 	};
 
@@ -163,6 +164,8 @@ export default function StudioInfo() {
 			updateLocalization({
 				currency: localStudioInfo.currency,
 				timezone: timezone,
+				payment_methods_enabled: localPaymentMethods,
+				bacs_enabled: localPaymentMethods.bacs,
 				dateFormat: dateFormat,
 			});
 
@@ -382,6 +385,11 @@ export default function StudioInfo() {
 					{/* Bank Account Setup */}
 					<BankAccountSetup />
 
+					{/* Bank Details Setup for BACS - Add this new section */}
+					{localPaymentMethods.bacs && (
+					  <BankDetailsSetup />
+					)}
+
 					{/* Localization Settings */}
 					<div>
 						<div className="flex items-center mb-4">
@@ -446,30 +454,92 @@ export default function StudioInfo() {
 			{/* Rooms Section */}
 			<div className="bg-white rounded-lg shadow p-6">
 				<div className="flex justify-between items-center mb-4">
-					<h2 className="text-xl font-semibold text-brand-primary">
-						Studio Rooms
-					</h2>
+					<h2 className="text-xl font-semibold text-brand-primary">Studio Locations</h2>
 					<button
 						onClick={() => setShowAddRoom(true)}
 						className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
 					>
 						<Plus className="w-5 h-5 mr-2" />
-						Add Room
+						Add Location
 					</button>
+				</div>
+
+				{/* Payment Methods */}
+				<div>
+					<div className="flex items-center mb-4">
+						<CreditCard className="w-5 h-5 text-brand-primary mr-2" />
+						<h3 className="font-medium">Payment Methods</h3>
+					</div>
+
+					<div className="space-y-4 pl-7">
+						<div className="space-y-2">
+							<label className="flex items-center space-x-2">
+								<input 
+									type="checkbox" 
+									checked={localPaymentMethods.stripe}
+									onChange={(e) => {
+										const newValue = e.target.checked;
+										// Prevent disabling both
+										if (!newValue && !localPaymentMethods.bacs) {
+											setError("At least one payment method must be enabled");
+											return;
+										}
+										setLocalPaymentMethods(prev => ({ ...prev, stripe: newValue }));
+									}}
+									disabled={hasActiveStripeSubscriptions && !localPaymentMethods.bacs}
+									className="h-4 w-4 text-brand-primary border-gray-300 rounded focus:ring-brand-accent"
+								/>
+								<span className="text-sm text-gray-700">Stripe Payments (Card payments with automatic processing)</span>
+							</label>
+							{hasActiveStripeSubscriptions && !localPaymentMethods.bacs && (
+								<p className="text-sm text-red-600 ml-6">
+									Cannot disable while you have active Stripe subscriptions
+								</p>
+							)}
+							
+							<label className="flex items-center space-x-2">
+								<input 
+									type="checkbox" 
+									checked={localPaymentMethods.bacs}
+									onChange={(e) => {
+										const newValue = e.target.checked;
+										// Prevent disabling both
+										if (!newValue && !localPaymentMethods.stripe) {
+											setError("At least one payment method must be enabled");
+											return;
+										}
+										setLocalPaymentMethods(prev => ({ ...prev, bacs: newValue }));
+									}}
+									className="h-4 w-4 text-brand-primary border-gray-300 rounded focus:ring-brand-accent"
+								/>
+								<span className="text-sm text-gray-700">BACS/Bank Transfer (Manual payments via bank transfer)</span>
+							</label>
+						</div>
+						
+						{localPaymentMethods.bacs && (
+							<div className="mt-4 p-4 bg-blue-50 rounded-lg">
+								<p className="text-sm text-blue-800">
+									When BACS is enabled, you can create invoices that parents pay manually via bank transfer. 
+									You'll need to mark these payments as received in StudioAlign.
+								</p>
+							</div>
+						)}
+					</div>
 				</div>
 
 				{rooms.length === 0 ? (
 					<p className="text-gray-500 text-center py-8">
-						No rooms added yet. Click "Add Room" to get started.
+						No locations added yet. Click "Add Location" to get started.
 					</p>
 				) : (
 					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 						{rooms.map((room) => (
 							<RoomCard
 								key={room.id}
-								room={room}
+								name={room.name}
+								description={room.description}
+								address={room.address}
 								onDelete={() => fetchRooms()}
-								onEdit={() => fetchRooms()}
 							/>
 						))}
 					</div>

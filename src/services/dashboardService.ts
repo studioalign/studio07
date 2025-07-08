@@ -34,41 +34,32 @@ export async function fetchOwnerDashboardData(studioId: string): Promise<OwnerDa
 }
 
 async function fetchOwnerRevenueData(studioId: string) {
-  // Get current month date range
   const currentMonthStart = startOfMonth(new Date());
   const currentMonthEnd = endOfMonth(new Date());
   
-  // Get previous month date range
   const prevMonthStart = startOfMonth(subMonths(new Date(), 1));
   const prevMonthEnd = endOfMonth(subMonths(new Date(), 1));
   
-  // Query payments for current month (assuming a payments table exists)
-  // Note: From the schema, we don't have a direct view of the payments table structure
-  // so we'll need to adjust this query based on the actual schema
-  
-  // For now, let's query invoices with status='paid' and paid_at in the current month
+  // Query for paid Stripe invoices AND paid BACS invoices
   const { data: currentMonthInvoices, error: currentError } = await supabase
     .from('invoices')
-    .select('total, paid_at')
+    .select('total, paid_at, payment_method, manual_payment_date')
     .eq('studio_id', studioId)
-    .eq('status', 'paid')
-    .gte('paid_at', currentMonthStart.toISOString())
-    .lte('paid_at', currentMonthEnd.toISOString());
+    .or('status.eq.paid,and(payment_method.eq.bacs,manual_payment_status.eq.paid)')
+    .or(`and(paid_at.gte.${currentMonthStart.toISOString()},paid_at.lte.${currentMonthEnd.toISOString()}),and(manual_payment_date.gte.${currentMonthStart.toISOString()},manual_payment_date.lte.${currentMonthEnd.toISOString()})`);
   
   if (currentError) throw currentError;
   
-  // Query for previous month
+  // Query for previous month with same logic
   const { data: prevMonthInvoices, error: prevError } = await supabase
     .from('invoices')
-    .select('total, paid_at')
+    .select('total, paid_at, payment_method, manual_payment_date')
     .eq('studio_id', studioId)
-    .eq('status', 'paid')
-    .gte('paid_at', prevMonthStart.toISOString())
-    .lte('paid_at', prevMonthEnd.toISOString());
+    .or('status.eq.paid,and(payment_method.eq.bacs,manual_payment_status.eq.paid)')
+    .or(`and(paid_at.gte.${prevMonthStart.toISOString()},paid_at.lte.${prevMonthEnd.toISOString()}),and(manual_payment_date.gte.${prevMonthStart.toISOString()},manual_payment_date.lte.${prevMonthEnd.toISOString()})`);
   
   if (prevError) throw prevError;
   
-  // Calculate totals
   const currentMonthRevenue = currentMonthInvoices 
     ? currentMonthInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0) 
     : 0;
@@ -77,12 +68,11 @@ async function fetchOwnerRevenueData(studioId: string) {
     ? prevMonthInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0) 
     : 0;
   
-  // Calculate percentage change
   let percentChange = 0;
   if (prevMonthRevenue > 0) {
     percentChange = Math.round(((currentMonthRevenue - prevMonthRevenue) / prevMonthRevenue) * 100);
   } else if (currentMonthRevenue > 0) {
-    percentChange = 100; // If previous month was 0, but current month has revenue
+    percentChange = 100;
   }
   
   return {
@@ -92,21 +82,21 @@ async function fetchOwnerRevenueData(studioId: string) {
 }
 
 async function fetchOwnerInvoiceData(studioId: string) {
-  // Get outstanding invoices (pending)
+  // Get outstanding invoices (pending Stripe + pending BACS)
   const { data: pendingInvoices, error: pendingError } = await supabase
     .from('invoices')
-    .select('id, total')
+    .select('id, total, payment_method, manual_payment_status')
     .eq('studio_id', studioId)
-    .eq('status', 'pending');
+    .or('status.eq.pending,and(payment_method.eq.bacs,manual_payment_status.eq.pending)');
   
   if (pendingError) throw pendingError;
   
-  // Get overdue invoices
+  // Get overdue invoices (overdue Stripe + overdue BACS)
   const { data: overdueInvoices, error: overdueError } = await supabase
     .from('invoices')
-    .select('id, total')
+    .select('id, total, payment_method, manual_payment_status')
     .eq('studio_id', studioId)
-    .eq('status', 'overdue');
+    .or('status.eq.overdue,and(payment_method.eq.bacs,manual_payment_status.eq.overdue)');
   
   if (overdueError) throw overdueError;
   
@@ -674,12 +664,12 @@ async function fetchParentClassesData(studentIds: string[], students: any[]) {
 }
 
 async function fetchParentBalanceData(parentId: string) {
-  // Get pending or overdue invoices
+  // Get pending or overdue invoices (both Stripe and BACS)
   const { data: invoices, error } = await supabase
     .from('invoices')
     .select('id, total, status, due_date, discount_reason')
     .eq('parent_id', parentId)
-    .in('status', ['pending', 'overdue'])
+    .or('status.in.(pending,overdue),and(payment_method.eq.bacs,manual_payment_status.in.(pending,overdue))')
     .order('due_date');
   
   if (error) throw error;
@@ -692,7 +682,12 @@ async function fetchParentBalanceData(parentId: string) {
   }
   
   // Get the most urgent invoice (first overdue, then earliest due date)
-  const overdueInvoices = invoices.filter(inv => inv.status === 'overdue');
+  // For BACS invoices, check manual_payment_status
+  const overdueInvoices = invoices.filter(inv => 
+    inv.status === 'overdue' || 
+    (inv.payment_method === 'bacs' && inv.manual_payment_status === 'overdue')
+  );
+  
   const targetInvoice = overdueInvoices.length > 0 
     ? overdueInvoices[0] // Get first overdue invoice
     : invoices[0]; // Otherwise get earliest due pending invoice

@@ -294,7 +294,7 @@ export default function Invoices() {
 											</td>
 											<td className="px-6 py-4 whitespace-nowrap">
 												<div className="flex items-center gap-2">
-													{invoice.payment_method === 'stripe' ? (
+													{(invoice.payment_method === 'stripe' || invoice.stripe_invoice_id) ? (
 														<div className="flex items-center text-xs text-blue-600">
 															<CreditCard className="w-3 h-3 mr-1" />
 															Card Payment

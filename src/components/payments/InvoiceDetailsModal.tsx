@@ -146,23 +146,6 @@ export default function InvoiceDetailsModal({
 					</div>
 				</div>
 
-				{/* Payment Method */}
-				{invoice.payment_method && (
-					<div className="mb-4 flex items-center">
-						{invoice.payment_method === 'bacs' ? (
-							<span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-								<Bank className="w-3 h-3 mr-1" />
-								Bank Transfer
-							</span>
-						) : (
-							<span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-								<CreditCard className="w-3 h-3 mr-1" />
-								Card Payment
-							</span>
-						)}
-					</div>
-				)}
-
 				<div className="p-6 space-y-6">
 					{/* Studio and Invoice Info */}
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-8">

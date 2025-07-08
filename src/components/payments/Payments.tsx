@@ -119,76 +119,88 @@ export default function Payments() {
 	};
 
 	const fetchStats = async (studioId: string) => {
-		try {
-			// Get total revenue from completed payments for this studio
-			const { data: revenueData, error: revenueError } = await supabase
-				.from("payments")
-				.select(
-					`
-	                id,
-	                amount, 
-	                original_amount,
-	                discount_amount,
-	                invoice:invoices!payments_invoice_id_fkey (
-	                    id,
-	                    studio_id,
-	                    total,
-	                    discount_type,
-	                    discount_value
-	                )
-	                `
-				)
-				.eq("status", "completed");
+  try {
+    // Get revenue from completed Stripe payments
+    const { data: stripePayments, error: stripeError } = await supabase
+      .from("payments")
+      .select(`
+        amount,
+        invoice:invoices!payments_invoice_id_fkey (
+          studio_id
+        )
+      `)
+      .eq("status", "completed");
 
-			if (revenueError) throw revenueError;
+    if (stripeError) throw stripeError;
 
-			// Filter out payments where invoice is null or studio_id doesn't match
-			const filteredRevenueData = (revenueData || []).filter(
-				(p) => p.invoice && p.invoice.studio_id === studioId
-			);
+    // Get revenue from paid BACS invoices
+    const { data: bacsInvoices, error: bacsError } = await supabase
+      .from("invoices")
+      .select("total")
+      .eq("studio_id", studioId)
+      .eq("payment_method", "bacs")
+      .eq("manual_payment_status", "paid");
 
-			// Use the actual amount paid for the total revenue calculation
-			const totalRevenue =
-				filteredRevenueData.reduce((sum, p) => sum + p.amount, 0) || 0;
+    if (bacsError) throw bacsError;
 
-			// Get outstanding invoices (sent but not paid) for this studio
-			const { data: pendingData, error: pendingError } = await supabase
-				.from("invoices")
-				.select("total")
-				.eq("status", "pending")
-				.eq("studio_id", studioId);
+    // Calculate total revenue
+    const stripeRevenue = (stripePayments || [])
+      .filter(p => p.invoice?.studio_id === studioId)
+      .reduce((sum, p) => sum + p.amount, 0);
+    
+    const bacsRevenue = (bacsInvoices || [])
+      .reduce((sum, inv) => sum + inv.total, 0);
+    
+    const totalRevenue = stripeRevenue + bacsRevenue;
 
-			if (pendingError) throw pendingError;
+    // Get outstanding invoices
+    const { data: pendingInvoices, error: pendingError } = await supabase
+      .from("invoices")
+      .select("total")
+      .eq("studio_id", studioId)
+      .in("status", ["pending"])
+      .neq("payment_method", "bacs");
 
-			// Get overdue invoices for this studio
-			const { data: overdueData, error: overdueError } = await supabase
-				.from("invoices")
-				.select("total")
-				.eq("status", "overdue")
-				.eq("studio_id", studioId);
+    if (pendingError) throw pendingError;
 
-			if (overdueError) throw overdueError;
+    // Get pending BACS invoices
+    const { data: pendingBacs, error: pendingBacsError } = await supabase
+      .from("invoices")
+      .select("total")
+      .eq("studio_id", studioId)
+      .eq("payment_method", "bacs")
+      .eq("manual_payment_status", "pending");
 
-			const outstandingBalance =
-				pendingData?.reduce((sum, i) => sum + i.total, 0) || 0;
-			const overdueAmount =
-				overdueData?.reduce((sum, i) => sum + i.total, 0) || 0;
+    if (pendingBacsError) throw pendingBacsError;
 
-			setStats({
-				totalRevenue,
-				outstandingBalance,
-				outstandingCount: pendingData?.length || 0,
-				overdueAmount,
-				overdueCount: overdueData?.length || 0,
-			});
-		} catch (err) {
-			console.error("Error fetching stats:", err);
-			setError(
-				err instanceof Error ? err.message : "Failed to fetch statistics"
-			);
-		} finally {
-			setLoading(false);
-		}
+    // Get overdue invoices
+    const { data: overdueInvoices, error: overdueError } = await supabase
+      .from("invoices")
+      .select("total")
+      .eq("studio_id", studioId)
+      .in("status", ["overdue"]);
+
+    if (overdueError) throw overdueError;
+
+    const outstandingBalance = 
+      ((pendingInvoices || []).reduce((sum, i) => sum + i.total, 0)) +
+      ((pendingBacs || []).reduce((sum, i) => sum + i.total, 0));
+
+    const overdueAmount = (overdueInvoices || []).reduce((sum, i) => sum + i.total, 0);
+
+    setStats({
+      totalRevenue,
+      outstandingBalance,
+      outstandingCount: ((pendingInvoices || []).length + (pendingBacs || []).length),
+      overdueAmount,
+      overdueCount: (overdueInvoices || []).length,
+    });
+  } catch (err) {
+    console.error("Error fetching stats:", err);
+    setError(err instanceof Error ? err.message : "Failed to fetch statistics");
+  } finally {
+    setLoading(false);
+  }
 	};
 
 	if (loading) {
