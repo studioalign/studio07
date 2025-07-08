@@ -175,6 +175,9 @@ export default function InvoiceDetailsModal({
 								<p>
 								  Due Date: {new Date(invoice.due_date).toLocaleDateString()}
 								</p>
+								<p>
+									Payment Reference: <span className="font-mono">{invoice.manual_payment_reference || `Invoice ${invoice.index}`}</span>
+								</p>
 							</div>
 						</div>
 					</div>
