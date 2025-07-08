@@ -101,6 +101,10 @@ export function useInvoices({ status, search }: UseInvoicesOptions = {}) {
 				pdf_url,
 				stripe_invoice_id,
 				paid_at,
+				payment_method,
+				manual_payment_status,
+				manual_payment_date,
+				manual_payment_reference,
 				items:invoice_items (
 					id,
 					description,
@@ -113,7 +117,7 @@ export function useInvoices({ status, search }: UseInvoicesOptions = {}) {
 					name
 					)
 				),
-				parent:users (
+				parent:parent_id (
 					name,
 					email
 				)
@@ -121,42 +125,42 @@ export function useInvoices({ status, search }: UseInvoicesOptions = {}) {
 				)
 				.eq("studio_id", profile?.studio?.id + "")
 				.order("created_at", { ascending: false });
-
+	
 			if (status) {
 				query = query.eq("status", status);
 			}
-
-			// if (search) {
-			//   query = query.or(`
-			//     number.ilike.%${search}%,
-			//   `);
-			// }
-
+	
 			const { data, error: fetchError } = await query;
-
+	
 			if (fetchError) throw fetchError;
-
+	
 			// Safely handle potential errors in the data
 			const validData = Array.isArray(data) && !("error" in data) ? data : [];
-
+	
 			// Apply client-side filtering for search if needed
 			const filteredData = search
 				? validData.filter((invoice) => {
 						// Type guard to safely access properties
 						const parentName = invoice?.parent?.name || "";
 						const parentEmail = invoice?.parent?.email || "";
-
+	
 						return (
 							parentName.toLowerCase().includes(search.toLowerCase()) ||
 							parentEmail.toLowerCase().includes(search.toLowerCase())
 						);
 				  })
 				: validData;
-
+	
+			// Transform the data to ensure parent is never null
+			const transformedData = filteredData.map((invoice: any) => ({
+				...invoice,
+				parent: invoice.parent || { name: "Unknown Parent", email: "N/A" }
+			}));
+	
 			// Cast to Invoice[] - we need this because the Supabase types don't exactly
 			// match our Invoice interface
-			setInvoices(filteredData as unknown as Invoice[]);
-
+			setInvoices(transformedData as unknown as Invoice[]);
+	
 			// Fetch counts for each status
 			const statusCounts: Record<InvoiceStatus, number> = {
 				draft: 0,
@@ -166,15 +170,15 @@ export function useInvoices({ status, search }: UseInvoicesOptions = {}) {
 				cancelled: 0,
 				refunded: 0,
 			};
-
+	
 			// Get status counts from a separate query
 			const { data: statusData, error: statusError } = await supabase
 				.from("invoices")
 				.select("status")
 				.eq("studio_id", profile?.studio?.id + "");
-
+	
 			if (statusError) throw statusError;
-
+	
 			// Count invoices by status from the fetched data
 			if (statusData && Array.isArray(statusData)) {
 				statusData.forEach((invoice) => {
@@ -184,7 +188,7 @@ export function useInvoices({ status, search }: UseInvoicesOptions = {}) {
 					}
 				});
 			}
-
+	
 			setCounts(statusCounts);
 		} catch (err) {
 			console.error("Error fetching invoices:", err);
