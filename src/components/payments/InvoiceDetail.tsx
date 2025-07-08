@@ -1,5 +1,5 @@
 // COMPLETE FIX for src/components/payments/InvoiceDetail.tsx
-// Replace the InvoiceDetail component with this version that safely handles null parent:
+// This fixes the null student issue for multi-parent invoices
 
 import React, { useEffect, useRef, useState } from "react";
 import { Edit2, Download, Building2, CreditCard, CheckCircle } from "lucide-react";
@@ -20,7 +20,7 @@ interface InvoiceItem {
 	type: string;
 	student: {
 		name: string;
-	};
+	} | null; // FIXED: Allow student to be null for multi-parent invoices
 }
 
 interface Invoice {
@@ -48,7 +48,7 @@ interface Invoice {
 		id?: string;
 		name: string;
 		email: string;
-	} | null; // FIXED: Allow parent to be null
+	} | null;
 	items: InvoiceItem[];
 	studio_id?: string;
 }
@@ -113,7 +113,6 @@ export default function InvoiceDetail({
 						return;
 					}
 
-					// FIXED: Safely access parent name
 					await notificationService.notifyPaymentReceived(
 						studioId,
 						parentName,
@@ -121,7 +120,6 @@ export default function InvoiceDetail({
 						invoice.id
 					);
 
-					// FIXED: Only send parent notification if parentId exists
 					if (parentId) {
 						await notificationService.notifyPaymentConfirmation(
 							parentId,
@@ -185,7 +183,6 @@ export default function InvoiceDetail({
 						<h3 className="text-sm font-medium text-brand-secondary-400 mb-1">
 							Bill To
 						</h3>
-						{/* FIXED: Safe parent access */}
 						<p className="font-medium text-gray-900">{parentName}</p>
 						<p className="text-gray-500">{parentEmail}</p>
 						{invoice.is_recurring && (
@@ -256,7 +253,10 @@ export default function InvoiceDetail({
 								{invoice.items.map((item) => (
 									<tr key={item.id}>
 										<td className="py-4">{item.description}</td>
-										<td className="py-4">{item.student.name}</td>
+										{/* FIXED: Safe student access for multi-parent invoices */}
+										<td className="py-4">
+											{item.student?.name || "Multiple Families"}
+										</td>
 										<td className="py-4">
 											<span className="capitalize">{item.type}</span>
 										</td>
