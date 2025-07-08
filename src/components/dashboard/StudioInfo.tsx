@@ -451,109 +451,62 @@ export default function StudioInfo() {
 				</div>
 			</div>
 
-			{/* Rooms Section */}
-			<div className="bg-white rounded-lg shadow p-6">
-				<div className="flex justify-between items-center mb-4">
-					<h2 className="text-xl font-semibold text-brand-primary">Studio Locations</h2>
+			<div className="bg-white rounded-lg shadow p-6 mt-6">
+				<div className="flex justify-between items-center mb-6">
+					<h2 className="text-xl font-semibold text-brand-primary">
+						Studio Rooms
+					</h2>
 					<button
 						onClick={() => setShowAddRoom(true)}
 						className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
 					>
 						<Plus className="w-5 h-5 mr-2" />
-						Add Location
+						Add Room
 					</button>
 				</div>
 
-				{/* Payment Methods */}
-				<div>
-					<div className="flex items-center mb-4">
-						<CreditCard className="w-5 h-5 text-brand-primary mr-2" />
-						<h3 className="font-medium">Payment Methods</h3>
+				{showAddRoom && profile?.studio && (
+					<div className="mb-6">
+						<AddRoomForm
+							studioId={profile?.studio?.id}
+							onSuccess={(newRoom) => {
+								setShowAddRoom(false);
+								// If we get the new room, add it directly to state
+								if (newRoom) {
+									setLocations((prev) => [...prev, newRoom]);
+								} else {
+									// Otherwise fetch all locations
+									fetchLocations();
+								}
+							}}
+							onCancel={() => setShowAddRoom(false)}
+						/>
 					</div>
+				)}
 
-					<div className="space-y-4 pl-7">
-						<div className="space-y-2">
-							<label className="flex items-center space-x-2">
-								<input 
-									type="checkbox" 
-									checked={localPaymentMethods.stripe}
-									onChange={(e) => {
-										const newValue = e.target.checked;
-										// Prevent disabling both
-										if (!newValue && !localPaymentMethods.bacs) {
-											setError("At least one payment method must be enabled");
-											return;
-										}
-										setLocalPaymentMethods(prev => ({ ...prev, stripe: newValue }));
-									}}
-									disabled={hasActiveStripeSubscriptions && !localPaymentMethods.bacs}
-									className="h-4 w-4 text-brand-primary border-gray-300 rounded focus:ring-brand-accent"
-								/>
-								<span className="text-sm text-gray-700">Stripe Payments (Card payments with automatic processing)</span>
-							</label>
-							{hasActiveStripeSubscriptions && !localPaymentMethods.bacs && (
-								<p className="text-sm text-red-600 ml-6">
-									Cannot disable while you have active Stripe subscriptions
-								</p>
-							)}
-							
-							<label className="flex items-center space-x-2">
-								<input 
-									type="checkbox" 
-									checked={localPaymentMethods.bacs}
-									onChange={(e) => {
-										const newValue = e.target.checked;
-										// Prevent disabling both
-										if (!newValue && !localPaymentMethods.stripe) {
-											setError("At least one payment method must be enabled");
-											return;
-										}
-										setLocalPaymentMethods(prev => ({ ...prev, bacs: newValue }));
-									}}
-									className="h-4 w-4 text-brand-primary border-gray-300 rounded focus:ring-brand-accent"
-								/>
-								<span className="text-sm text-gray-700">BACS/Bank Transfer (Manual payments via bank transfer)</span>
-							</label>
+				<div className="space-y-4">
+					{loadingLocations ? (
+						<div className="animate-pulse space-y-4">
+							{[1, 2].map((i) => (
+								<div key={i} className="bg-gray-100 h-24 rounded-lg" />
+							))}
 						</div>
-						
-						{localPaymentMethods.bacs && (
-							<div className="mt-4 p-4 bg-blue-50 rounded-lg">
-								<p className="text-sm text-blue-800">
-									When BACS is enabled, you can create invoices that parents pay manually via bank transfer. 
-									You'll need to mark these payments as received in StudioAlign.
-								</p>
-							</div>
-						)}
-					</div>
-				</div>
-
-				{rooms.length === 0 ? (
-					<p className="text-gray-500 text-center py-8">
-						No locations added yet. Click "Add Location" to get started.
-					</p>
-				) : (
-					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-						{rooms.map((room) => (
+					) : locations.length > 0 ? (
+						locations.map((location) => (
 							<RoomCard
-								key={room.id}
-								name={room.name}
-								description={room.description}
-								address={room.address}
-								onDelete={() => fetchRooms()}
+								key={location.id}
+								name={location.name}
+								description={location.description}
+								address={location.address}
+								onDelete={() => handleDeleteRoom(location.id)}
 							/>
-						))}
-					</div>
-				)}
-
-				{showAddRoom && (
-					<AddRoomForm
-						onClose={() => setShowAddRoom(false)}
-						onSuccess={() => {
-							setShowAddRoom(false);
-							fetchRooms();
-						}}
-					/>
-				)}
+						))
+					) : (
+						<p className="text-center text-gray-500 py-4">
+							No rooms added yet. Add your first room to get started.
+						</p>
+					)}
+				</div>
 			</div>
 		</div>
 	);
