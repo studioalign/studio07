@@ -196,6 +196,15 @@ export default function InvoiceDetail({
 								</p>
 							</div>
 						)}
+						{invoice.payment_method === 'bacs' && (
+							<div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+								<h4 className="font-medium text-blue-800 mb-1">Payment Reference</h4>
+								<p className="text-blue-700 font-mono text-sm">
+									{invoice.manual_payment_reference || `Invoice ${invoice.index}`}
+								</p>
+								<p className="text-xs text-blue-600 mt-1">Use this reference when making your bank transfer</p>
+							</div>
+						)}
 					</div>
 					<div className="text-right">
 						<h3 className="text-sm font-medium text-brand-secondary-400 mb-1">
