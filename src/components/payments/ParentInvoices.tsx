@@ -64,7 +64,7 @@ export default function ParentInvoices() {
 	const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 	const [showPaymentModal, setShowPaymentModal] = useState(false);
 	const [filter, setFilter] = useState<"all" | "pending" | "paid">("all");
-	const [bankDetails, setDetails] = useState<{[key: string]: any}>({});
+	const [bankDetails, setBankDetails] = useState<{[key: string]: any}>({});
 	const [studioInfo, setStudioInfo] = useState<
 		| {
 				name: string;
