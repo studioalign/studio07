@@ -199,8 +199,24 @@ export default function CreateInvoiceForm({
 	  const parentsToInvoice = sendToMultiple ? selectedParents : [selectedParent!];
 	  
 	  // Generate a default BACS reference if not provided
-	  const defaultBacsReference = `Invoice-${Date.now().toString(36)}`;
-	  const finalBacsReference = bacsReference || defaultBacsReference;
+	  const generateBacsReference = (invoiceIndex: number) => {
+		  return bacsReference.trim() || `Invoice ${invoiceIndex}`;
+		};
+		
+		// In the invoice creation loop, AFTER the invoice is created:
+		const finalBacsReference = generateBacsReference(invoice.index);
+		
+		// Update the invoice with the final reference:
+		const { error: updateRefError } = await supabase
+		  .from("invoices")
+		  .update({
+		    manual_payment_reference: finalBacsReference
+		  })
+		  .eq("id", invoice.id);
+		
+		if (updateRefError) {
+		  console.error("Error updating BACS reference:", updateRefError);
+		}
 	  
 	  try {
 	    // Calculate totals
