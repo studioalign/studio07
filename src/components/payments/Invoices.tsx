@@ -306,15 +306,6 @@ export default function Invoices() {
 														</div>
 													)}
 												</div>
-												{invoice.payment_method === 'bacs' && invoice.manual_payment_status && (
-													<span className={`inline-block px-2 py-1 text-xs rounded-full mt-1 ${
-														invoice.manual_payment_status === 'paid' ? 'bg-green-100 text-green-800' :
-														invoice.manual_payment_status === 'overdue' ? 'bg-red-100 text-red-800' :
-														'bg-yellow-100 text-yellow-800'
-													}`}>
-														{invoice.manual_payment_status.toUpperCase()}
-													</span>
-												)}
 											</td>
 											<td className="px-6 py-4 whitespace-nowrap">
 												<span
@@ -328,7 +319,7 @@ export default function Invoices() {
 															: "bg-gray-100 text-gray-800"
 													}`}
 												>
-													{invoice.status}
+													{invoice.status.toUpperCase()}
 												</span>
 												{invoice.is_recurring && (
 													<div className="text-xs text-gray-500 mt-1">
