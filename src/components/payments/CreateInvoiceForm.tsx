@@ -198,76 +198,76 @@ export default function CreateInvoiceForm({
 	  // Determine which parents to send invoices to
 	  const parentsToInvoice = sendToMultiple ? selectedParents : [selectedParent!];
 	  
-	  // Generate a default BACS reference if not provided
-	  const generateBacsReference = (invoiceIndex: number) => {
-		  return bacsReference.trim() || `Invoice ${invoiceIndex}`;
-		};
-		
-		// In the invoice creation loop, AFTER the invoice is created:
-		const finalBacsReference = generateBacsReference(invoice.index);
-		
-		// Update the invoice with the final reference:
-		const { error: updateRefError } = await supabase
-		  .from("invoices")
-		  .update({
-		    manual_payment_reference: finalBacsReference
-		  })
-		  .eq("id", invoice.id);
-		
-		if (updateRefError) {
-		  console.error("Error updating BACS reference:", updateRefError);
-		}
-	  
 	  try {
-	    // Calculate totals
-	    const totals = calculateTotals();
-	    
-	    // Create invoices for each parent
-	    for (const parent of parentsToInvoice) {
-	      // Create invoice
-	      const invoiceData = {
-	        studio_id: profile?.studio?.id,
-	        parent_id: parent.id,
-	        status: 'pending',
-	        due_date: dueDate,
-	        notes: notes || null,
-	        subtotal: totals.subtotal,
-	        total: totals.total,
-	        payment_method: paymentMethod,
-	        is_recurring: isRecurring,
-	        recurring_interval: recurringInterval,
-	        recurring_end_date: recurringEndDate || null,
-	        discount_type: discountType,
-	        discount_value: discountValue ? parseFloat(discountValue) : 0,
-	        discount_reason: discountReason,
-	        manual_payment_status: paymentMethod === 'bacs' ? 'pending' : null,
-	        manual_payment_reference: paymentMethod === 'bacs' ? finalBacsReference : null,
-	        stripe_invoice_id: null,
-	        pdf_url: null,
-	      };
-	      
-	      const { data: invoice, error: invoiceError } = await supabase
-	        .from("invoices")
-	        .insert([invoiceData])
-	        .select()
-	        .single();
-	  
-	      if (invoiceError) throw invoiceError;
-	  
-	      // Create invoice items
-	      const { error: itemsError } = await supabase.from("invoice_items").insert(
-	        items.map((item) => ({
-	          invoice_id: invoice.id,
-	          student_id: sendToMultiple ? null : item.student_id, // Set to null for multi-parent
-	          description: item.description,
-	          quantity: item.quantity,
-	          unit_price: item.unit_price,
-	          subtotal: item.quantity * item.unit_price,
-	          total: item.quantity * item.unit_price,
-	          type: item.type,
-	          plan_enrollment_id: sendToMultiple ? null : item.plan_enrollment_id, // Set to null for multi-parent
-	        }))
-	      );
+		  // Calculate totals
+		  const totals = calculateTotals();
+		  
+		  // Create invoices for each parent
+		  for (const parent of parentsToInvoice) {
+		    // Generate BACS reference INSIDE the loop, AFTER invoice creation
+		    const tempBacsReference = bacsReference.trim() || null;
+		    
+		    // Create invoice
+		    const invoiceData = {
+		      studio_id: profile?.studio?.id,
+		      parent_id: parent.id,
+		      status: 'pending',
+		      due_date: dueDate,
+		      notes: notes || null,
+		      subtotal: totals.subtotal,
+		      total: totals.total,
+		      payment_method: paymentMethod,
+		      is_recurring: isRecurring,
+		      recurring_interval: recurringInterval,
+		      recurring_end_date: recurringEndDate || null,
+		      discount_type: discountType,
+		      discount_value: discountValue ? parseFloat(discountValue) : 0,
+		      discount_reason: discountReason,
+		      manual_payment_status: paymentMethod === 'bacs' ? 'pending' : null,
+		      manual_payment_reference: tempBacsReference, // Use temp reference or null
+		      stripe_invoice_id: null,
+		      pdf_url: null,
+		    };
+		    
+		    const { data: invoice, error: invoiceError } = await supabase
+		      .from("invoices")
+		      .insert([invoiceData])
+		      .select()
+		      .single();
+		
+		    if (invoiceError) throw invoiceError;
+		
+		    // NOW we have the invoice, so we can generate the final BACS reference
+		    const finalBacsReference = tempBacsReference || `Invoice ${invoice.index}`;
+		    
+		    // Update the invoice with the final BACS reference if needed
+		    if (paymentMethod === 'bacs' && !tempBacsReference) {
+		      const { error: updateRefError } = await supabase
+		        .from("invoices")
+		        .update({
+		          manual_payment_reference: finalBacsReference
+		        })
+		        .eq("id", invoice.id);
+		        
+		      if (updateRefError) {
+		        console.error("Error updating BACS reference:", updateRefError);
+		      }
+		    }
+		
+		    // Create invoice items (rest of the code stays the same)
+		    const { error: itemsError } = await supabase.from("invoice_items").insert(
+		      items.map((item) => ({
+		        invoice_id: invoice.id,
+		        student_id: sendToMultiple ? null : item.student_id,
+		        description: item.description,
+		        quantity: item.quantity,
+		        unit_price: item.unit_price,
+		        subtotal: item.quantity * item.unit_price,
+		        total: item.quantity * item.unit_price,
+		        type: item.type,
+		        plan_enrollment_id: sendToMultiple ? null : item.plan_enrollment_id,
+		      }))
+		    );
 	  
 	      if (itemsError) throw itemsError;
 	  
