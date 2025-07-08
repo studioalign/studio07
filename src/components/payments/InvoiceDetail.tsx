@@ -1,4 +1,5 @@
 // COMPLETE FIX for src/components/payments/InvoiceDetail.tsx
+// Replace the InvoiceDetail component with this version that safely handles null parent:
 
 import React, { useEffect, useRef, useState } from "react";
 import { Edit2, Download, Building2, CreditCard, CheckCircle } from "lucide-react";
@@ -39,15 +40,15 @@ interface Invoice {
 	discount_value: number;
 	discount_reason: string;
 	pdf_url?: string;
-	payment_method?: 'stripe' | 'bacs'; // Added
-	manual_payment_status?: 'pending' | 'paid' | 'overdue'; // Added
-	manual_payment_date?: string; // Added
-	manual_payment_reference?: string; // Added
+	payment_method?: 'stripe' | 'bacs';
+	manual_payment_status?: 'pending' | 'paid' | 'overdue';
+	manual_payment_date?: string;
+	manual_payment_reference?: string;
 	parent: {
 		id?: string;
 		name: string;
 		email: string;
-	};
+	} | null; // FIXED: Allow parent to be null
 	items: InvoiceItem[];
 	studio_id?: string;
 }
@@ -74,7 +75,12 @@ export default function InvoiceDetail({
 	// Check if user is studio owner
 	const isOwner = profile?.role === 'owner';
 
-	// MISSING FUNCTION: Handle marking BACS invoice as paid
+	// Safe parent access with fallbacks
+	const parentName = invoice.parent?.name || "Unknown Parent";
+	const parentEmail = invoice.parent?.email || "N/A";
+	const parentId = invoice.parent?.id;
+
+	// Handle marking BACS invoice as paid
 	const handleMarkAsPaid = async () => {
 		setIsMarkingPaid(true);
 		setMarkPaidError(null);
@@ -84,7 +90,6 @@ export default function InvoiceDetail({
 			
 			if (result.success) {
 				setMarkPaidSuccess(true);
-				// Refresh the invoice data to show updated status
 				onRefresh();
 			} else {
 				setMarkPaidError(result.error || 'Failed to mark invoice as paid');
@@ -108,16 +113,18 @@ export default function InvoiceDetail({
 						return;
 					}
 
+					// FIXED: Safely access parent name
 					await notificationService.notifyPaymentReceived(
 						studioId,
-						invoice.parent.name,
+						parentName,
 						invoice.total,
 						invoice.id
 					);
 
-					if (invoice.parent.id) {
+					// FIXED: Only send parent notification if parentId exists
+					if (parentId) {
 						await notificationService.notifyPaymentConfirmation(
-							invoice.parent.id,
+							parentId,
 							studioId,
 							invoice.total,
 							invoice.id,
@@ -133,7 +140,7 @@ export default function InvoiceDetail({
 		}
 
 		previousStatusRef.current = invoice.status;
-	}, [invoice.status, invoice.studio_id, invoice.parent.name, invoice.parent.id, invoice.total, invoice.id, currency, profile?.studio?.id]);
+	}, [invoice.status, invoice.studio_id, parentName, parentId, invoice.total, invoice.id, currency, profile?.studio?.id]);
 
 	return (
 		<div className="bg-white rounded-lg shadow-lg overflow-hidden">
@@ -178,8 +185,9 @@ export default function InvoiceDetail({
 						<h3 className="text-sm font-medium text-brand-secondary-400 mb-1">
 							Bill To
 						</h3>
-						<p className="font-medium text-gray-900">{invoice.parent.name}</p>
-						<p className="text-gray-500">{invoice.parent.email}</p>
+						{/* FIXED: Safe parent access */}
+						<p className="font-medium text-gray-900">{parentName}</p>
+						<p className="text-gray-500">{parentEmail}</p>
 						{invoice.is_recurring && (
 							<div className="mt-3 bg-blue-50 p-2 rounded-md">
 								<p className="text-sm text-blue-800">
@@ -307,7 +315,7 @@ export default function InvoiceDetail({
 				)}
 			</div>
 			
-			{/* BACS Payment Handling - FIXED: Single section only */}
+			{/* BACS Payment Handling */}
 			{invoice.payment_method === 'bacs' && 
 			 (invoice.manual_payment_status === 'pending' || invoice.status === 'pending') && 
 			 isOwner && (
