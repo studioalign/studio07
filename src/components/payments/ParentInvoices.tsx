@@ -475,23 +475,35 @@ export default function ParentInvoices() {
 				
 				        {/* Bank Details for BACS payments */}
 				        {invoice.payment_method === 'bacs' && invoice.status !== 'paid' && (
-				          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-				            <h4 className="font-medium text-blue-800 mb-2">Bank Transfer Details</h4>
-				            {bankDetails[profile?.studio?.id || ''] ? (
-				              <div className="text-sm text-blue-700 space-y-1">
-				                <p><strong>Account Name:</strong> {bankDetails[profile?.studio?.id || ''].account_name}</p>
-				                <p><strong>Account Number:</strong> {bankDetails[profile?.studio?.id || ''].account_number}</p>
-				                <p><strong>Sort Code:</strong> {bankDetails[profile?.studio?.id || ''].sort_code}</p>
-				                <p><strong>Bank:</strong> {bankDetails[profile?.studio?.id || ''].bank_name}</p>
-				                <p><strong>Reference:</strong> Invoice-{invoice.id.substring(0, 8)}</p>
-				              </div>
-				            ) : (
-				              <p className="text-sm text-blue-700">
-				                Please contact the studio for bank transfer details.
-				              </p>
-				            )}
-				          </div>
-				        )}
+					  <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+					    <h4 className="font-medium text-blue-800 mb-2">Bank Transfer Details</h4>
+					    {bankDetails[profile?.studio?.id || ''] ? (
+					      <div className="text-sm text-blue-700 space-y-1">
+					        <p><strong>Account Name:</strong> {bankDetails[profile?.studio?.id || ''].account_name}</p>
+					        <p><strong>Account Number:</strong> {bankDetails[profile?.studio?.id || ''].account_number}</p>
+					        <p><strong>Sort Code:</strong> {bankDetails[profile?.studio?.id || ''].sort_code}</p>
+					        <p><strong>Bank:</strong> {bankDetails[profile?.studio?.id || ''].bank_name}</p>
+					        {/* FIXED: Use correct payment reference */}
+					        <p><strong>Reference:</strong> {invoice.manual_payment_reference || `Invoice-${invoice.index}`}</p>
+					      </div>
+					    ) : (
+					      <p className="text-sm text-blue-700">
+					        Please contact the studio for bank transfer details.
+					      </p>
+					    )}
+					  </div>
+					)}
+					
+					{invoice.payment_method === 'bacs' && (
+					  <div className="mt-2 pt-2 border-t border-blue-100">
+					    <p className="text-sm text-blue-800">
+					      <strong>Payment Reference:</strong> 
+					      <span className="font-mono ml-1">
+					        {invoice.manual_payment_reference || `Invoice-${invoice.index}`}
+					      </span>
+					    </p>
+					  </div>
+					)}
 
 					{invoice.payment_method === 'bacs' && (
 					  <div className="mt-2 pt-2 border-t border-blue-100">
