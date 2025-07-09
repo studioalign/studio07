@@ -4,6 +4,7 @@ import { useLocalization } from "../../contexts/LocalizationContext";
 import { supabase } from "../../lib/supabase";
 import { formatCurrency } from "../../utils/formatters";
 import FormInput from "../FormInput";
+import { notificationService } from "../../services/notificationService";
 
 interface Payment {
 	id: string;
@@ -40,131 +41,157 @@ export default function RefundModal({
 	const maxRefund = payment.amount - totalRefunded;
 
 	const handleSubmit = async (e: React.FormEvent) => {
-	  e.preventDefault();
-	  setIsSubmitting(true);
-	  setError(null);
-	
-	  try {
-	    const refundAmount = parseFloat(amount);
-	    if (isNaN(refundAmount) || refundAmount <= 0) {
-	      throw new Error("Please enter a valid amount");
-	    }
-	
-	    if (refundAmount > maxRefund) {
-	      throw new Error(
-	        "Refund amount cannot exceed the remaining payment amount"
-	      );
-	    }
-	
-	    // Check if this is a BACS payment (no Stripe payment ID)
-	    const isBACSPayment = !payment.stripe_payment_intent_id;
-	
-	    if (isBACSPayment) {
-	      // For BACS payments, create refund record directly
-	      const { error: refundError } = await supabase.from("refunds").insert([
-	        {
-	          payment_id: payment.id,
-	          amount: refundAmount,
-	          reason,
-	          status: "pending", // BACS refunds start as pending
-	          refund_method: "bank_transfer",
-	        },
-	      ]);
-	
-	      if (refundError) throw refundError;
-	
-	      // Update payment status to 'refunded' if fully refunded
-	      const isFullRefund = refundAmount >= maxRefund;
-	      if (isFullRefund) {
-	        const { error: updateError } = await supabase
-	          .from("payments")
-	          .update({ status: "refunded" })
-	          .eq("id", payment.id);
-	
-	        if (updateError) throw updateError;
-	      }
-	
-	      // Use existing notification service for BACS refund notification
-	      try {
-	        // First get the parent ID from the payment/invoice
-	        const { data: invoiceData, error: invoiceError } = await supabase
-	          .from("invoices")
-	          .select("parent_id, manual_payment_reference, index")
-	          .eq("id", payment.invoice_id)
-	          .single();
-	
-	        if (!invoiceError && invoiceData) {
-	          const invoiceReference = invoiceData.manual_payment_reference || `Invoice-${invoiceData.index}`;
-	          
-	          await notificationService.notifyRefundPending(
-	            invoiceData.parent_id,
-	            payment.invoice.studio_id,
-	            refundAmount,
-	            currency, // Make sure this is available in scope
-	            invoiceReference,
-	            reason,
-	            "bank_transfer",
-	            payment.id
-	          );
-	        }
-	      } catch (notificationError) {
-	        console.warn("Failed to send refund notification:", notificationError);
-	      }
-	
-	      onSuccess();
-	    } else {
-	      // For Stripe payments, process through Stripe as before
-	      const { data: response, error: functionError } =
-	        await supabase.functions.invoke("process-refund", {
-	          body: {
-	            paymentId: payment.stripe_payment_intent_id,
-	            amount: Math.round(refundAmount * 100),
-	            reason,
-	            studioId: payment.invoice.studio_id,
-	          },
-	        });
-	
-	      if (functionError || !response?.success) {
-	        throw new Error(
-	          functionError?.message ||
-	            response?.error ||
-	            "Failed to process refund"
-	        );
-	      }
-	
-	      // Create refund record in database for Stripe
-	      const { error: refundError } = await supabase.from("refunds").insert([
-	        {
-	          payment_id: payment.id,
-	          amount: refundAmount,
-	          reason,
-	          status: "completed",
-	          stripe_refund_id: response.refundId,
-	          refund_method: "stripe",
-	        },
-	      ]);
-	
-	      if (refundError) throw refundError;
-	
-	      // Update payment status to 'refunded' if fully refunded
-	      const isFullRefund = refundAmount >= maxRefund;
-	      if (isFullRefund) {
-	        const { error: updateError } = await supabase
-	          .from("payments")
-	          .update({ status: "refunded" })
-	          .eq("id", payment.id);
-	
-	        if (updateError) throw updateError;
-	      }
-	
-	      onSuccess();
-	    }
-	  } catch (err) {
-	    console.error("Error processing refund:", err);
-	    setError(err instanceof Error ? err.message : "Failed to process refund");
-	  } finally {
-	    setIsSubmitting(false);
-	  }
+		e.preventDefault();
+		setIsSubmitting(true);
+		setError(null);
+
+		try {
+			const refundAmount = parseFloat(amount);
+			if (isNaN(refundAmount) || refundAmount <= 0) {
+				throw new Error("Please enter a valid amount");
+			}
+
+			if (refundAmount > maxRefund) {
+				throw new Error(
+					"Refund amount cannot exceed the remaining payment amount"
+				);
+			}
+
+			// Check if this is a BACS payment (no Stripe payment ID)
+			const isBACSPayment = !payment.stripe_payment_intent_id;
+
+			if (isBACSPayment) {
+				// For BACS payments, create refund record directly
+				const { error: refundError } = await supabase.from("refunds").insert([
+					{
+						payment_id: payment.id,
+						amount: refundAmount,
+						reason,
+						status: "pending", // BACS refunds start as pending
+						refund_method: "bank_transfer",
+					},
+				]);
+
+				if (refundError) throw refundError;
+
+				// Update payment status to 'refunded' if fully refunded
+				const isFullRefund = refundAmount >= maxRefund;
+				if (isFullRefund) {
+					const { error: updateError } = await supabase
+						.from("payments")
+						.update({ status: "refunded" })
+						.eq("id", payment.id);
+
+					if (updateError) throw updateError;
+				}
+
+				// Use existing notification service for BACS refund notification
+				try {
+					// First get the parent ID from the payment/invoice
+					const { data: invoiceData, error: invoiceError } = await supabase
+						.from("invoices")
+						.select("parent_id, manual_payment_reference, index")
+						.eq("id", payment.invoice.id)
+						.single();
+
+					if (!invoiceError && invoiceData) {
+						const invoiceReference = invoiceData.manual_payment_reference || `Invoice-${invoiceData.index}`;
+						
+						await notificationService.notifyRefundPending(
+							invoiceData.parent_id,
+							payment.invoice.studio_id,
+							refundAmount,
+							currency,
+							invoiceReference,
+							reason,
+							"bank_transfer",
+							payment.id
+						);
+					}
+				} catch (notificationError) {
+					console.warn("Failed to send refund notification:", notificationError);
+				}
+
+				onSuccess();
+			} else {
+				// For Stripe payments, process through Stripe as before
+				const { data: response, error: functionError } =
+					await supabase.functions.invoke("process-refund", {
+						body: {
+							paymentId: payment.stripe_payment_intent_id,
+							amount: Math.round(refundAmount * 100),
+							reason,
+							studioId: payment.invoice.studio_id,
+						},
+					});
+
+				if (functionError || !response?.success) {
+					throw new Error(
+						functionError?.message ||
+							response?.error ||
+							"Failed to process refund"
+					);
+				}
+
+				// Create refund record in database for Stripe
+				const { error: refundError } = await supabase.from("refunds").insert([
+					{
+						payment_id: payment.id,
+						amount: refundAmount,
+						reason,
+						status: "completed",
+						stripe_refund_id: response.refundId,
+						refund_method: "stripe",
+					},
+				]);
+
+				if (refundError) throw refundError;
+
+				// Update payment status to 'refunded' if fully refunded
+				const isFullRefund = refundAmount >= maxRefund;
+				if (isFullRefund) {
+					const { error: updateError } = await supabase
+						.from("payments")
+						.update({ status: "refunded" })
+						.eq("id", payment.id);
+
+					if (updateError) throw updateError;
+				}
+
+				// Send notification for Stripe refund too
+				try {
+					const { data: invoiceData, error: invoiceError } = await supabase
+						.from("invoices")
+						.select("parent_id, manual_payment_reference, index")
+						.eq("id", payment.invoice.id)
+						.single();
+
+					if (!invoiceError && invoiceData) {
+						const invoiceReference = invoiceData.manual_payment_reference || `Invoice-${invoiceData.index}`;
+						
+						await notificationService.notifyRefundPending(
+							invoiceData.parent_id,
+							payment.invoice.studio_id,
+							refundAmount,
+							currency,
+							invoiceReference,
+							reason,
+							"stripe",
+							payment.id
+						);
+					}
+				} catch (notificationError) {
+					console.warn("Failed to send refund notification:", notificationError);
+				}
+
+				onSuccess();
+			}
+		} catch (err) {
+			console.error("Error processing refund:", err);
+			setError(err instanceof Error ? err.message : "Failed to process refund");
+		} finally {
+			setIsSubmitting(false);
+		}
 	};
 
 	return (
@@ -240,13 +267,13 @@ export default function RefundModal({
 					</div>
 
 					{!payment.stripe_payment_intent_id && (
-					  <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 mb-4">
-					    <h4 className="font-medium text-blue-800 mb-2">Bank Transfer Refund</h4>
-					    <p className="text-sm text-blue-700">
-					      Since this was a bank transfer payment, you will need to manually transfer the refund amount back to the customer's bank account. 
-					      The customer will be notified via email and in-app notification about the pending bank transfer refund.
-					    </p>
-					  </div>
+						<div className="p-3 bg-blue-50 rounded-lg border border-blue-200 mb-4">
+							<h4 className="font-medium text-blue-800 mb-2">Bank Transfer Refund</h4>
+							<p className="text-sm text-blue-700">
+								Since this was a bank transfer payment, you will need to manually transfer the refund amount back to the customer's bank account. 
+								The customer will be notified via email and in-app notification about the pending bank transfer refund.
+							</p>
+						</div>
 					)}
 
 					{error && <p className="text-red-500 text-sm">{error}</p>}
