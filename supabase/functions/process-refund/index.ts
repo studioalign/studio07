@@ -8,11 +8,8 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: corsHeaders
-    });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
@@ -23,7 +20,6 @@ serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient()
     });
 
-    // Create Supabase client
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "", 
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -32,7 +28,7 @@ serve(async (req) => {
     const requestBody = await req.json();
     console.log("Request body:", requestBody);
     
-    const { paymentId, amount, reason, studioId } = requestBody;
+    const { paymentId, amount, reason, studioId, paymentDbId, invoiceId, isFullRefund } = requestBody;
 
     // Basic validation
     if (!paymentId || !amount || !studioId) {
@@ -42,17 +38,13 @@ serve(async (req) => {
         error: "Missing required fields: paymentId, amount, or studioId"
       }), {
         status: 400,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json"
-        }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
-    console.log("Processing refund for:", { paymentId, amount, studioId });
+    console.log("Processing refund for:", { paymentId, amount, studioId, isFullRefund });
 
-    // Get the studio's connected account ID from the database
-    console.log("Looking up studio:", studioId);
+    // Get the studio's connected account ID
     const { data: studioData, error: studioError } = await supabaseClient
       .from("studios")
       .select("stripe_connect_id, name")
@@ -66,10 +58,7 @@ serve(async (req) => {
         error: `Database error: ${studioError.message}`
       }), {
         status: 400,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json"
-        }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
@@ -80,17 +69,14 @@ serve(async (req) => {
         error: "Studio's Stripe account not connected"
       }), {
         status: 400,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json"
-        }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
     const connectedAccountId = studioData.stripe_connect_id;
     console.log("Using connected account:", connectedAccountId);
 
-    // Get the payment intent using the connected account ID
+    // Get the payment intent
     console.log("Retrieving payment intent:", paymentId);
     let paymentIntent;
     try {
@@ -109,10 +95,7 @@ serve(async (req) => {
         error: `Could not find payment intent: ${retrieveError.message}`
       }), {
         status: 400,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json"
-        }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
@@ -126,7 +109,9 @@ serve(async (req) => {
         reason: reason || "requested_by_customer",
         metadata: {
           reason: reason || "Customer requested refund",
-          studio_id: studioId
+          studio_id: studioId,
+          payment_db_id: paymentDbId || "",
+          invoice_id: invoiceId || ""
         }
       }, {
         stripeAccount: connectedAccountId
@@ -143,24 +128,55 @@ serve(async (req) => {
         error: `Refund creation failed: ${refundError.message}`
       }), {
         status: 400,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json"
-        }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
     if (refund.status === "succeeded") {
       console.log("=== REFUND SUCCESSFUL ===");
+      
+      // ENHANCED: Update payment and invoice status if this is a full refund
+      if (isFullRefund && paymentDbId) {
+        console.log("Updating payment status to refunded");
+        try {
+          // Update payment status
+          const { error: paymentUpdateError } = await supabaseClient
+            .from("payments")
+            .update({ status: "refunded" })
+            .eq("id", paymentDbId);
+
+          if (paymentUpdateError) {
+            console.error("Error updating payment status:", paymentUpdateError);
+          } else {
+            console.log("Payment status updated successfully");
+          }
+
+          // Update invoice status if provided
+          if (invoiceId) {
+            console.log("Updating invoice status to refunded");
+            const { error: invoiceUpdateError } = await supabaseClient
+              .from("invoices")
+              .update({ status: "refunded" })
+              .eq("id", invoiceId);
+
+            if (invoiceUpdateError) {
+              console.error("Error updating invoice status:", invoiceUpdateError);
+            } else {
+              console.log("Invoice status updated successfully");
+            }
+          }
+        } catch (updateError) {
+          console.error("Error updating statuses:", updateError);
+          // Don't fail the refund if status updates fail
+        }
+      }
+
       return new Response(JSON.stringify({
         success: true,
         refundId: refund.id
       }), {
         status: 200,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json"
-        }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     } else {
       console.error("Refund failed with status:", refund.status);
@@ -169,10 +185,7 @@ serve(async (req) => {
         error: `Refund failed with status: ${refund.status}`
       }), {
         status: 400,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json"
-        }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
   } catch (error) {
@@ -182,10 +195,7 @@ serve(async (req) => {
       error: error instanceof Error ? error.message : "An unexpected error occurred"
     }), {
       status: 500,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json"
-      }
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
 });
