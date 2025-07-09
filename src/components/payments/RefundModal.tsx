@@ -60,7 +60,7 @@ export default function RefundModal({
 	    const isBACSPayment = !payment.stripe_payment_intent_id;
 	
 	    if (isBACSPayment) {
-	      // For BACS payments, create refund record directly and send notification
+	      // For BACS payments, create refund record directly
 	      const { error: refundError } = await supabase.from("refunds").insert([
 	        {
 	          payment_id: payment.id,
@@ -73,20 +73,41 @@ export default function RefundModal({
 	
 	      if (refundError) throw refundError;
 	
-	      // Send notification to parent about bank transfer refund
-	      const { error: notificationError } = await supabase.functions.invoke(
-	        "send-bacs-refund-notification",
-	        {
-	          body: {
-	            paymentId: payment.id,
-	            amount: refundAmount,
-	            reason,
-	            invoiceReference: payment.invoice?.reference || "N/A",
-	          },
-	        }
-	      );
+	      // Update payment status to 'refunded' if fully refunded
+	      const isFullRefund = refundAmount >= maxRefund;
+	      if (isFullRefund) {
+	        const { error: updateError } = await supabase
+	          .from("payments")
+	          .update({ status: "refunded" })
+	          .eq("id", payment.id);
 	
-	      if (notificationError) {
+	        if (updateError) throw updateError;
+	      }
+	
+	      // Use existing notification service for BACS refund notification
+	      try {
+	        // First get the parent ID from the payment/invoice
+	        const { data: invoiceData, error: invoiceError } = await supabase
+	          .from("invoices")
+	          .select("parent_id, manual_payment_reference, index")
+	          .eq("id", payment.invoice_id)
+	          .single();
+	
+	        if (!invoiceError && invoiceData) {
+	          const invoiceReference = invoiceData.manual_payment_reference || `Invoice-${invoiceData.index}`;
+	          
+	          await notificationService.notifyRefundPending(
+	            invoiceData.parent_id,
+	            payment.invoice.studio_id,
+	            refundAmount,
+	            currency, // Make sure this is available in scope
+	            invoiceReference,
+	            reason,
+	            "bank_transfer",
+	            payment.id
+	          );
+	        }
+	      } catch (notificationError) {
 	        console.warn("Failed to send refund notification:", notificationError);
 	      }
 	
@@ -124,6 +145,18 @@ export default function RefundModal({
 	      ]);
 	
 	      if (refundError) throw refundError;
+	
+	      // Update payment status to 'refunded' if fully refunded
+	      const isFullRefund = refundAmount >= maxRefund;
+	      if (isFullRefund) {
+	        const { error: updateError } = await supabase
+	          .from("payments")
+	          .update({ status: "refunded" })
+	          .eq("id", payment.id);
+	
+	        if (updateError) throw updateError;
+	      }
+	
 	      onSuccess();
 	    }
 	  } catch (err) {
