@@ -493,28 +493,6 @@ export default function ParentInvoices() {
 					    )}
 					  </div>
 					)}
-					
-					{invoice.payment_method === 'bacs' && (
-					  <div className="mt-2 pt-2 border-t border-blue-100">
-					    <p className="text-sm text-blue-800">
-					      <strong>Payment Reference:</strong> 
-					      <span className="font-mono ml-1">
-					        {invoice.manual_payment_reference || `Invoice-${invoice.index}`}
-					      </span>
-					    </p>
-					  </div>
-					)}
-
-					{invoice.payment_method === 'bacs' && (
-					  <div className="mt-2 pt-2 border-t border-blue-100">
-					    <p className="text-sm text-blue-800">
-					      <strong>Payment Reference:</strong> 
-					      <span className="font-mono ml-1">
-					        {invoice.manual_payment_reference || `Invoice ${invoice.index}`}
-					      </span>
-					    </p>
-					  </div>
-					)}
 				
 				        {/* Invoice Items */}
 				        <div className="mb-4">
