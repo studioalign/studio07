@@ -175,88 +175,126 @@ export default function Payments() {
 	};
 
 	const fetchStats = async (studioId: string) => {
-  try {
-    // Get revenue from completed Stripe payments
-    const { data: stripePayments, error: stripeError } = await supabase
-      .from("payments")
-      .select(`
-        amount,
-        invoice:invoices!payments_invoice_id_fkey (
-          studio_id
-        )
-      `)
-      .eq("status", "completed");
+	  try {
+	    // Get current month date range
+	    const now = new Date();
+	    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+	    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+	    
+	    console.log("Fetching stats for current month:", {
+	      start: startOfMonth.toISOString(),
+	      end: endOfMonth.toISOString()
+	    });
 
-    if (stripeError) throw stripeError;
+	    // Get revenue from completed Stripe payments in current month (excluding refunded)
+	    const { data: stripePayments, error: stripeError } = await supabase
+	      .from("payments")
+	      .select(`
+	        amount,
+	        payment_date,
+	        status,
+	        invoice:invoices!payments_invoice_id_fkey (
+	          studio_id,
+	          status
+	        )
+	      `)
+	      .eq("status", "completed")
+	      .gte("payment_date", startOfMonth.toISOString())
+	      .lte("payment_date", endOfMonth.toISOString());
 
-    // Get revenue from paid BACS invoices
-    const { data: bacsInvoices, error: bacsError } = await supabase
-      .from("invoices")
-      .select("total")
-      .eq("studio_id", studioId)
-      .eq("payment_method", "bacs")
-      .eq("manual_payment_status", "paid");
+	    if (stripeError) throw stripeError;
 
-    if (bacsError) throw bacsError;
+	    // Get revenue from paid BACS invoices in current month (excluding refunded)
+	    const { data: bacsInvoices, error: bacsError } = await supabase
+	      .from("invoices")
+	      .select("total, manual_payment_date, status")
+	      .eq("studio_id", studioId)
+	      .eq("payment_method", "bacs")
+	      .eq("manual_payment_status", "paid")
+	      .neq("status", "refunded") // FIXED: Exclude refunded invoices
+	      .gte("manual_payment_date", startOfMonth.toISOString())
+	      .lte("manual_payment_date", endOfMonth.toISOString());
 
-    // Calculate total revenue
-    const stripeRevenue = (stripePayments || [])
-      .filter(p => p.invoice?.studio_id === studioId)
-      .reduce((sum, p) => sum + p.amount, 0);
-    
-    const bacsRevenue = (bacsInvoices || [])
-      .reduce((sum, inv) => sum + inv.total, 0);
-    
-    const totalRevenue = stripeRevenue + bacsRevenue;
+	    if (bacsError) throw bacsError;
 
-    // Get outstanding invoices
-    const { data: pendingInvoices, error: pendingError } = await supabase
-      .from("invoices")
-      .select("total")
-      .eq("studio_id", studioId)
-      .in("status", ["pending"])
-      .neq("payment_method", "bacs");
+	    // Calculate total revenue (excluding refunded payments/invoices)
+	    const stripeRevenue = (stripePayments || [])
+	      .filter(p => 
+	        p.invoice?.studio_id === studioId && 
+	        p.invoice?.status !== "refunded" && // FIXED: Exclude refunded invoices
+	        p.status !== "refunded" // FIXED: Exclude refunded payments
+	      )
+	      .reduce((sum, p) => sum + p.amount, 0);
+	    
+	    const bacsRevenue = (bacsInvoices || [])
+	      .reduce((sum, inv) => sum + inv.total, 0);
+	    
+	    const totalRevenue = stripeRevenue + bacsRevenue;
 
-    if (pendingError) throw pendingError;
+	    // Get outstanding invoices (current month only)
+	    const { data: pendingInvoices, error: pendingError } = await supabase
+	      .from("invoices")
+	      .select("total, created_at")
+	      .eq("studio_id", studioId)
+	      .in("status", ["pending"])
+	      .neq("payment_method", "bacs")
+	      .gte("created_at", startOfMonth.toISOString())
+	      .lte("created_at", endOfMonth.toISOString());
 
-    // Get pending BACS invoices
-    const { data: pendingBacs, error: pendingBacsError } = await supabase
-      .from("invoices")
-      .select("total")
-      .eq("studio_id", studioId)
-      .eq("payment_method", "bacs")
-      .eq("manual_payment_status", "pending");
+	    if (pendingError) throw pendingError;
 
-    if (pendingBacsError) throw pendingBacsError;
+	    // Get pending BACS invoices (current month only)
+	    const { data: pendingBacs, error: pendingBacsError } = await supabase
+	      .from("invoices")
+	      .select("total, created_at")
+	      .eq("studio_id", studioId)
+	      .eq("payment_method", "bacs")
+	      .eq("manual_payment_status", "pending")
+	      .gte("created_at", startOfMonth.toISOString())
+	      .lte("created_at", endOfMonth.toISOString());
 
-    // Get overdue invoices
-    const { data: overdueInvoices, error: overdueError } = await supabase
-      .from("invoices")
-      .select("total")
-      .eq("studio_id", studioId)
-      .in("status", ["overdue"]);
+	    if (pendingBacsError) throw pendingBacsError;
 
-    if (overdueError) throw overdueError;
+	    // Get overdue invoices (current month only)
+	    const { data: overdueInvoices, error: overdueError } = await supabase
+	      .from("invoices")
+	      .select("total, created_at")
+	      .eq("studio_id", studioId)
+	      .in("status", ["overdue"])
+	      .gte("created_at", startOfMonth.toISOString())
+	      .lte("created_at", endOfMonth.toISOString());
 
-    const outstandingBalance = 
-      ((pendingInvoices || []).reduce((sum, i) => sum + i.total, 0)) +
-      ((pendingBacs || []).reduce((sum, i) => sum + i.total, 0));
+	    if (overdueError) throw overdueError;
 
-    const overdueAmount = (overdueInvoices || []).reduce((sum, i) => sum + i.total, 0);
+	    const outstandingBalance = 
+	      ((pendingInvoices || []).reduce((sum, i) => sum + i.total, 0)) +
+	      ((pendingBacs || []).reduce((sum, i) => sum + i.total, 0));
 
-    setStats({
-      totalRevenue,
-      outstandingBalance,
-      outstandingCount: ((pendingInvoices || []).length + (pendingBacs || []).length),
-      overdueAmount,
-      overdueCount: (overdueInvoices || []).length,
-    });
-  } catch (err) {
-    console.error("Error fetching stats:", err);
-    setError(err instanceof Error ? err.message : "Failed to fetch statistics");
-  } finally {
-    setLoading(false);
-  }
+	    const overdueAmount = (overdueInvoices || []).reduce((sum, i) => sum + i.total, 0);
+
+	    console.log("Stats calculated:", {
+	      totalRevenue,
+	      outstandingBalance,
+	      overdueAmount,
+	      stripePaymentsCount: stripePayments?.length || 0,
+	      bacsInvoicesCount: bacsInvoices?.length || 0,
+	      stripeRevenue,
+	      bacsRevenue
+	    });
+
+	    setStats({
+	      totalRevenue,
+	      outstandingBalance,
+	      outstandingCount: ((pendingInvoices || []).length + (pendingBacs || []).length),
+	      overdueAmount,
+	      overdueCount: (overdueInvoices || []).length,
+	    });
+	  } catch (err) {
+	    console.error("Error fetching stats:", err);
+	    setError(err instanceof Error ? err.message : "Failed to fetch statistics");
+	  } finally {
+	    setLoading(false);
+	  }
 	};
 
 	if (loading) {
@@ -322,21 +360,21 @@ export default function Payments() {
 							? "+" + formatCurrency(payments[0].amount, currency)
 							: "0"
 					}`}
-					description="latest payment"
+					description="this month" // UPDATED: Changed from "latest payment" to clarify it's current month
 				/>
 				<StatsCard
 					title="Outstanding Balance"
 					value={formatCurrency(stats.outstandingBalance, currency)}
 					icon={TrendingUp}
 					trend={`${stats.outstandingCount} invoices`}
-					description="pending payment"
+					description="this month" // UPDATED: Added to clarify it's current month
 				/>
 				<StatsCard
 					title="Overdue Payments"
 					value={formatCurrency(stats.overdueAmount, currency)}
 					icon={AlertCircle}
 					trend={`${stats.overdueCount} invoices`}
-					description="overdue"
+					description="this month" // UPDATED: Added to clarify it's current month
 				/>
 			</div>
 
