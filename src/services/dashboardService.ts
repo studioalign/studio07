@@ -667,7 +667,7 @@ async function fetchParentBalanceData(parentId: string) {
   // Get pending or overdue invoices (both Stripe and BACS)
   const { data: invoices, error } = await supabase
     .from('invoices')
-    .select('id, total, status, due_date, discount_reason')
+    .select('id, index, total, status, due_date, discount_reason, payment_method, manual_payment_status, manual_payment_reference')
     .eq('parent_id', parentId)
     .or('status.in.(pending,overdue),and(payment_method.eq.bacs,manual_payment_status.in.(pending,overdue))')
     .order('due_date');
@@ -681,8 +681,19 @@ async function fetchParentBalanceData(parentId: string) {
     };
   }
   
-  // Get the most urgent invoice (first overdue, then earliest due date)
-  // For BACS invoices, check manual_payment_status
+  // Calculate total outstanding amount from all pending/overdue invoices
+  const totalOutstanding = invoices.reduce((sum, invoice) => {
+    // Include invoice if it's pending/overdue (Stripe) or BACS with pending/overdue manual status
+    const isOutstanding = 
+      invoice.status === 'pending' || 
+      invoice.status === 'overdue' || 
+      (invoice.payment_method === 'bacs' && 
+       (invoice.manual_payment_status === 'pending' || invoice.manual_payment_status === 'overdue'));
+    
+    return isOutstanding ? sum + invoice.total : sum;
+  }, 0);
+  
+  // Get the most urgent invoice for the "due soon" text
   const overdueInvoices = invoices.filter(inv => 
     inv.status === 'overdue' || 
     (inv.payment_method === 'bacs' && inv.manual_payment_status === 'overdue')
@@ -692,9 +703,18 @@ async function fetchParentBalanceData(parentId: string) {
     ? overdueInvoices[0] // Get first overdue invoice
     : invoices[0]; // Otherwise get earliest due pending invoice
   
+  // Create a descriptive reason that includes invoice reference
+  const invoiceReference = targetInvoice.payment_method === 'bacs' 
+    ? (targetInvoice.manual_payment_reference || `Invoice ${targetInvoice.index}`)
+    : `Invoice ${targetInvoice.index}`;
+  
+  const reason = overdueInvoices.length > 0 
+    ? `${invoiceReference} overdue` 
+    : `due soon - ${invoiceReference}`;
+  
   return {
-    amount: targetInvoice.total,
-    reason: targetInvoice.discount_reason || 'Monthly Fees'
+    amount: totalOutstanding,
+    reason: reason
   };
 }
 
