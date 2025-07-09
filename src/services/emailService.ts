@@ -602,6 +602,37 @@ export class EmailService {
 	}
 }
 
+	async sendRefundPendingEmail(params: {
+	  recipientEmail: string;
+	  recipientName: string;
+	  amount: number;
+	  currency: string;
+	  invoiceReference: string;
+	  reason: string;
+	  refundMethod: 'stripe' | 'bank_transfer';
+	}): Promise<boolean> {
+	  const emailHtml = emailTemplates.refundPending({
+	    recipient: { name: params.recipientName },
+	    amount: params.amount,
+	    currency: params.currency,
+	    invoiceReference: params.invoiceReference,
+	    reason: params.reason,
+	    refundMethod: params.refundMethod,
+	  });
+	
+	  const subject = params.refundMethod === 'bank_transfer' 
+	    ? `Bank Transfer Refund Pending - ${params.invoiceReference}`
+	    : `Refund Processed - ${params.invoiceReference}`;
+	
+	  const result = await this.sendEmail({
+	    to: params.recipientEmail,
+	    subject: subject,
+	    html: emailHtml,
+	  });
+	
+	  return result;
+	}
+
 // Create a singleton instance
 export const emailService = new EmailService();
 
