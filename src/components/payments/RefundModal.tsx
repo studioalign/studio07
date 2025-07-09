@@ -30,6 +30,13 @@ export default function RefundModal({
 	onClose,
 	onSuccess,
 }: RefundModalProps) {
+	console.log("=== PAYMENT OBJECT DEBUG ===");
+	console.log("Full payment object:", payment);
+	console.log("payment.invoice:", payment.invoice);
+	console.log("payment.invoice_id:", payment.invoice_id);
+	console.log("payment.stripe_payment_intent_id:", payment.stripe_payment_intent_id);
+	console.log("=== END DEBUG ===");
+	
 	const { currency } = useLocalization();
 	const [amount, setAmount] = useState("");
 	const [reason, setReason] = useState("");
