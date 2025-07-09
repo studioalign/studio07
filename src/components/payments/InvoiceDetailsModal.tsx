@@ -325,19 +325,19 @@ export default function InvoiceDetailsModal({
 								</div>
 							) : (
 								<div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-									<h3 className="font-medium text-blue-800 flex items-center">
-										<Bank className="w-4 h-4 mr-2" />
-										Bank Transfer Required
-									</h3>
-									<p className="text-sm text-blue-700 mt-2">
-										Please make payment via bank transfer using the reference: <strong>Invoice-{invoice.id.substring(0, 8)}</strong>
-									</p>
-									{studio?.bank_account_name && (
-										<div className="mt-3 text-sm">
-											<p><strong>Account Name:</strong> {studio.bank_account_name}</p>
-											{/* Add other bank details if available */}
-										</div>
-									)}
+								  <h3 className="font-medium text-blue-800 flex items-center">
+								    <Bank className="w-4 h-4 mr-2" />
+								    Bank Transfer Required
+								  </h3>
+								  <p className="text-sm text-blue-700 mt-2">
+								    Please make payment via bank transfer using the reference: <strong>{invoice.manual_payment_reference || `Invoice-${invoice.index}`}</strong>
+								  </p>
+								  {studio?.bank_account_name && (
+								    <div className="mt-3 text-sm">
+								      <p><strong>Account Name:</strong> {studio.bank_account_name}</p>
+								      {/* Add other bank details if available */}
+								    </div>
+								  )}
 								</div>
 							)}
 						</>
