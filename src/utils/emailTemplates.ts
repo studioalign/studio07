@@ -643,6 +643,49 @@ export function paymentRequestTemplate(params: PaymentRequestParams) {
   });
 }
 
+export interface RefundPendingParams extends BaseTemplateParams {
+  amount: number;
+  currency: string;
+  invoiceReference: string;
+  reason: string;
+  refundMethod: 'stripe' | 'bank_transfer';
+}
+
+export function refundPendingTemplate(params: RefundPendingParams) {
+  const formattedAmount = formatCurrency(params.amount, params.currency);
+  
+  const content = params.refundMethod === 'bank_transfer' ? `
+    <h2>Bank Transfer Refund Pending</h2>
+    <p>We are processing a refund for your payment via bank transfer.</p>
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+      <h3 style="margin-top: 0; color: #131a56;">Refund Details</h3>
+      <p><strong>Invoice Reference:</strong> ${params.invoiceReference}</p>
+      <p><strong>Refund Amount:</strong> ${formattedAmount}</p>
+      <p><strong>Reason:</strong> ${params.reason}</p>
+    </div>
+    <div style="background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin: 20px 0;">
+      <p style="margin: 0;"><strong>Important:</strong> This refund will be processed as a bank transfer back to your original payment account. Please allow 3-5 business days for the funds to appear in your account.</p>
+    </div>
+    <p>If you have any questions about this refund, please contact us.</p>
+  ` : `
+    <h2>Refund Processed</h2>
+    <p>Your refund has been processed successfully.</p>
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+      <h3 style="margin-top: 0; color: #131a56;">Refund Details</h3>
+      <p><strong>Invoice Reference:</strong> ${params.invoiceReference}</p>
+      <p><strong>Refund Amount:</strong> ${formattedAmount}</p>
+      <p><strong>Reason:</strong> ${params.reason}</p>
+    </div>
+    <p>The refund will appear on your card statement within 3-5 business days.</p>
+  `;
+
+  return generateBaseTemplate({
+    recipient: params.recipient,
+    content,
+    title: params.refundMethod === 'bank_transfer' ? "Bank Transfer Refund Pending" : "Refund Processed",
+  });
+}
+
 // Export all template functions and interfaces
 export const emailTemplates = {
 	generateBaseTemplate,
@@ -665,6 +708,7 @@ export const emailTemplates = {
 	sendClassAssignedEmail,
 	invitation: invitationTemplate,
 	paymentRequest: paymentRequestTemplate,
+	refundPending: refundPendingTemplate,
 };
 
 export default emailTemplates;
