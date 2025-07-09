@@ -61,40 +61,59 @@ export default function RefundModal({
 			const isBACSPayment = !payment.stripe_payment_intent_id;
 
 			if (isBACSPayment) {
-				// For BACS payments, create refund record as COMPLETED
-				const { error: refundError } = await supabase.from("refunds").insert([
-					{
-						payment_id: payment.id,
-						amount: refundAmount,
-						reason,
-						status: "completed", // FIXED: Set to completed for consistency
-						refund_method: "bank_transfer",
-						refund_date: new Date().toISOString(),
-					},
-				]);
-
-				if (refundError) throw refundError;
-
-				// Update payment status to 'refunded' if fully refunded
-				if (isFullRefund) {
-					const { error: updateError } = await supabase
-						.from("payments")
-						.update({ status: "refunded" })
-						.eq("id", payment.id);
-
-					if (updateError) throw updateError;
-
-					// FIXED: Also update the invoice status to refunded
-					const { error: invoiceUpdateError } = await supabase
-						.from("invoices")
-						.update({ status: "refunded" })
-						.eq("id", payment.invoice.id);
-
-					if (invoiceUpdateError) {
-						console.error("Error updating invoice status:", invoiceUpdateError);
-						// Don't fail the whole process for this
-					}
-				}
+			  // For BACS payments, create refund record as COMPLETED
+			  const { error: refundError } = await supabase.from("refunds").insert([
+			    {
+			      payment_id: payment.id,
+			      amount: refundAmount,
+			      reason,
+			      status: "completed",
+			      refund_method: "bank_transfer",
+			      refund_date: new Date().toISOString(),
+			    },
+			  ]);
+			
+			  if (refundError) throw refundError;
+			
+			  // Update payment status to 'refunded' if fully refunded
+			  if (isFullRefund) {
+			    // FIXED: Find the payment record by invoice_id instead of using payment.id directly
+			    const { data: paymentRecord, error: findError } = await supabase
+			      .from("payments")
+			      .select("id")
+			      .eq("invoice_id", payment.invoice.id)
+			      .single();
+			
+			    if (findError) {
+			      console.error("Error finding payment record:", findError);
+			    } else if (paymentRecord) {
+			      // Update the correct payment record
+			      const { error: updateError } = await supabase
+			        .from("payments")
+			        .update({ status: "refunded" })
+			        .eq("id", paymentRecord.id);
+			
+			      if (updateError) {
+			        console.error("Error updating payment status:", updateError);
+			      } else {
+			        console.log("Successfully updated payment status to refunded");
+			      }
+			    } else {
+			      console.warn("No payment record found for invoice:", payment.invoice.id);
+			    }
+			
+			    // Update the invoice status to refunded
+			    const { error: invoiceUpdateError } = await supabase
+			      .from("invoices")
+			      .update({ status: "refunded" })
+			      .eq("id", payment.invoice.id);
+			
+			    if (invoiceUpdateError) {
+			      console.error("Error updating invoice status:", invoiceUpdateError);
+			    } else {
+			      console.log("Successfully updated invoice status to refunded");
+			    }
+			  }
 
 				// Send notification
 				try {
