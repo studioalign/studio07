@@ -1424,7 +1424,6 @@ export {
 	notifyPaymentRequest,
 	notifyPaymentConfirmation,
 	notifyUpgradeRequired,
-	notifyRefundPending,
 };
 
 // Export as a service object
