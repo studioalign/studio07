@@ -53,9 +53,9 @@ export type NotificationType =
 	| "class_cancellation"
 	| "payment_request"
 	| "payment_confirmation"
-	| "upgrade_required";
+	| "upgrade_required"
 	| "refund_pending"
-	| "refund_completed"
+	| "refund_completed";
 
 // Utility function to generate links based on notification type
 export function generateNotificationLink(notification: {
