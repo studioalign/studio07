@@ -40,13 +40,13 @@ async function fetchOwnerRevenueData(studioId: string) {
   const prevMonthStart = startOfMonth(subMonths(new Date(), 1));
   const prevMonthEnd = endOfMonth(subMonths(new Date(), 1));
   
-  console.log("Dashboard revenue calculation:", {
+  console.log("Dashboard revenue calculation - PAYMENTS ONLY:", {
     currentMonth: { start: currentMonthStart.toISOString(), end: currentMonthEnd.toISOString() },
     prevMonth: { start: prevMonthStart.toISOString(), end: prevMonthEnd.toISOString() }
   });
   
-  // FIXED: Current month Stripe payments - ONLY check payment status
-  const { data: currentStripePayments, error: currentStripeError } = await supabase
+  // Current month payments ONLY
+  const { data: currentPayments, error: currentError } = await supabase
     .from("payments")
     .select(`
       amount,
@@ -60,23 +60,10 @@ async function fetchOwnerRevenueData(studioId: string) {
     .gte("payment_date", currentMonthStart.toISOString())
     .lte("payment_date", currentMonthEnd.toISOString());
 
-  if (currentStripeError) throw currentStripeError;
+  if (currentError) throw currentError;
 
-  // Current month BACS invoices (excluding refunded)
-  const { data: currentBacsInvoices, error: currentBacsError } = await supabase
-    .from("invoices")
-    .select("total, manual_payment_date, status")
-    .eq("studio_id", studioId)
-    .eq("payment_method", "bacs")
-    .eq("manual_payment_status", "paid")
-    .neq("status", "refunded")
-    .gte("manual_payment_date", currentMonthStart.toISOString())
-    .lte("manual_payment_date", currentMonthEnd.toISOString());
-
-  if (currentBacsError) throw currentBacsError;
-
-  // FIXED: Previous month Stripe payments - ONLY check payment status
-  const { data: prevStripePayments, error: prevStripeError } = await supabase
+  // Previous month payments ONLY
+  const { data: prevPayments, error: prevError } = await supabase
     .from("payments")
     .select(`
       amount,
@@ -90,40 +77,16 @@ async function fetchOwnerRevenueData(studioId: string) {
     .gte("payment_date", prevMonthStart.toISOString())
     .lte("payment_date", prevMonthEnd.toISOString());
 
-  if (prevStripeError) throw prevStripeError;
+  if (prevError) throw prevError;
 
-  // Previous month BACS invoices (excluding refunded)
-  const { data: prevBacsInvoices, error: prevBacsError } = await supabase
-    .from("invoices")
-    .select("total, manual_payment_date, status")
-    .eq("studio_id", studioId)
-    .eq("payment_method", "bacs")
-    .eq("manual_payment_status", "paid")
-    .neq("status", "refunded")
-    .gte("manual_payment_date", prevMonthStart.toISOString())
-    .lte("manual_payment_date", prevMonthEnd.toISOString());
-
-  if (prevBacsError) throw prevBacsError;
-
-  // FIXED: Calculate current month revenue - ONLY filter by studio, ignore invoice status
-  const currentStripeRevenue = (currentStripePayments || [])
+  // Calculate revenue - ONLY from payments table
+  const currentMonthRevenue = (currentPayments || [])
     .filter(p => p.invoice?.studio_id === studioId)
     .reduce((sum, p) => sum + p.amount, 0);
   
-  const currentBacsRevenue = (currentBacsInvoices || [])
-    .reduce((sum, inv) => sum + inv.total, 0);
-  
-  const currentMonthRevenue = currentStripeRevenue + currentBacsRevenue;
-
-  // FIXED: Calculate previous month revenue - ONLY filter by studio, ignore invoice status
-  const prevStripeRevenue = (prevStripePayments || [])
+  const prevMonthRevenue = (prevPayments || [])
     .filter(p => p.invoice?.studio_id === studioId)
     .reduce((sum, p) => sum + p.amount, 0);
-  
-  const prevBacsRevenue = (prevBacsInvoices || [])
-    .reduce((sum, inv) => sum + inv.total, 0);
-  
-  const prevMonthRevenue = prevStripeRevenue + prevBacsRevenue;
   
   let percentChange = 0;
   if (prevMonthRevenue > 0) {
@@ -132,14 +95,12 @@ async function fetchOwnerRevenueData(studioId: string) {
     percentChange = 100;
   }
   
-  console.log("Dashboard revenue calculated (FIXED - payment status only):", {
+  console.log("Revenue calculated - PAYMENTS ONLY:", {
     currentMonthRevenue,
     prevMonthRevenue,
     percentChange,
-    currentStripeRevenue,
-    currentBacsRevenue,
-    prevStripeRevenue,
-    prevBacsRevenue
+    currentPaymentsCount: currentPayments?.length || 0,
+    prevPaymentsCount: prevPayments?.length || 0
   });
   
   return {
