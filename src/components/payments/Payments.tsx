@@ -181,13 +181,13 @@ export default function Payments() {
 	    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 	    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 	    
-	    console.log("Fetching stats for current month:", {
+	    console.log("Fetching stats for current month - PAYMENTS ONLY:", {
 	      start: startOfMonth.toISOString(),
 	      end: endOfMonth.toISOString()
 	    });
 	
-	    // FIXED: Get revenue from completed Stripe payments - ONLY check payment status
-	    const { data: stripePayments, error: stripeError } = await supabase
+	    // Get revenue from completed payments ONLY
+	    const { data: payments, error: paymentsError } = await supabase
 	      .from("payments")
 	      .select(`
 	        amount,
@@ -201,30 +201,12 @@ export default function Payments() {
 	      .gte("payment_date", startOfMonth.toISOString())
 	      .lte("payment_date", endOfMonth.toISOString());
 	
-	    if (stripeError) throw stripeError;
+	    if (paymentsError) throw paymentsError;
 	
-	    // Get revenue from paid BACS invoices in current month (excluding refunded)
-	    const { data: bacsInvoices, error: bacsError } = await supabase
-	      .from("invoices")
-	      .select("total, manual_payment_date, status")
-	      .eq("studio_id", studioId)
-	      .eq("payment_method", "bacs")
-	      .eq("manual_payment_status", "paid")
-	      .neq("status", "refunded")
-	      .gte("manual_payment_date", startOfMonth.toISOString())
-	      .lte("manual_payment_date", endOfMonth.toISOString());
-	
-	    if (bacsError) throw bacsError;
-	
-	    // FIXED: Calculate total revenue - ONLY filter by studio, ignore invoice status
-	    const stripeRevenue = (stripePayments || [])
+	    // Calculate total revenue - ONLY from payments table
+	    const totalRevenue = (payments || [])
 	      .filter(p => p.invoice?.studio_id === studioId)
 	      .reduce((sum, p) => sum + p.amount, 0);
-	    
-	    const bacsRevenue = (bacsInvoices || [])
-	      .reduce((sum, inv) => sum + inv.total, 0);
-	    
-	    const totalRevenue = stripeRevenue + bacsRevenue;
 	
 	    // Get outstanding invoices (current month only)
 	    const { data: pendingInvoices, error: pendingError } = await supabase
@@ -267,14 +249,12 @@ export default function Payments() {
 	
 	    const overdueAmount = (overdueInvoices || []).reduce((sum, i) => sum + i.total, 0);
 	
-	    console.log("Stats calculated (FIXED - payment status only):", {
+	    console.log("Stats calculated - PAYMENTS ONLY:", {
 	      totalRevenue,
 	      outstandingBalance,
 	      overdueAmount,
-	      stripePaymentsCount: stripePayments?.length || 0,
-	      bacsInvoicesCount: bacsInvoices?.length || 0,
-	      stripeRevenue,
-	      bacsRevenue
+	      paymentsCount: payments?.length || 0,
+	      paymentsIncluded: (payments || []).filter(p => p.invoice?.studio_id === studioId)
 	    });
 	
 	    setStats({
