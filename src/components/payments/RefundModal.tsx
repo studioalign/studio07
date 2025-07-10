@@ -75,43 +75,31 @@ export default function RefundModal({
 			
 			  if (refundError) throw refundError;
 			
-			  // Update payment status to 'refunded' if fully refunded
+			  // FIXED: Update payment status to 'refunded' if fully refunded
 			  if (isFullRefund) {
-			    // FIXED: Find the payment record by invoice_id instead of using payment.id directly
-			    const { data: paymentRecord, error: findError } = await supabase
+			    console.log("Updating BACS payment status to refunded");
+			    const { error: paymentUpdateError } = await supabase
 			      .from("payments")
-			      .select("id")
-			      .eq("invoice_id", payment.invoice.id)
-			      .single();
+			      .update({ status: "refunded" })
+			      .eq("id", payment.id);
 			
-			    if (findError) {
-			      console.error("Error finding payment record:", findError);
-			    } else if (paymentRecord) {
-			      // Update the correct payment record
-			      const { error: updateError } = await supabase
-			        .from("payments")
-			        .update({ status: "refunded" })
-			        .eq("id", paymentRecord.id);
-			
-			      if (updateError) {
-			        console.error("Error updating payment status:", updateError);
-			      } else {
-			        console.log("Successfully updated payment status to refunded");
-			      }
-			    } else {
-			      console.warn("No payment record found for invoice:", payment.invoice.id);
+			    if (paymentUpdateError) {
+			      console.error("Error updating BACS payment status:", paymentUpdateError);
+			      throw paymentUpdateError;
 			    }
+			  }
 			
-			    // Update the invoice status to refunded
+			  // Update invoice status to 'refunded' if fully refunded
+			  if (isFullRefund) {
+			    console.log("Updating BACS invoice status to refunded");
 			    const { error: invoiceUpdateError } = await supabase
 			      .from("invoices")
 			      .update({ status: "refunded" })
 			      .eq("id", payment.invoice.id);
 			
 			    if (invoiceUpdateError) {
-			      console.error("Error updating invoice status:", invoiceUpdateError);
-			    } else {
-			      console.log("Successfully updated invoice status to refunded");
+			      console.error("Error updating BACS invoice status:", invoiceUpdateError);
+			      throw invoiceUpdateError;
 			    }
 			  }
 
