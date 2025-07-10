@@ -185,8 +185,8 @@ export default function Payments() {
 	      start: startOfMonth.toISOString(),
 	      end: endOfMonth.toISOString()
 	    });
-
-	    // Get revenue from completed Stripe payments in current month (excluding refunded)
+	
+	    // FIXED: Get revenue from completed Stripe payments - ONLY check payment status
 	    const { data: stripePayments, error: stripeError } = await supabase
 	      .from("payments")
 	      .select(`
@@ -194,16 +194,15 @@ export default function Payments() {
 	        payment_date,
 	        status,
 	        invoice:invoices!payments_invoice_id_fkey (
-	          studio_id,
-	          status
+	          studio_id
 	        )
 	      `)
 	      .eq("status", "completed")
 	      .gte("payment_date", startOfMonth.toISOString())
 	      .lte("payment_date", endOfMonth.toISOString());
-
+	
 	    if (stripeError) throw stripeError;
-
+	
 	    // Get revenue from paid BACS invoices in current month (excluding refunded)
 	    const { data: bacsInvoices, error: bacsError } = await supabase
 	      .from("invoices")
@@ -211,26 +210,22 @@ export default function Payments() {
 	      .eq("studio_id", studioId)
 	      .eq("payment_method", "bacs")
 	      .eq("manual_payment_status", "paid")
-	      .neq("status", "refunded") // FIXED: Exclude refunded invoices
+	      .neq("status", "refunded")
 	      .gte("manual_payment_date", startOfMonth.toISOString())
 	      .lte("manual_payment_date", endOfMonth.toISOString());
-
+	
 	    if (bacsError) throw bacsError;
-
-	    // Calculate total revenue (excluding refunded payments/invoices)
+	
+	    // FIXED: Calculate total revenue - ONLY filter by studio, ignore invoice status
 	    const stripeRevenue = (stripePayments || [])
-	      .filter(p => 
-	        p.invoice?.studio_id === studioId && 
-	        p.invoice?.status !== "refunded" && // FIXED: Exclude refunded invoices
-	        p.status !== "refunded" // FIXED: Exclude refunded payments
-	      )
+	      .filter(p => p.invoice?.studio_id === studioId)
 	      .reduce((sum, p) => sum + p.amount, 0);
 	    
 	    const bacsRevenue = (bacsInvoices || [])
 	      .reduce((sum, inv) => sum + inv.total, 0);
 	    
 	    const totalRevenue = stripeRevenue + bacsRevenue;
-
+	
 	    // Get outstanding invoices (current month only)
 	    const { data: pendingInvoices, error: pendingError } = await supabase
 	      .from("invoices")
@@ -240,9 +235,9 @@ export default function Payments() {
 	      .neq("payment_method", "bacs")
 	      .gte("created_at", startOfMonth.toISOString())
 	      .lte("created_at", endOfMonth.toISOString());
-
+	
 	    if (pendingError) throw pendingError;
-
+	
 	    // Get pending BACS invoices (current month only)
 	    const { data: pendingBacs, error: pendingBacsError } = await supabase
 	      .from("invoices")
@@ -252,9 +247,9 @@ export default function Payments() {
 	      .eq("manual_payment_status", "pending")
 	      .gte("created_at", startOfMonth.toISOString())
 	      .lte("created_at", endOfMonth.toISOString());
-
+	
 	    if (pendingBacsError) throw pendingBacsError;
-
+	
 	    // Get overdue invoices (current month only)
 	    const { data: overdueInvoices, error: overdueError } = await supabase
 	      .from("invoices")
@@ -263,16 +258,16 @@ export default function Payments() {
 	      .in("status", ["overdue"])
 	      .gte("created_at", startOfMonth.toISOString())
 	      .lte("created_at", endOfMonth.toISOString());
-
+	
 	    if (overdueError) throw overdueError;
-
+	
 	    const outstandingBalance = 
 	      ((pendingInvoices || []).reduce((sum, i) => sum + i.total, 0)) +
 	      ((pendingBacs || []).reduce((sum, i) => sum + i.total, 0));
-
+	
 	    const overdueAmount = (overdueInvoices || []).reduce((sum, i) => sum + i.total, 0);
-
-	    console.log("Stats calculated:", {
+	
+	    console.log("Stats calculated (FIXED - payment status only):", {
 	      totalRevenue,
 	      outstandingBalance,
 	      overdueAmount,
@@ -281,7 +276,7 @@ export default function Payments() {
 	      stripeRevenue,
 	      bacsRevenue
 	    });
-
+	
 	    setStats({
 	      totalRevenue,
 	      outstandingBalance,
