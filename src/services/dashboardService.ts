@@ -45,9 +45,7 @@ async function fetchOwnerRevenueData(studioId: string) {
     prevMonth: { start: prevMonthStart.toISOString(), end: prevMonthEnd.toISOString() }
   });
   
-  // FIXED: Use same logic as Payments.tsx for consistency
-  
-  // Current month Stripe payments (excluding refunded)
+  // FIXED: Current month Stripe payments - ONLY check payment status
   const { data: currentStripePayments, error: currentStripeError } = await supabase
     .from("payments")
     .select(`
@@ -55,8 +53,7 @@ async function fetchOwnerRevenueData(studioId: string) {
       payment_date,
       status,
       invoice:invoices!payments_invoice_id_fkey (
-        studio_id,
-        status
+        studio_id
       )
     `)
     .eq("status", "completed")
@@ -78,7 +75,7 @@ async function fetchOwnerRevenueData(studioId: string) {
 
   if (currentBacsError) throw currentBacsError;
 
-  // Previous month Stripe payments (excluding refunded)
+  // FIXED: Previous month Stripe payments - ONLY check payment status
   const { data: prevStripePayments, error: prevStripeError } = await supabase
     .from("payments")
     .select(`
@@ -86,8 +83,7 @@ async function fetchOwnerRevenueData(studioId: string) {
       payment_date,
       status,
       invoice:invoices!payments_invoice_id_fkey (
-        studio_id,
-        status
+        studio_id
       )
     `)
     .eq("status", "completed")
@@ -109,13 +105,9 @@ async function fetchOwnerRevenueData(studioId: string) {
 
   if (prevBacsError) throw prevBacsError;
 
-  // Calculate current month revenue
+  // FIXED: Calculate current month revenue - ONLY filter by studio, ignore invoice status
   const currentStripeRevenue = (currentStripePayments || [])
-    .filter(p => 
-      p.invoice?.studio_id === studioId && 
-      p.invoice?.status !== "refunded" && 
-      p.status !== "refunded"
-    )
+    .filter(p => p.invoice?.studio_id === studioId)
     .reduce((sum, p) => sum + p.amount, 0);
   
   const currentBacsRevenue = (currentBacsInvoices || [])
@@ -123,13 +115,9 @@ async function fetchOwnerRevenueData(studioId: string) {
   
   const currentMonthRevenue = currentStripeRevenue + currentBacsRevenue;
 
-  // Calculate previous month revenue
+  // FIXED: Calculate previous month revenue - ONLY filter by studio, ignore invoice status
   const prevStripeRevenue = (prevStripePayments || [])
-    .filter(p => 
-      p.invoice?.studio_id === studioId && 
-      p.invoice?.status !== "refunded" && 
-      p.status !== "refunded"
-    )
+    .filter(p => p.invoice?.studio_id === studioId)
     .reduce((sum, p) => sum + p.amount, 0);
   
   const prevBacsRevenue = (prevBacsInvoices || [])
@@ -144,7 +132,7 @@ async function fetchOwnerRevenueData(studioId: string) {
     percentChange = 100;
   }
   
-  console.log("Dashboard revenue calculated (FIXED):", {
+  console.log("Dashboard revenue calculated (FIXED - payment status only):", {
     currentMonthRevenue,
     prevMonthRevenue,
     percentChange,
