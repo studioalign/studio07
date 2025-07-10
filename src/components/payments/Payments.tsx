@@ -303,17 +303,17 @@ export default function Payments() {
 								Stripe Account Not Connected
 							</h3>
 							<p className="mt-1 text-sm text-yellow-700">
-								You need to connect your Stripe account to start accepting
-								payments and creating invoices. This ensures secure payment
-								processing and automatic transfers to your bank account.
+								You need to connect your Stripe account to start creating Stripe invoices and accepting
+								Stripe payments. This ensures secure payment
+								processing and automatic transfers to your bank account. You can still accept manual BACS payments. Click below to set up Stripe or update your Bank Account details.
 							</p>
 							<div className="mt-3">
 								<button
-									onClick={() => navigate("/dashboard/payment-settings")}
+									onClick={() => navigate("/dashboard/studio")}
 									className="inline-flex items-center px-4 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-sm font-medium rounded-lg transition-colors duration-200"
 								>
 									<CreditCard className="w-4 h-4 mr-2" />
-									Go to Payment Settings
+									Go to Studio Info
 								</button>
 							</div>
 						</div>
