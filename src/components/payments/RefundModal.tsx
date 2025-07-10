@@ -62,32 +62,19 @@ export default function RefundModal({
 
 			if (isBACSPayment) {
 			  // For BACS payments, create refund record as COMPLETED
+			  // The database trigger will automatically update the payment status
 			  const { error: refundError } = await supabase.from("refunds").insert([
 			    {
 			      payment_id: payment.id,
 			      amount: refundAmount,
 			      reason,
-			      status: "completed",
+			      status: "completed", // This will trigger the database function
 			      refund_method: "bank_transfer",
 			      refund_date: new Date().toISOString(),
 			    },
 			  ]);
 			
 			  if (refundError) throw refundError;
-			
-			  // FIXED: Update payment status to 'refunded' if fully refunded
-			  if (isFullRefund) {
-			    console.log("Updating BACS payment status to refunded");
-			    const { error: paymentUpdateError } = await supabase
-			      .from("payments")
-			      .update({ status: "refunded" })
-			      .eq("id", payment.id);
-			
-			    if (paymentUpdateError) {
-			      console.error("Error updating BACS payment status:", paymentUpdateError);
-			      throw paymentUpdateError;
-			    }
-			  }
 			
 			  // Update invoice status to 'refunded' if fully refunded
 			  if (isFullRefund) {
