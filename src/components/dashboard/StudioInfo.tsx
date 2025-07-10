@@ -490,11 +490,12 @@ export default function StudioInfo() {
 				{showAddRoom && (
 					<div className="mb-6">
 						<AddRoomForm
-							onClose={() => setShowAddRoom(false)}
+							studioId={profile?.studio?.id || ""}
 							onSuccess={() => {
 								setShowAddRoom(false);
 								fetchRooms();
 							}}
+							onCancel={() => setShowAddRoom(false)}
 						/>
 					</div>
 				)}
