@@ -1,5 +1,5 @@
 import React from "react";
-import { X, Download, CreditCard, Building2, Calendar } from "lucide-react";
+import { X, Download, CreditCard, Building2, Calendar, Ban as Bank } from "lucide-react";
 import { useLocalization } from "../../contexts/LocalizationContext";
 import { formatCurrency } from "../../utils/formatters";
 
@@ -18,6 +18,7 @@ interface InvoiceDetailsModalProps {
 		discount_type?: string;
 		discount_value?: number;
 		discount_reason?: string;
+		payment_method?: 'stripe' | 'bacs';
 		items: {
 			id: string;
 			description: string;
@@ -169,10 +170,13 @@ export default function InvoiceDetailsModal({
 							<div className="text-sm text-gray-600 space-y-2">
 								<p>Invoice-{invoice.index}</p>
 								<p>
-									Issue Date: {new Date(invoice.due_date).toLocaleDateString()}
+								  Issue Date: {new Date(invoice.created_at || invoice.due_date).toLocaleDateString()}
 								</p>
 								<p>
-									Due Date: {new Date(invoice.due_date).toLocaleDateString()}
+								  Due Date: {new Date(invoice.due_date).toLocaleDateString()}
+								</p>
+								<p>
+									Payment Reference: <span className="font-mono">{invoice.manual_payment_reference || `Invoice ${invoice.index}`}</span>
 								</p>
 							</div>
 						</div>
@@ -249,7 +253,7 @@ export default function InvoiceDetailsModal({
 											</td>
 										</tr>
 									)}
-									{invoice.discount_value && invoice.discount_value > 0 && (
+									{invoice.discount_value > 0 && (
 										<tr>
 											<td colSpan={3} />
 											<td className="px-6 py-4 text-sm font-medium text-green-600 text-right">
@@ -292,31 +296,51 @@ export default function InvoiceDetailsModal({
 
 					{/* Payment Button */}
 					{["pending", "overdue"].includes(invoice.status) && onPayClick && (
-						<div className="flex justify-end">
-							{studio?.stripe_connect_enabled ? (
-								<button
-									onClick={onPayClick}
-									className="flex items-center px-8 py-4 bg-brand-primary text-white rounded-xl hover:bg-brand-secondary-400 transform hover:scale-105 transition-all duration-200"
-								>
-									<CreditCard className="w-5 h-5 mr-3" />
-									Pay {formatCurrency(invoice.total, currency)}
-								</button>
+						<>
+							{invoice.payment_method === 'stripe' ? (
+								<div className="flex justify-end">
+									{studio?.stripe_connect_enabled ? (
+										<button
+											onClick={onPayClick}
+											className="flex items-center px-8 py-4 bg-brand-primary text-white rounded-xl hover:bg-brand-secondary-400 transform hover:scale-105 transition-all duration-200"
+										>
+											<CreditCard className="w-5 h-5 mr-3" />
+											Pay {formatCurrency(invoice.total, currency)}
+										</button>
+									) : (
+										<div className="text-right">
+											<button
+												disabled
+												className="flex items-center px-8 py-4 bg-gray-300 text-gray-500 rounded-xl cursor-not-allowed"
+											>
+												<CreditCard className="w-5 h-5 mr-3" />
+												Payment Unavailable
+											</button>
+											<p className="text-sm text-gray-500 mt-2">
+												The studio needs to connect their Stripe account to accept
+												payments.
+											</p>
+										</div>
+									)}
+								</div>
 							) : (
-								<div className="text-right">
-									<button
-										disabled
-										className="flex items-center px-8 py-4 bg-gray-300 text-gray-500 rounded-xl cursor-not-allowed"
-									>
-										<CreditCard className="w-5 h-5 mr-3" />
-										Payment Unavailable
-									</button>
-									<p className="text-sm text-gray-500 mt-2">
-										The studio needs to connect their Stripe account to accept
-										payments.
-									</p>
+								<div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+								  <h3 className="font-medium text-blue-800 flex items-center">
+								    <Bank className="w-4 h-4 mr-2" />
+								    Bank Transfer Required
+								  </h3>
+								  <p className="text-sm text-blue-700 mt-2">
+								    Please make payment via bank transfer using the reference: <strong>{invoice.manual_payment_reference || `Invoice-${invoice.index}`}</strong>
+								  </p>
+								  {studio?.bank_account_name && (
+								    <div className="mt-3 text-sm">
+								      <p><strong>Account Name:</strong> {studio.bank_account_name}</p>
+								      {/* Add other bank details if available */}
+								    </div>
+								  )}
 								</div>
 							)}
-						</div>
+						</>
 					)}
 				</div>
 			</div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { MapPin, Phone, Mail, Save, Plus, Globe } from "lucide-react";
+import { MapPin, Phone, Mail, Save, Plus, Globe, CreditCard, Building2 } from "lucide-react";
 import FormField from "../FormField";
 import RoomCard from "./RoomCard";
 import AddRoomForm from "./AddRoomForm";
@@ -10,6 +10,8 @@ import { useData } from "../../contexts/DataContext";
 import { useLocalization } from "../../contexts/LocalizationContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { SUPPORTED_COUNTRIES } from "../../utils/formatters";
+import { getStudioPaymentMethods } from "../../utils/studioUtils";
+import BankDetailsSetup from './BankDetailsSetup';
 
 const TIMEZONE_LABELS: Record<string, string> = {
 	// UK & Ireland
@@ -43,73 +45,79 @@ const TIMEZONE_LABELS: Record<string, string> = {
 	"Pacific/Chatham": "Chatham Islands (CHAST/CHADT)",
 };
 
-interface Location {
+interface Room {
 	id: string;
 	name: string;
-	description: string | null;
-	address: string | null;
+	capacity?: number;
+	description: string;
+	address?: string;
 }
+
+type Role = "owner" | "teacher" | "parent" | "student";
+
 export default function StudioInfo() {
-	const [isEditing, setIsEditing] = useState(false);
+	const { profile } = useAuth();
+	const [rooms, setRooms] = useState<Room[]>([]);
+	const [loadingLocations, setLoadingLocations] = useState(false);
 	const [showAddRoom, setShowAddRoom] = useState(false);
-	const [locations, setLocations] = useState<Location[]>([]);
-	const [loadingLocations, setLoadingLocations] = useState(true);
-	const [country, setCountry] = useState("GB");
+	const [isEditing, setIsEditing] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [isLoading, setIsLoading] = useState(false);
+	const [hasActiveStripeSubscriptions, setHasActiveStripeSubscriptions] = useState(false);
 	const [timezone, setTimezone] = useState("Europe/London");
 	const [dateFormat, setDateFormat] = useState("dd/MM/yyyy");
-	const [localStudioInfo, setLocalStudioInfo] = useState<StudioInfoType | null>(
-		null
-	);
+	const [localStudioInfo, setLocalStudioInfo] = useState<StudioInfoType | null>(null);
+	const [localPaymentMethods, setLocalPaymentMethods] = useState<{
+		stripe: boolean;
+		bacs: boolean;
+	}>({ stripe: true, bacs: false });
 	const { updateLocalization } = useLocalization();
 
-	const { error, isLoading, refreshData } = useData();
-	const { profile } = useAuth();
+	const { error: dataError, isLoading: dataLoading, refreshData } = useData();
 
+	// Get studio payment methods from current profile
 	useEffect(() => {
 		if (profile?.studio && !localStudioInfo) {
 			setLocalStudioInfo(profile.studio);
+			
+			// Initialize payment methods
+			const paymentMethods = getStudioPaymentMethods(profile.studio);
+			setLocalPaymentMethods(paymentMethods);
+			
+			// Check for active Stripe subscriptions
+			const checkSubscriptions = async () => {
+				try {
+					const { count, error } = await supabase
+						.from('invoices')
+						.select('*', { count: 'exact', head: true })
+						.eq('studio_id', profile.studio?.id || '')
+						.eq('payment_method', 'stripe')
+						.eq('is_recurring', true)
+						.eq('status', 'active');
+						
+					if (error) throw error;
+					setHasActiveStripeSubscriptions(count > 0);
+				} catch (err) {
+					console.error('Error checking for active subscriptions:', err);
+				}
+			};
+			
+			checkSubscriptions();
 		}
 	}, [profile?.studio, localStudioInfo]);
 
-	useEffect(() => {
+	const fetchRooms = async () => {
 		if (!profile?.studio?.id) return;
 
-		// Subscribe to location changes for this studio
-		const subscription = supabase
-			.channel("locations-changes")
-			.on(
-				"postgres_changes",
-				{
-					event: "*", // Listen for all events (INSERT, UPDATE, DELETE)
-					schema: "public",
-					table: "locations",
-					filter: `studio_id=eq.${profile.studio.id}`,
-				},
-				(payload) => {
-					// Refresh locations when something changes
-					fetchLocations();
-				}
-			)
-			.subscribe();
-
-		// Clean up subscription on unmount
-		return () => {
-			supabase.removeChannel(subscription);
-		};
-	}, [profile?.studio?.id]);
-
-	const fetchLocations = async () => {
-		if (!profile?.studio?.id) return;
+		setLoadingLocations(true);
 		try {
-			setLoadingLocations(true);
-			const { data, error: fetchError } = await supabase
+			const { data, error } = await supabase
 				.from("locations")
 				.select("*")
-				.eq("studio_id", profile?.studio.id)
-				.order("name");
+				.eq("studio_id", profile.studio.id);
 
-			if (fetchError) throw fetchError;
-			setLocations(data || []);
+			if (error) throw error;
+			setRooms(data || []);
 		} catch (err) {
 			console.error("Error fetching locations:", err);
 		} finally {
@@ -117,33 +125,39 @@ export default function StudioInfo() {
 		}
 	};
 
-	// Keep the existing useEffect, but now it just calls the function
-	useEffect(() => {
-		fetchLocations();
-	}, [profile?.studio]);
-
 	const handleDeleteRoom = async (roomId: string) => {
 		try {
-			const { error: deleteError } = await supabase
+			const { error } = await supabase
 				.from("locations")
 				.delete()
 				.eq("id", roomId);
 
-			if (deleteError) throw deleteError;
-
-			setLocations((prevLocations) =>
-				prevLocations.filter((location) => location.id !== roomId)
-			);
+			if (error) throw error;
+			
+			// Remove from local state
+			setRooms(prev => prev.filter(room => room.id !== roomId));
 		} catch (err) {
 			console.error("Error deleting room:", err);
-			// You might want to show an error message to the user here
+			setError("Failed to delete room");
 		}
 	};
 
+	useEffect(() => {
+		fetchRooms();
+	}, [profile?.studio?.id]);
+
 	const handleSave = async () => {
+		if (!localStudioInfo || !profile?.studio?.id) return;
+
+		setIsLoading(true);
+		setError(null);
+
 		try {
-			// Update the existing studio record
-			const { error: studioError } = await supabase
+			const country = SUPPORTED_COUNTRIES.find(
+				(c) => c.currency === localStudioInfo.currency
+			)?.code;
+
+			const { error } = await supabase
 				.from("studios")
 				.update({
 					name: localStudioInfo?.name,
@@ -154,79 +168,71 @@ export default function StudioInfo() {
 					currency: SUPPORTED_COUNTRIES.find((c) => c.code === country)
 						?.currency,
 					timezone: timezone,
+					payment_methods_enabled: localPaymentMethods,
+					bacs_enabled: localPaymentMethods.bacs,
 					updated_at: new Date().toISOString(),
 				})
-				.eq("id", profile?.studio?.id + "")
-				.eq("owner_id", profile?.id + "");
+				.eq("id", profile?.studio?.id + "");
 
-			if (studioError) throw studioError;
+			if (error) throw error;
 
-			// Update localization context
-			const selectedCountry = SUPPORTED_COUNTRIES.find(
-				(c) => c.code === country
-			);
-			if (selectedCountry) {
-				updateLocalization({
-					country,
-					timezone,
-					currency: selectedCountry.currency,
-					dateFormat,
-				});
-			}
+			// Update localization
+			updateLocalization({
+				currency: localStudioInfo.currency,
+				timezone: timezone,
+				payment_methods_enabled: localPaymentMethods,
+				bacs_enabled: localPaymentMethods.bacs,
+				dateFormat: dateFormat,
+			});
 
 			setIsEditing(false);
 			await refreshData();
 		} catch (err) {
-			const error =
-				err instanceof Error
-					? err.message
-					: "Failed to save studio information";
-			console.error(error, err);
-			throw error;
+			console.error("Error updating studio:", err);
+			setError(err instanceof Error ? err.message : "Failed to update studio");
+		} finally {
+			setIsLoading(false);
 		}
 	};
 
-	if (isLoading) {
+	if (dataLoading) {
 		return (
-			<div>
-				<div className="flex justify-between items-center mb-6">
-					<h1 className="text-2xl font-bold text-brand-primary">
-						Studio Information
-					</h1>
-					<div className="w-32 h-10 bg-gray-200 rounded-md animate-pulse" />
-				</div>
-				<div className="bg-white rounded-lg shadow p-6">
-					<div className="h-6 bg-gray-200 rounded w-1/4 mb-6" />
-					<div className="space-y-6">
-						<div className="h-4 bg-gray-200 rounded w-3/4" />
-						<div className="h-4 bg-gray-200 rounded w-1/2" />
-						<div className="h-4 bg-gray-200 rounded w-2/3" />
-					</div>
-				</div>
+			<div className="flex items-center justify-center h-64">
+				<div className="animate-spin rounded-full h-32 w-32 border-b-2 border-brand-primary"></div>
+			</div>
+		);
+	}
+
+	if (dataError) {
+		return (
+			<div className="text-center text-red-600 p-6">
+				Error loading studio information: {dataError}
 			</div>
 		);
 	}
 
 	return (
-		<div>
-			<div className="flex justify-between items-center mb-6">
-				<h1 className="text-2xl font-bold text-brand-primary">
-					Studio Information
-				</h1>
+		<div className="space-y-6">
+			<div className="flex justify-between items-center">
+				<h1 className="text-2xl font-bold text-brand-primary">Studio Information</h1>
 				<button
-					onClick={() => (isEditing ? handleSave() : setIsEditing(true))}
-					className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
+					onClick={isEditing ? handleSave : () => setIsEditing(true)}
+					disabled={isLoading}
+					className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 disabled:opacity-50"
 				>
 					<Save className="w-5 h-5 mr-2" />
 					{isEditing ? "Save Changes" : "Edit Information"}
 				</button>
 				{error && <p className="text-red-500 text-sm ml-4">{error}</p>}
 			</div>
+
+			{/* Studio Details Card */}
 			<div className="bg-white rounded-lg shadow p-6">
 				<h2 className="text-xl font-semibold text-brand-primary mb-4">
 					Studio Details
 				</h2>
 				<div className="space-y-6">
+					{/* Location Information */}
 					<div>
 						<div className="flex items-center mb-4">
 							<MapPin className="w-5 h-5 text-brand-accent mr-2" />
@@ -262,6 +268,8 @@ export default function StudioInfo() {
 							</div>
 						)}
 					</div>
+
+					{/* Contact Information */}
 					<div>
 						<div className="flex items-center mb-4">
 							<Phone className="w-5 h-5 text-brand-accent mr-2" />
@@ -306,9 +314,6 @@ export default function StudioInfo() {
 						)}
 					</div>
 
-					{/* Bank Account Setup */}
-					<BankAccountSetup />
-
 					{/* Localization Settings */}
 					<div>
 						<div className="flex items-center mb-4">
@@ -319,49 +324,26 @@ export default function StudioInfo() {
 							<div className="space-y-4 pl-7">
 								<div>
 									<label className="block text-sm font-medium text-brand-secondary-400 mb-1">
-										Country
+										Currency
 									</label>
 									<select
-										value={country}
-										onChange={(e) => {
-											setCountry(e.target.value);
-											// Reset timezone when country changes
-											const newCountry = SUPPORTED_COUNTRIES.find(
-												(c) => c.code === e.target.value
-											);
-											if (newCountry) {
-												switch (newCountry.code) {
-													case "GB":
-														setTimezone("Europe/London");
-														break;
-													case "IE":
-														setTimezone("Europe/Dublin");
-														break;
-													case "US":
-														setTimezone("America/New_York");
-														break;
-													case "CA":
-														setTimezone("America/Toronto");
-														break;
-													case "AU":
-														setTimezone("Australia/Sydney");
-														break;
-													case "NZ":
-														setTimezone("Pacific/Auckland");
-														break;
-												}
-											}
-										}}
+										value={localStudioInfo?.currency || "GBP"}
+										onChange={(e) =>
+											setLocalStudioInfo(
+												localStudioInfo
+													? { ...localStudioInfo, currency: e.target.value }
+													: null
+											)
+										}
 										className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-accent focus:border-brand-accent"
 									>
 										{SUPPORTED_COUNTRIES.map((country) => (
-											<option key={country.code} value={country.code}>
-												{country.name} ({country.currency})
+											<option key={country.code} value={country.currency}>
+												{country.currency} - {country.name}
 											</option>
 										))}
 									</select>
 								</div>
-
 								<div>
 									<label className="block text-sm font-medium text-brand-secondary-400 mb-1">
 										Timezone
@@ -371,74 +353,21 @@ export default function StudioInfo() {
 										onChange={(e) => setTimezone(e.target.value)}
 										className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-accent focus:border-brand-accent"
 									>
-										{Object.entries(TIMEZONE_LABELS)
-											.filter(([tz]) => {
-												// Filter timezones based on selected country
-												switch (country) {
-													case "GB":
-														return tz === "Europe/London";
-													case "IE":
-														return tz === "Europe/Dublin";
-													case "US":
-														return (
-															tz.startsWith("America/") ||
-															tz === "Pacific/Honolulu"
-														);
-													case "CA":
-														return [
-															"Toronto",
-															"Vancouver",
-															"Edmonton",
-															"Winnipeg",
-															"Halifax",
-															"St_Johns",
-														].some((city) => tz === `America/${city}`);
-													case "AU":
-														return tz.startsWith("Australia/");
-													case "NZ":
-														return tz.startsWith("Pacific/");
-													default:
-														return false;
-												}
-											})
-											.map(([tz, label]) => (
-												<option key={tz} value={tz}>
-													{label}
-												</option>
-											))}
-									</select>
-								</div>
-
-								<div>
-									<label className="block text-sm font-medium text-brand-secondary-400 mb-1">
-										Date Format
-									</label>
-									<select
-										value={dateFormat}
-										onChange={(e) => setDateFormat(e.target.value)}
-										className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-accent focus:border-brand-accent"
-									>
-										<option value="dd/MM/yyyy">DD/MM/YYYY (31/12/2024)</option>
-										<option value="MM/dd/yyyy">MM/DD/YYYY (12/31/2024)</option>
-										<option value="yyyy-MM-dd">YYYY-MM-DD (2024-12-31)</option>
+										{Object.entries(TIMEZONE_LABELS).map(([value, label]) => (
+											<option key={value} value={value}>
+												{label}
+											</option>
+										))}
 									</select>
 								</div>
 							</div>
 						) : (
 							<div className="pl-7 space-y-2">
 								<p className="text-brand-secondary-400">
-									Country:{" "}
-									{SUPPORTED_COUNTRIES.find((c) => c.code === country)?.name}
+									Currency: {profile?.studio?.currency || "Not set"}
 								</p>
 								<p className="text-brand-secondary-400">
-									Timezone: {TIMEZONE_LABELS[timezone]}
-								</p>
-								<p className="text-brand-secondary-400">
-									Currency:{" "}
-									{
-										SUPPORTED_COUNTRIES.find((c) => c.code === country)
-											?.currency
-									}
+									Timezone: {TIMEZONE_LABELS[timezone] || timezone}
 								</p>
 							</div>
 						)}
@@ -446,33 +375,125 @@ export default function StudioInfo() {
 				</div>
 			</div>
 
-			<div className="bg-white rounded-lg shadow p-6 mt-6">
-				<div className="flex justify-between items-center mb-6">
-					<h2 className="text-xl font-semibold text-brand-primary">
-						Studio Rooms
-					</h2>
+			{/* Payment Methods Card - SEPARATE SECTION */}
+			<div className="bg-white rounded-lg shadow p-6">
+				<div className="flex justify-between items-center mb-4">
+					<div className="flex items-center">
+						<CreditCard className="w-5 h-5 text-brand-primary mr-2" />
+						<h2 className="text-xl font-semibold text-brand-primary">Payment Methods</h2>
+					</div>
+				</div>
+
+				{isEditing ? (
+					<div className="space-y-4">
+						<div className="space-y-2">
+							<label className="flex items-center space-x-2">
+								<input 
+									type="checkbox" 
+									checked={localPaymentMethods.stripe}
+									onChange={(e) => {
+										const newValue = e.target.checked;
+										// Prevent disabling both
+										if (!newValue && !localPaymentMethods.bacs) {
+											setError("At least one payment method must be enabled");
+											return;
+										}
+										setLocalPaymentMethods(prev => ({ ...prev, stripe: newValue }));
+									}}
+									disabled={hasActiveStripeSubscriptions && !localPaymentMethods.bacs}
+									className="h-4 w-4 text-brand-primary border-gray-300 rounded focus:ring-brand-accent"
+								/>
+								<span className="text-sm text-gray-700">Stripe Payments (Card payments with automatic processing)</span>
+							</label>
+							{hasActiveStripeSubscriptions && !localPaymentMethods.bacs && (
+								<p className="text-sm text-red-600 ml-6">
+									Cannot disable while you have active Stripe subscriptions
+								</p>
+							)}
+							
+							<label className="flex items-center space-x-2">
+								<input 
+									type="checkbox" 
+									checked={localPaymentMethods.bacs}
+									onChange={(e) => {
+										const newValue = e.target.checked;
+										// Prevent disabling both
+										if (!newValue && !localPaymentMethods.stripe) {
+											setError("At least one payment method must be enabled");
+											return;
+										}
+										setLocalPaymentMethods(prev => ({ ...prev, bacs: newValue }));
+									}}
+									className="h-4 w-4 text-brand-primary border-gray-300 rounded focus:ring-brand-accent"
+								/>
+								<span className="text-sm text-gray-700">BACS/Bank Transfer (Manual payments via bank transfer)</span>
+							</label>
+						</div>
+						
+						{localPaymentMethods.bacs && (
+							<div className="mt-4 p-4 bg-blue-50 rounded-lg">
+								<p className="text-sm text-blue-800">
+									When BACS is enabled, you can create invoices that parents pay manually via bank transfer. 
+									You'll need to mark these payments as received in StudioAlign.
+								</p>
+							</div>
+						)}
+					</div>
+				) : (
+					<div className="space-y-2">
+						<div className="flex flex-wrap gap-2">
+							{localPaymentMethods.stripe && (
+								<span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+									<CreditCard className="w-3 h-3 mr-1" />
+									Stripe Payments
+								</span>
+							)}
+							{localPaymentMethods.bacs && (
+								<span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+									<Building2 className="w-3 h-3 mr-1" />
+									BACS/Bank Transfer
+								</span>
+							)}
+						</div>
+						{!localPaymentMethods.stripe && !localPaymentMethods.bacs && (
+							<p className="text-gray-500">No payment methods configured</p>
+						)}
+					</div>
+				)}
+
+				{/* Bank Account Setup */}
+				<div className="mt-6">
+					<BankAccountSetup />
+				</div>
+
+				{/* Bank Details Setup for BACS */}
+				{localPaymentMethods.bacs && (
+					<div className="mt-6">
+						<BankDetailsSetup />
+					</div>
+				)}
+			</div>
+
+			{/* Studio Locations Card - SEPARATE SECTION */}
+			<div className="bg-white rounded-lg shadow p-6">
+				<div className="flex justify-between items-center mb-4">
+					<h2 className="text-xl font-semibold text-brand-primary">Studio Locations</h2>
 					<button
 						onClick={() => setShowAddRoom(true)}
 						className="flex items-center px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400"
 					>
 						<Plus className="w-5 h-5 mr-2" />
-						Add Room
+						Add Location
 					</button>
 				</div>
 
-				{showAddRoom && profile?.studio && (
+				{showAddRoom && (
 					<div className="mb-6">
 						<AddRoomForm
-							studioId={profile?.studio?.id}
-							onSuccess={(newRoom) => {
+							studioId={profile?.studio?.id || ""}
+							onSuccess={() => {
 								setShowAddRoom(false);
-								// If we get the new room, add it directly to state
-								if (newRoom) {
-									setLocations((prev) => [...prev, newRoom]);
-								} else {
-									// Otherwise fetch all locations
-									fetchLocations();
-								}
+								fetchRooms();
 							}}
 							onCancel={() => setShowAddRoom(false)}
 						/>
@@ -486,19 +507,19 @@ export default function StudioInfo() {
 								<div key={i} className="bg-gray-100 h-24 rounded-lg" />
 							))}
 						</div>
-					) : locations.length > 0 ? (
-						locations.map((location) => (
+					) : rooms.length > 0 ? (
+						rooms.map((room) => (
 							<RoomCard
-								key={location.id}
-								name={location.name}
-								description={location.description}
-								address={location.address}
-								onDelete={() => handleDeleteRoom(location.id)}
+								key={room.id}
+								name={room.name}
+								description={room.description}
+								address={room.address}
+								onDelete={() => handleDeleteRoom(room.id)}
 							/>
 						))
 					) : (
 						<p className="text-center text-gray-500 py-4">
-							No rooms added yet. Add your first room to get started.
+							No locations added yet. Click "Add Location" to get started.
 						</p>
 					)}
 				</div>

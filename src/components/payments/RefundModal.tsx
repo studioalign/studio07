@@ -4,11 +4,13 @@ import { useLocalization } from "../../contexts/LocalizationContext";
 import { supabase } from "../../lib/supabase";
 import { formatCurrency } from "../../utils/formatters";
 import FormInput from "../FormInput";
+import { notificationService } from "../../services/notificationService";
 
 interface Payment {
 	id: string;
 	amount: number;
 	stripe_payment_intent_id?: string;
+	payment_method?: string;
 	invoice: {
 		id: string;
 		studio_id: string;
@@ -56,42 +58,150 @@ export default function RefundModal({
 				);
 			}
 
-			if (!payment.stripe_payment_intent_id) {
-				throw new Error("No Stripe payment ID found for this payment");
+			const isFullRefund = refundAmount >= maxRefund;
+			const isBACSPayment = !payment.stripe_payment_intent_id || 
+			                     payment.stripe_payment_intent_id?.startsWith('BACS-REF-') ||
+			                     payment.payment_method === 'bank_transfer';
+			
+			console.log('Payment detection:', {
+			  payment_id: payment.id,
+			  stripe_payment_intent_id: payment.stripe_payment_intent_id,
+			  payment_method: payment.payment_method, // Add this to the interface if missing
+			  isBACSPayment
+			});
+			
+			if (isBACSPayment) {
+			  console.log('Processing BACS refund');
+			  
+			  // For BACS payments, create refund record as COMPLETED
+			  // The database trigger will automatically update the payment status
+			  const { error: refundError } = await supabase.from("refunds").insert([
+			    {
+			      payment_id: payment.id,
+			      amount: refundAmount,
+			      reason,
+			      status: "completed",
+			      refund_method: "bank_transfer",
+			      refund_date: new Date().toISOString(),
+			    },
+			  ]);
+			
+			  if (refundError) {
+			    console.error("Error creating BACS refund:", refundError);
+			    throw new Error(`Failed to create refund: ${refundError.message}`);
+			  }
+			
+			  console.log("BACS refund created successfully, trigger should update payment status");
+			
+			  // Update invoice status to 'refunded' if fully refunded
+			  if (isFullRefund) {
+			    console.log("Updating BACS invoice status to refunded");
+			    const { error: invoiceUpdateError } = await supabase
+			      .from("invoices")
+			      .update({ status: "refunded" })
+			      .eq("id", payment.invoice.id);
+			
+			    if (invoiceUpdateError) {
+			      console.error("Error updating BACS invoice status:", invoiceUpdateError);
+			      // Don't throw here - the refund was created successfully
+			    }
+			  }
+			
+			  // Send notification
+			  try {
+			    const { data: invoiceData, error: invoiceError } = await supabase
+			      .from("invoices")
+			      .select("parent_id, manual_payment_reference, index")
+			      .eq("id", payment.invoice.id)
+			      .single();
+			
+			    if (!invoiceError && invoiceData) {
+			      const invoiceReference = invoiceData.manual_payment_reference || `Invoice-${invoiceData.index}`;
+			      
+			      await notificationService.notifyRefundPending(
+			        invoiceData.parent_id,
+			        payment.invoice.studio_id,
+			        refundAmount,
+			        currency,
+			        invoiceReference,
+			        reason,
+			        "bank_transfer",
+			        payment.id
+			      );
+			    }
+			  } catch (notificationError) {
+			    console.warn("Failed to send refund notification:", notificationError);
+			  }
+			
+			  onSuccess();
+			} else {
+			  console.log('Processing Stripe refund');
+			  
+			  // For Stripe payments, process through enhanced edge function
+			  const { data: response, error: functionError } =
+			    await supabase.functions.invoke("process-refund", {
+			      body: {
+			        paymentId: payment.stripe_payment_intent_id,
+			        amount: Math.round(refundAmount * 100),
+			        reason,
+			        studioId: payment.invoice.studio_id,
+			        paymentDbId: payment.id,
+			        invoiceId: payment.invoice.id,
+			        isFullRefund: isFullRefund,
+			      },
+			    });
+			
+			  if (functionError || !response?.success) {
+			    throw new Error(
+			      functionError?.message ||
+			        response?.error ||
+			        "Failed to process refund"
+			    );
+			  }
+			
+			  // Create refund record in database for Stripe
+			  const { error: refundError } = await supabase.from("refunds").insert([
+			    {
+			      payment_id: payment.id,
+			      amount: refundAmount,
+			      reason,
+			      status: "completed",
+			      stripe_refund_id: response.refundId,
+			      refund_method: "stripe",
+			      refund_date: new Date().toISOString(),
+			    },
+			  ]);
+			
+			  if (refundError) throw refundError;
+			
+			  // Send notification for Stripe refund
+			  try {
+			    const { data: invoiceData, error: invoiceError } = await supabase
+			      .from("invoices")
+			      .select("parent_id, manual_payment_reference, index")
+			      .eq("id", payment.invoice.id)
+			      .single();
+			
+			    if (!invoiceError && invoiceData) {
+			      const invoiceReference = invoiceData.manual_payment_reference || `Invoice-${invoiceData.index}`;
+			      
+			      await notificationService.notifyRefundPending(
+			        invoiceData.parent_id,
+			        payment.invoice.studio_id,
+			        refundAmount,
+			        currency,
+			        invoiceReference,
+			        reason,
+			        "stripe",
+			        payment.id
+			      );
+			    }
+			  } catch (notificationError) {
+			    console.warn("Failed to send refund notification:", notificationError);
+			  }
+			
+			  onSuccess();
 			}
-
-			// Process refund through Stripe using Supabase Edge Function
-			const { data: response, error: functionError } =
-				await supabase.functions.invoke("process-refund", {
-					body: {
-						paymentId: payment.stripe_payment_intent_id,
-						amount: Math.round(refundAmount * 100),
-						reason,
-						studioId: payment.invoice.studio_id,
-					},
-				});
-
-			if (functionError || !response?.success) {
-				throw new Error(
-					functionError?.message ||
-						response?.error ||
-						"Failed to process refund"
-				);
-			}
-
-			// Create refund record in database
-			const { error: refundError } = await supabase.from("refunds").insert([
-				{
-					payment_id: payment.id,
-					amount: refundAmount,
-					reason,
-					status: "completed",
-					stripe_refund_id: response.refundId,
-				},
-			]);
-
-			if (refundError) throw refundError;
-			onSuccess();
 		} catch (err) {
 			console.error("Error processing refund:", err);
 			setError(err instanceof Error ? err.message : "Failed to process refund");
@@ -171,6 +281,16 @@ export default function RefundModal({
 							requested_by_customer
 						</p>
 					</div>
+
+					{!payment.stripe_payment_intent_id && (
+						<div className="p-3 bg-blue-50 rounded-lg border border-blue-200 mb-4">
+							<h4 className="font-medium text-blue-800 mb-2">Bank Transfer Refund</h4>
+							<p className="text-sm text-blue-700">
+								Since this was a bank transfer payment, you will need to manually transfer the refund amount back to the customer's bank account. 
+								The customer will be notified via email and in-app notification about the refund.
+							</p>
+						</div>
+					)}
 
 					{error && <p className="text-red-500 text-sm">{error}</p>}
 

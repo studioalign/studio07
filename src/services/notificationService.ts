@@ -53,7 +53,9 @@ export type NotificationType =
 	| "class_cancellation"
 	| "payment_request"
 	| "payment_confirmation"
-	| "upgrade_required";
+	| "upgrade_required"
+	| "refund_pending"
+	| "refund_completed";
 
 // Utility function to generate links based on notification type
 export function generateNotificationLink(notification: {
@@ -193,14 +195,15 @@ async function createNotification(data: NotificationData) {
 				// Handle different notification types and send appropriate emails
 				switch (data.type) {
 					case "payment_request":
-						emailResult = await emailService.sendPaymentOverdueEmail({
-							recipientEmail: userData.email,
-							recipientName: userData.name || "User",
-							amount: details?.amount || 0,
-							daysOverdue: 0, // New request, not overdue yet
-							invoiceId: data.entity_id || "",
-							currency: details?.currency || "USD",
-						});
+						emailResult = await emailService.sendPaymentRequestEmail({
+						    recipientEmail: userData.email,
+						    recipientName: userData.name || "User",
+						    amount: details?.amount || 0,
+						    dueDate: details?.dueDate || new Date().toISOString(),
+						    invoiceId: data.entity_id || "",
+						    currency: details?.currency || "USD",
+						    paymentMethod: details?.paymentMethod || "stripe"
+						  });
 						break;
 
 					case "payment_overdue":
@@ -371,6 +374,19 @@ async function createNotification(data: NotificationData) {
 							studioId: data.studio_id,
 						});
 						break;
+
+					case "refund_pending":
+					case "refund_completed":
+					  emailResult = await emailService.sendRefundPendingEmail({
+					    recipientEmail: userData.email,
+					    recipientName: userData.name || "User",
+					    amount: details?.amount || 0,
+					    currency: details?.currency || "USD",
+					    invoiceReference: details?.invoice_reference || "N/A",
+					    reason: details?.reason || "Customer request",
+					    refundMethod: details?.refund_method || "stripe",
+					  });
+					  break;
 
 					default:
 						// Generic email for types without specific templates
@@ -1307,6 +1323,72 @@ async function notifyUpgradeRequired(studioId: string, message: string) {
 	}
 }
 
+async function notifyBacsPaymentRequest(
+	parentId: string,
+	studioId: string,
+	amount: number,
+	dueDate: string,
+	invoiceId: string,
+	currency: string,
+	bacsReference: string
+) {
+	await createNotification({
+		user_id: parentId,
+		studio_id: studioId,
+		type: "payment_request",
+		title: "Bank Transfer Required",
+		message: `Payment of ${new Intl.NumberFormat("en-US", {
+			style: "currency",
+			currency: currency,
+		}).format(amount)} is due by ${dueDate}. Reference: ${bacsReference}`,
+		priority: "high",
+		entity_id: invoiceId,
+		entity_type: "invoice",
+		details: { amount, dueDate, currency, bacsReference, paymentMethod: 'bacs' },
+		requires_action: true,
+		email_required: false, // KEY: No email for BACS notifications
+	});
+}
+
+export async function notifyRefundPending(
+  userId: string,
+  studioId: string,
+  amount: number,
+  currency: string,
+  invoiceReference: string,
+  reason: string,
+  refundMethod: 'stripe' | 'bank_transfer',
+  paymentId: string
+) {
+  await createNotification({
+    user_id: userId,
+    studio_id: studioId,
+    type: refundMethod === 'bank_transfer' ? "refund_pending" : "refund_completed",
+    title: refundMethod === 'bank_transfer' ? "Bank Transfer Refund Pending" : "Refund Processed",
+    message: refundMethod === 'bank_transfer' 
+      ? `A refund of ${formatCurrency(amount, currency)} will be transferred to your bank account within 3-5 business days.`
+      : `Your refund of ${formatCurrency(amount, currency)} has been processed and will appear on your card statement within 3-5 business days.`,
+    priority: "medium",
+    entity_id: paymentId,
+    entity_type: "payment",
+    details: {
+      amount,
+      currency,
+      invoice_reference: invoiceReference,
+      reason,
+      refund_method: refundMethod,
+    },
+    email_required: true,
+  });
+}
+
+function formatCurrency(amount: number, currency: string = "USD"): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency,
+  }).format(amount);
+}
+
 // Export all functions
 export {
 	createNotification,
@@ -1379,8 +1461,10 @@ export const notificationService = {
 	notifyAttendanceMarked,
 	notifyUnauthorizedAbsence,
 	notifyPaymentRequest,
+	notifyBacsPaymentRequest,
 	notifyPaymentConfirmation,
 	notifyUpgradeRequired,
+	notifyRefundPending,
 };
 
 export default notificationService;
