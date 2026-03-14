@@ -66,16 +66,12 @@ export default function SignupForm() {
 	useEffect(() => {
 		if (invitationToken) {
 			validateInvitationToken();
-		} else {
-			// If no invitation token, this is a direct owner signup
-			setSelectedRole("owner");
-			setShowSignupForm(true);
 		}
+		// Note: we no longer set selectedRole("owner") here — direct signups are blocked
 	}, [invitationToken]);
 
 	const validateInvitationToken = async () => {
 		try {
-			// Validate invitation token using the database function
 			const { data, error: validationError } = await (supabase.rpc(
 				"validate_invitation_token" as keyof Database["public"]["Functions"],
 				{
@@ -123,7 +119,6 @@ export default function SignupForm() {
 				throw new Error("Please select a role");
 			}
 
-			// Sign up the user with metadata
 			const signUpData: {
 				email: string;
 				password: string;
@@ -149,7 +144,6 @@ export default function SignupForm() {
 				},
 			};
 
-			// Add invitation token if present
 			if (invitationToken) {
 				signUpData.options.data.invitation_token = invitationToken;
 			}
@@ -161,7 +155,6 @@ export default function SignupForm() {
 			if (signUpError) {
 				console.error("Signup error:", signUpError);
 
-				// Check specifically for email already registered error
 				if (
 					signUpError.message.includes("User already registered") ||
 					signUpError.message.includes("already in use") ||
@@ -175,12 +168,10 @@ export default function SignupForm() {
 				throw signUpError;
 			}
 
-			// Remove the problematic check - if we get here, signup was successful
 			if (!authData.user) {
 				throw new Error("Failed to create user account. Please try again.");
 			}
 
-			// Send appropriate notifications based on role
 			try {
 				if (selectedRole === "parent" && invitationDetails?.studio_id) {
 					await notificationService.notifyParentRegistration(
@@ -197,7 +188,6 @@ export default function SignupForm() {
 					);
 				}
 			} catch (notificationError) {
-				// Log but don't fail the registration if notification fails
 				console.error(
 					"Failed to send registration notification:",
 					notificationError
@@ -208,7 +198,6 @@ export default function SignupForm() {
 		} catch (err) {
 			console.error("Error in signup:", err);
 
-			// Check for rate limit error
 			if (err instanceof Error && err.message.includes("rate limit exceeded")) {
 				localStorage.setItem(SIGNUP_COOLDOWN_KEY, Date.now().toString());
 				setCooldownRemaining(COOLDOWN_PERIOD_MS / 1000);
@@ -236,6 +225,7 @@ export default function SignupForm() {
 		}
 	};
 
+	// Confirmation sent screen
 	if (confirmationSent) {
 		return (
 			<div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl">
@@ -280,7 +270,7 @@ export default function SignupForm() {
 		);
 	}
 
-	// Show welcome screen for invited users
+	// Welcome screen for invited users (before they fill in the form)
 	if (invitationToken && invitationDetails && !showSignupForm) {
 		return (
 			<div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl">
@@ -314,20 +304,45 @@ export default function SignupForm() {
 		);
 	}
 
+	// Block direct (non-invited) signups — registration is closed
+	if (!invitationToken) {
+		return (
+			<div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl">
+				<div className="text-center">
+					<div className="w-16 h-16 bg-brand-primary rounded-full flex items-center justify-center mx-auto mb-6">
+						<UserPlus className="h-8 w-8 text-white" />
+					</div>
+					<h1 className="text-2xl font-bold text-brand-primary mb-3">
+						Not open to new members
+					</h1>
+					<p className="text-brand-secondary-400 mb-6">
+						Studio Align isn't open to new members right now. If you already
+						have an account, you can sign in below.
+					</p>
+					<Link
+						to="/"
+						className="inline-block px-6 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-secondary-400 transition-colors"
+					>
+						Go to sign in
+					</Link>
+				</div>
+			</div>
+		);
+	}
+
+	// Signup form for invited users
 	return (
 		<div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl">
 			<div className="text-center mb-8">
 				<h1 className="text-3xl font-bold text-brand-primary mb-2">
-					{invitationToken ? "Create your account" : "Sign up as Studio Owner"}
+					Create your account
 				</h1>
 				<p className="text-brand-secondary-400">
-					{invitationToken
-						? `Join ${invitationDetails?.studio_name || "the studio"}`
-						: "Start your dance studio management journey"}
+					Join {invitationDetails?.studio_name || "the studio"}
 				</p>
 			</div>
 
-			{invitationToken && invitationRole && (
+			{invitationRole && (
 				<div className="my-4 p-4 bg-green-50 border border-green-200 rounded-md">
 					<p className="text-sm text-green-800">
 						You've been invited to join as a <strong>{invitationRole}</strong>.
