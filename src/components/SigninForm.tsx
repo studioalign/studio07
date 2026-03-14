@@ -114,16 +114,6 @@ export default function SigninForm() {
 						</>
 					)}
 				</button>
-
-				<p className="text-center text-sm text-brand-secondary-400">
-					Don't have an account?{" "}
-					<Link
-						to="/signup"
-						className="font-medium text-brand-primary hover:text-brand-secondary-400"
-					>
-						Sign up
-					</Link>
-				</p>
 			</form>
 		</div>
 	);
